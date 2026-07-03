@@ -4,8 +4,6 @@
 
 Automatic heading numbering for [Obsidian](https://obsidian.md) — the kind that survives editing, renaming, and reorganizing your notes.
 
-<!-- TODO: hero screenshot / GIF: assets/hero.gif -->
-
 ## The problems this plugin solves
 
 **You insert a section in the middle of a long document, and now every number after it is wrong.** Manually renumbering `2.3` → `2.4` → `2.5` … across a 40-heading spec or a semester's worth of lecture notes is tedious and error-prone. Auto Headings recomputes the whole file automatically, every time you stop typing.
