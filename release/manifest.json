@@ -1,7 +1,7 @@
 {
-	"id": "obsidian-auto-headings",
+	"id": "auto-headings",
 	"name": "Auto Headings",
-	"version": "0.7.25",
+	"version": "0.7.26",
 	"minAppVersion": "1.4.0",
 	"description": "Automatic heading numbering with fully customizable templates, per-folder rules, whitelist and backlink sync. Bilingual UI (English / 中文).",
 	"author": "AArlert",

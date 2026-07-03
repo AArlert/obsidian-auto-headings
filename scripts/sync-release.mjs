@@ -4,8 +4,8 @@
  * 由 `npm run release` 调用（其前置 `npm run build` 已生成根目录 main.js）。
  * 产出两类交付物：
  * 1. **三个独立文件**（main.js + manifest.json + styles.css）直接平铺在 release/，
- *    方便往 `<Vault>/.obsidian/plugins/obsidian-auto-headings/` 里逐个拖放实测。
- * 2. **打包 zip**（release/obsidian-auto-headings.zip）：内含一个 `obsidian-auto-headings/`
+ *    方便往 `<Vault>/.obsidian/plugins/<插件 id>/` 里逐个拖放实测。
+ * 2. **打包 zip**（release/<插件 id>.zip）：内含一个 `<插件 id>/`
  *    文件夹，文件夹里就是上面三个文件。解压即得标准插件目录，供发布 GitHub Release 时上传。
  *    **zip 不入 git**（.gitignore 已排除）——它是三个平铺文件的打包副本，需要时现跑本脚本生成。
  *

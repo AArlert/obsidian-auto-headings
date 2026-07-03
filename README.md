@@ -72,7 +72,7 @@ What this means for you:
 
 **From the community plugin store** (once accepted): Settings → Community plugins → Browse → search "Auto Headings".
 
-**Manually**: download `main.js`, `manifest.json`, `styles.css` from the [latest release](../../releases/latest) into `<vault>/.obsidian/plugins/obsidian-auto-headings/`, then reload Obsidian and enable the plugin.
+**Manually**: download `main.js`, `manifest.json`, `styles.css` from the [latest release](../../releases/latest) into `<vault>/.obsidian/plugins/auto-headings/`, then reload Obsidian and enable the plugin.
 
 ## Commands
 

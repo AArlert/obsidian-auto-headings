@@ -70,9 +70,9 @@
 
 ## 安装
 
-**社区插件市场**：设置 → 社区插件 → 浏览 → 搜索“Auto Headings”。
+**社区插件市场**（一旦通过审核）：设置 → 社区插件 → 浏览 → 搜索”Auto Headings”。
 
-**手动安装**：从[最新 Release](../../releases/latest) 下载 `main.js`、`manifest.json`、`styles.css` 放入 `<库>/.obsidian/plugins/obsidian-auto-headings/`，重载 Obsidian 后启用。
+**手动安装**：从[最新 Release](../../releases/latest) 下载 `main.js`、`manifest.json`、`styles.css` 放入 `<库>/.obsidian/plugins/auto-headings/`，重载 Obsidian 后启用。
 
 ## 命令
 
