@@ -5,6 +5,57 @@
 
 ---
 
+## 2026-07-03 0.7.26 上架前审计：manifest id 违规修复 + 文档漂移订正（用户要求，claude/plugin-repo-audit-avuhui）
+
+**做了什么**：用户要求全面审计本仓库能否上架 Obsidian 社区插件目录、交叉检查各文档、动手修复问题。
+
+- **发现并修复硬性拦下项**：查证 Obsidian 官方规则（`docs.obsidian.md` 提交要求）明确
+  「manifest id 不能包含 `obsidian`」，而本插件 `id` 一直是 `obsidian-auto-headings`——会被商店
+  审核直接拦下。仓库尚未发布过任何 GitHub Release、也未提交过商店，改的成本最低；征得用户同意后
+  改为 **`auto-headings`**（`name` 早已合规，不含 "Obsidian"/"Plugin"，未动）。同步更新：
+  `README.md`/`README.zh.md` 手动安装路径示例、`src/templates/TemplateStore.ts` 注释、
+  `scripts/sync-release.mjs` 注释、`spec.md` 开发环境搭建示例。**不改**的：frontmatter 开关键
+  `obsidian-auto-headings`（`SWITCH_KEY`，用户数据协议，与 manifest id 无关，改它才是真破坏性变更）、
+  `package.json` name 与 GitHub 仓库名 `AArlert/obsidian-auto-headings`（仓库标识，不受该规则约束）。
+- **核实提交机制已变更**：`spec.md` M7 原描述的「提交至 `obsidianmd/obsidian-releases` PR」流程已被
+  Obsidian 2026-05 上线的 Community Hub（`community.obsidian.md`）取代，改为网页端提交 + 自动化 /
+  人工审核；已更新 spec.md 对应条目并保留前置要求（manifest 在默认分支 HEAD、GitHub Release 资产
+  齐全、release name 与 manifest version 一致不带 `v` 前缀）。
+- **`CLAUDE.md` 全文订正**（用户指出并授权）：本仓库是从私有 monorepo 迁移出的独立发布仓库，
+  却仍原样携带 monorepo 版 `CLAUDE.md`——里面描述的多 Addon 结构（`chrome-tab-tree/` 等）、
+  `<addon>/` 路径前缀、SessionStart 钩子/`.githooks/`/CI workflow 在本仓库均不存在。逐节核实后
+  重写：`§1` 改为单项目结构说明、`§3.1` 路径去掉 addon 前缀、`§6` 多 Addon 表格改为指向
+  `status.jsonl`/`log.md` 的一句话、`§7` 如实说明本仓库当前**没有** pre-commit/CI 自动化。
+- **交叉检查发现的文档漂移一并修复**：`doc/log.md`/`doc/testplan.md` 中 `[CLAUDE.md](../../CLAUDE.md)`
+  链接因迁移少了一层目录嵌套，实际应是 `../CLAUDE.md`（GitHub blob 相对路径验证过，`README.md` 里
+  `../../releases/latest` 因 `/blob/<branch>/` 路径段的存在则确认无误、未动）；`README.zh.md` 安装段落
+  漏了英文版有的「（一旦通过审核）」限定语，补齐中英一致。
+- **代码层面顺带发现一处待修**（**未改代码**，只登记 backlog）：`clearAllVaultNumbering`（面板
+  [清除全库编号]）逐文件用 `vault.read`+`vault.modify`，而非 M18 刚验证过更安全的 `vault.process`/
+  编辑器内存写回路径——若目标文件此刻被打开且有未落盘编辑器改动，理论上与 M18 修复前同源竞态。
+  未实测复现（窗口很窄），登记 `testplan.md` **H8** + `spec.md` §3.10，不阻塞本轮发布。
+- **审计代码是否符合 Obsidian 官方开发规范**（`Plugin guidelines`）：`console.*`、`innerHTML`/
+  `outerHTML`/`insertAdjacentHTML`、全局 `app`（非 `this.app`）、默认快捷键、Node/Electron API
+  引入等逐项 `grep` 排查，均**未发现违规**；`isDesktopOnly: false` 的声明属实。
+- 回答用户「Obsidian 允许 vibe coding（AI 辅助）插件吗」：查证无禁止性规定，官方 2026-05
+  Community Hub 用自动化扫描 + 人工复核把关**代码质量与安全**，不问写作方式；已有插件在商店说明中
+  公开披露部分代码由 AI 辅助编写的先例。
+
+**没做什么**：未生成截图 / GIF（README 占位仍在，需实机 Obsidian）；未跑 `npm run bump 1.0.0`
+（M7 尚有 J9/K12/L17/L22/K11/E14/E16 等待用户实机手感验证，未到转正时机）；未提交
+Community Hub、未打 GitHub Release；未修复新登记的 H8（vault.modify 竞态）——留给下一周期评估是否
+值得在 1.0 前动手。
+
+**下一步**：用户实机手感验证遗留项 → 补截图/GIF → `npm run bump 1.0.0` → 在
+`community.obsidian.md` 提交并打 `v1.0.0` Release → 视时间决定是否顺手修 H8。
+
+**验证方式**：`npm test`（328 passed）/ `npm run lint` / `npm run format:check`（含本次修复
+`CLAUDE.md`/`README.md` 的既存格式化漂移）全绿；`npm run bump` → `npm run release` 确认
+`release/manifest.json` id 已更新为 `auto-headings`、zip 重命名为 `auto-headings.zip`；
+`npm run docs` 校验通过（周期块 3/3、状态行 13/13、目录树与磁盘一致）。
+
+---
+
 ## 2026-07-03 0.7.25 修复「清除编号」自链接竞态致清除不生效（testplan M18，用户实测报告）（claude/numbering-clear-bug-fix-e4woim）
 
 **做了什么**：修复用户实测报告的 bug：文件已格式化 → 关全局自动编号 + 单文件 `fm:false`（编号冻结，
