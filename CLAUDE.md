@@ -124,7 +124,18 @@
 
 ## 7. 开发环境
 
-本仓库当前**没有**配置 `.githooks/`、`.claude/hooks/`、`.github/workflows/` 等自动化——质量门槛
-（test / lint / format:check / docs 守卫）目前只能靠 `npm run preflight` 手动跑绿再提交，没有
-pre-commit 钩子或 CI 兜底。若后续需要接入 CI，可参考插件源生 monorepo 里的
-`.github/workflows/ci.yml` 与 `.githooks/pre-commit` 思路重新搭建。
+SessionStart 钩子（`.claude/hooks/session-start.sh`，由 `.claude/settings.json` 挂接）在远程会话
+启动时自动安装依赖，并启用共享 git 钩子（`git config core.hooksPath .githooks`）。
+
+**pre-commit 文档守卫**（`.githooks/pre-commit`）：提交时若本次有暂存改动，跑
+`node scripts/docs.mjs --check`——`log.md` 周期块超上限（忘归档）、`status.jsonl` 概括行超上限
+（忘滚动）、或「目录结构约定」常青块与磁盘不一致（新增/拆分文件忘回填），任一命中即**拦下提交**。
+修复：跑 `npm run docs`（目录树漂移需手动修缮 log.md 该块）后 `git add` 重提；确需跳过用
+`git commit --no-verify`。本地克隆首次需手动 `git config core.hooksPath .githooks`（远程会话由
+SessionStart 自动设）。
+
+**CI**（`.github/workflows/ci.yml`）：push 到 `master` 与 PR 时跑完整质量门槛（文档守卫 + test +
+lint + format:check + build）——pre-commit 可被 `--no-verify` 跳过，CI 是机器兜底。
+
+> 历史备注：这三项曾在私有 monorepo 迁移到本独立仓库时遗漏，2026-07-03 按单项目结构补回
+> （原 monorepo 版按多 Addon 循环处理，本仓库只有一个项目，已简化为直接对仓库根跑）。
