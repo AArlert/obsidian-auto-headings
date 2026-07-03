@@ -23,7 +23,7 @@ export type LangSetting = "auto" | Lang;
 export const DEFAULT_LANG_SETTING: LangSetting = "auto";
 
 /**
- * 探测 Obsidian 的界面语言：走官方 {@link getLanguage}（1.8.0+，返回如 `en` / `zh` / `zh-TW`）。
+ * 探测 Obsidian 的界面语言：走官方 {@link getLanguage}（1.8.7+，返回如 `en` / `zh` / `zh-TW`）。
  * 以 `zh` 前缀（含 `zh-TW` 等）判为中文，其余一律英文。
  * 调用失败（受限 / 异常环境）时回退英文（与 Obsidian 默认界面一致）。
  */

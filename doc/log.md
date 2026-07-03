@@ -40,6 +40,47 @@
 
 ---
 
+## 2026-07-03 1.0.2 商店重扫第二轮反馈：getLanguage 版本下限 + 跨窗口类型检查（claude/obsidian-plugin-review-fixes-8fy6ck）
+
+**做了什么**：1.0.1 推上去后 Community Hub 重扫，Error 从「any/eslint-disable」换成一条新的
+`no-unsupported-api`，另有几条新 Warning/Recommendation，逐项处理，bump **1.0.2**。
+
+- **Error：`getLanguage` 比声明的 minAppVersion 新**：typings 里它标注 **`@since 1.8.7`**，上轮
+  提的 1.8.0 差一个补丁位——**minAppVersion 1.8.0 → 1.8.7**（manifest + versions.json；顺手把
+  versions.json 里 1.0.1 的映射也修正为 1.8.7——1.0.1 从未发布分发，仅存于 git 历史，修正无害）。
+- **Warning：`as TFile` 断言（main.ts）**：`syncBacklinks` 改 **`file instanceof TFile`** 收窄
+  （TFile 改为值导入），连带删掉 `"children" in file` 鸭子判断。配套：obsidian-mock 新增 `TFile`
+  替身类，main.test.ts 假 vault 的 `getAbstractFileByPath` 改返回 `Object.assign(new TFile(), …)`
+  实例（否则对象字面量过不了 instanceof，8 个 Backlink 用例会静默跳过写回）。
+- **Warning：`instanceof InputEvent` 非跨窗口安全 ×3**：审核建议用 Obsidian 的 `.instanceOf()`，
+  但它只声明在 `UIEvent` 上，而本仓库 TS 5.6 的 lib.dom 把 `"input"` 事件映射为 `Event`，参数
+  在 strictFunctionTypes 下收窄不进去（bot 环境的新 lib.dom 已是 InputEvent，两边类型环境不一致）。
+  改为**不依赖构造器身份**的写法：`"isComposing" in e && e.isComposing === true`（`in` 收窄，
+  零断言零 instanceof，弹出窗口下天然成立），两边编译器与两套规则都满足。
+- **Recommendation：Release 产物缺 artifact attestation**：release.yml 补 `id-token: write` +
+  `attestations: write` 权限与 `actions/attest-build-provenance@v2` 步骤（对 main.js /
+  manifest.json / styles.css 出具构建来源证明），在 `gh release create` 之前执行。
+- **不采纳的三条 Recommendation（有意跳过，非遗漏）**：`display` / `setWarning` /
+  `setDynamicTooltip` 弃用提示——替代 API（`getSettingDefinitions` / `setDestructive`）都是
+  **1.13.0+** 才有，本插件 minAppVersion 1.8.7，换用会把「弃用提醒」升级成「不支持 API」的
+  **Error**；旧 API 在 1.13 仍正常工作，等未来抬高版本下限时一并迁移。
+- **License Warning 复核**：`cat -A` 逐字节比对，LICENSE 就是标准 MIT 模板（LF、无 BOM、无增删
+  字句），代码侧无可修——GitHub 的许可证识别（licensee）在默认分支文件变更后有缓存滞后，
+  预计随时间/重扫自行消失；若长期不消可在提交说明里附本块结论。
+- 「Vault Enumeration」Recommendation 同上轮：`getMarkdownFiles` 为全库清除功能所必需，不改。
+
+**没做什么**：未迁移三个弃用 API（版本下限不允许，见上）；未实测 attestation 步骤真跑一遍
+（要打 tag 才触发，留给下次真实发版验证）；未解决 License Warning（判定为平台侧缓存，无代码动作）。
+
+**下一步**：推 master 后再触发一次重扫——预期 Error 清零、Warning 仅剩 License（缓存）与已解释
+项；然后打 `1.0.2` tag 走一次带 attestation 的正式 Release，再去 community.obsidian.md 提交。
+
+**验证方式**：`npm test` 328 passed（含改造后的 Backlink 假 vault 用例）/ `npx tsc -noEmit` /
+`npm run lint` / `npm run format:check` 全绿；`grep` 复核 src 零 `as TFile`、零
+`instanceof InputEvent`；`getLanguage` 的 `@since 1.8.7` 已对照 obsidian.d.ts 原文确认。
+
+---
+
 ## 2026-07-03 1.0.1 商店完整扫描反馈修复：源码 Error/Warning 清零（claude/obsidian-plugin-review-fixes-8fy6ck）
 
 **做了什么**：用户带回 Community Hub 的**完整扫描报告**（比上周期多出源码级检查），逐项修复。
@@ -116,46 +157,6 @@
 **验证方式**：`npm test`（328 passed，未受影响，纯文档改动）/ `npm run lint` / `npm run format:check`
 全绿；`grep -n -i "TODO"` 复核 README 两个文件已无残留；`LICENSE` 手工核对确认只剩单一 MIT 正文、
 无拼接痕迹。
-
----
-
-## 2026-07-03 1.0.0 版本转正 + 新增 Release 自动化（用户明确指示直接上架，claude/plugin-repo-audit-avuhui）
-
-**做了什么**：用户看完上一周期的审计结果后明确表态「直接 1.0.0，准备上架」，不再等 testplan 里
-M18/J9/K12/L17/L22/K11/E14/E16 等手感项逐条实机验完——这是用户的选择，本轮**没有**替用户跑这些
-验证、也没有把它们的状态标注为已验证（testplan 对应行保持原状态，如实反映"未验证但用户接受直接
-上架"，不是"已验证"）。
-
-- **`npm run bump 1.0.0`**：0.7.27 → 1.0.0。`manifest.json`/`package.json`/`package-lock.json`/
-  `versions.json`/`release/manifest.json` 一键同步。上架后版本策略自此生效：仅行为/产物变化才
-  bump manifest，纯文档改动只记 log（`spec.md` §5 M7 已有此约定，见 §4.1）。
-- **新增 `.github/workflows/release.yml`**：此前只有 `npm run release` 把产物同步进本地
-  `release/` 目录入库，**没有对外发布的自动化**——真要发 GitHub Release 仍得手动上传三个文件。
-  新增的 workflow 在推送任意 tag 时触发：`npm run build` → `gh release create <tag> --generate-notes
-  main.js manifest.json styles.css`。用 Actions runner 自带的 `gh` CLI（无需额外配置 token，
-  `GITHUB_TOKEN` 由 Actions 自动注入，workflow 声明 `permissions: contents: write`）。tag 名与
-  manifest version 完全一致、不带 `v` 前缀，满足 Obsidian 商店对 Release 命名的硬性要求。
-  这个能力此前完全没有——GitHub MCP 工具集里没有"创建 Release"这个操作，Agent 自己不能越权
-  帮用户点 GitHub 网页按钮，所以补一条 CI 是唯一能让"打 tag = 有 Release"这件事可重复、
-  不依赖人工点击的路径（下次改动想发新版本，打个 tag 就行，不用记着手动传三个文件）。
-- **`doc/spec.md` M7 清单收尾**：「发布物料」「版本转正」「发布自检」标记完成（各自附带"未做
-  什么"的老实说明——截图/GIF 仍是占位、user_tests 全量手动回归未逐条重跑，均是用户知情选择，
-  不是遗漏）；「提交至 Obsidian 社区插件目录」保持未完成——这一步需要用户自己的 Obsidian
-  账号登录 community.obsidian.md，Agent 没有、也不该有这个账号的访问权限。
-
-**没做什么**：未替用户跑 testplan 里剩余的手感验证项；未生成截图/GIF（用户明确表示纯文字已够）；
-未推送 `1.0.0` tag 触发 release.yml（是否现在就打 tag、正式对外发布，留给用户决定时机——workflow
-已就绪，用户想发的时候 `git tag 1.0.0 && git push origin 1.0.0` 或在 GitHub 网页 Releases 页手动
-打 tag 即可）；未替用户去 community.obsidian.md 提交（做不到，需要用户本人登录）。
-
-**下一步**：用户视时机打 `1.0.0` tag 触发 GitHub Release → 去 community.obsidian.md 完成账号
-登录 + 关联仓库 + 提交审核。上架后如有社区反馈的 bug/改动需求，回到「仅行为/产物变化才 bump」
-的版本策略继续迭代。
-
-**验证方式**：`npm test`（328 passed）/ `npm run lint` / `npm run format:check` 全绿；
-`npm run release` 确认 `release/manifest.json` version 已是 `1.0.0`；`.github/workflows/release.yml`
-本地过 `python3 -c "import yaml; yaml.safe_load(...)"` 校验语法合法（未实际触发，因为触发需要真实
-推送 tag，留给用户决定时机）；`npm run docs` 校验通过。
 
 ---
 

@@ -10,6 +10,9 @@ on:
 
 permissions:
     contents: write
+    # 产物溯源证明（artifact attestation）所需：商店审核建议为发布产物提供可验证的构建来源。
+    id-token: write
+    attestations: write
 
 jobs:
     release:
@@ -24,6 +27,13 @@ jobs:
               run: npm ci
             - name: 构建
               run: npm run build
+            - name: 产物溯源证明
+              uses: actions/attest-build-provenance@v2
+              with:
+                  subject-path: |
+                      main.js
+                      manifest.json
+                      styles.css
             - name: 创建 Release
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
