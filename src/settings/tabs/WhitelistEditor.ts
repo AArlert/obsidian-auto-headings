@@ -125,7 +125,8 @@ export function renderWhitelistEditor(
 			const textEl = row.createEl("span", { cls: "ah-wl-row-text", text: entry.text });
 			textEl.title = t.wlEditTitle;
 			textEl.addEventListener("click", () => {
-				const edit = document.createElement("input");
+				// activeDocument：当前活动窗口的 document（弹出窗口兼容，勿用全局 document）。
+				const edit = activeDocument.createElement("input");
 				edit.type = "text";
 				edit.value = entry.text;
 				edit.className = "ah-wl-input ah-wl-row-edit";
@@ -172,12 +173,12 @@ export function renderWhitelistEditor(
 					text: MATCH_ICON[m],
 				});
 				btn.title = matchLabel(m, t);
-				btn.addEventListener("click", async () => {
+				btn.addEventListener("click", () => {
 					if (entry.match === m) {
 						return;
 					}
 					entry.match = m;
-					await commit();
+					void commit();
 				});
 			});
 
@@ -202,9 +203,9 @@ export function renderWhitelistEditor(
 			// ✕ 删除（按原始下标写回存储数组，过滤 / 排序视图下也删对条目）。
 			const del = row.createEl("span", { cls: "ah-wl-row-del", text: "✕" });
 			del.title = t.deleteBtn;
-			del.addEventListener("click", async () => {
+			del.addEventListener("click", () => {
 				template.whitelist.splice(index, 1);
-				await commit();
+				void commit();
 			});
 		});
 	};
@@ -219,7 +220,7 @@ export function renderWhitelistEditor(
 		filterInput.value = tab.wlFilter;
 		filterInput.addEventListener("input", (e) => {
 			// IME 组合中的半截拼音不参与过滤（避免行列表闪烁，L25）；上屏后再过滤一次。
-			if ((e as InputEvent).isComposing) {
+			if (e instanceof InputEvent && e.isComposing) {
 				return;
 			}
 			tab.wlFilter = filterInput.value;

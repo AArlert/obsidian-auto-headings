@@ -100,6 +100,21 @@ export class Modal {
 /** App 类型在源码里仅用作类型注解；提供一个空类以防个别打包路径未擦除该导入。 */
 export class App {}
 
+/**
+ * `getLanguage` 替身：i18n.ts 的语言探测改走官方 API（1.8.0+）后，测试经此设定「Obsidian 界面语言」。
+ * 默认 `en`（与 Obsidian 默认界面一致）；置为抛错函数可模拟受限环境。
+ */
+let mockLanguage: () => string = () => "en";
+
+/** 测试专用：设定 {@link getLanguage} 的返回（传入函数以便模拟抛错场景）。 */
+export function __setMockLanguage(fn: () => string): void {
+	mockLanguage = fn;
+}
+
+export function getLanguage(): string {
+	return mockLanguage();
+}
+
 /** 路径归一：折叠反斜杠与重复斜杠，足够 TemplateStore 使用。 */
 /** setIcon 替身：测试环境无 lucide 图标注册表，置空即可（DOM 结构由手验覆盖）。 */
 export function setIcon(_el: unknown, _icon: string): void {}

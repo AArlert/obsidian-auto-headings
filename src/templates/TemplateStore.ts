@@ -100,7 +100,7 @@ export class TemplateStore {
 	private async readFile(filePath: string): Promise<Template | null> {
 		try {
 			const raw = await this.adapter.read(filePath);
-			const parsed = JSON.parse(raw);
+			const parsed: unknown = JSON.parse(raw);
 			const fallbackName = this.basename(filePath).replace(/\.json$/i, "");
 			return normalizeTemplate(parsed, fallbackName);
 		} catch {
