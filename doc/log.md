@@ -3,7 +3,7 @@
 本文件用于多 agent / 多人协作的**握手交接**：每个开发周期结束时，记录「做了什么、
 没做什么、下一步干嘛」，让接手者无需通读全部代码即可继续。倒序排列（最新在最上）。
 
-**接手前怎么读**（见根 [`CLAUDE.md`](../../CLAUDE.md) §3）：第一条命令跑 **`npm run docs -- --handover`**，
+**接手前怎么读**（见根 [`CLAUDE.md`](../CLAUDE.md) §3）：第一条命令跑 **`npm run docs -- --handover`**，
 一次打印「status 首行总览 + 本文件最新块 + testplan 待办摘要」；需要更早来龙去脉时才按需翻
 [`log-archive.md`](./log-archive.md)，**不必从头通读**。
 
@@ -37,6 +37,101 @@
 > 均可整读）；仍大的 `main.ts`（~800 行）与 `i18n.ts`（~600 行）先 `grep` 定位、别整读。
 
 > 一句话：**改代码 → `npm run bump` → 写本文件新块 + `status.jsonl` → `npm run preflight`（= docs + release + test + lint + format:check）→ 提交（含 `release/`）。**
+
+---
+
+## 2026-07-03 0.7.27 README 大改（卖点先行）+ 补回迁移遗漏的 CI/钩子（用户要求，claude/plugin-repo-audit-avuhui）
+
+**做了什么**：延续上一周期的上架审计，处理用户追加的三项要求。
+
+- **README.md / README.zh.md 重写**：原版是功能清单式写法，改为**痛点先行**——开篇三段直接点出
+  「插入一节后手动改编号」「改标题名链接跟着断」「一种编号风格套不了整个库」三个真实用户痛点，
+  再给出本插件的对应解法。`## Features` 从「亮点五条」展开为按主题分类的详细小节（编号引擎本身 /
+  模板 / 路径规则 / 白名单 / Backlink 同步 / 清除命令 / 单文件覆盖 / 双语与移动端），补齐此前只在
+  `spec.md` 里才有的细节——如白名单**点击词条原地编辑**、`=/≈/▸` 分段控件切换匹配方式带 tooltip、
+  命中数角标 hover 列出具体标题、⚠ 子标题告警、过滤排序工具栏；模板的祖先序号渲染两种风格；路径
+  规则拖拽排序 + 路径自动补全 + 无根规则告警。GIF/截图占位保留（用户明确暂不做，纯文字说明已足够
+  支撑上架）。双语内容逐段对照，非机翻腔。
+- **补回 monorepo 迁移时遗漏的基础设施**（用户提供原件，按单项目结构改写）：
+  - `.claude/settings.json` + `.claude/hooks/session-start.sh`：远程会话启动自动 `npm install`
+    + 启用 `.githooks`；原版按"monorepo 多 Addon 循环安装"写的，本仓库只有一个项目，简化为直接
+    对仓库根操作。
+  - `.githooks/pre-commit`：文档守卫。**原版有个在单项目仓库里会静默失效的 bug**——它用
+    `find *//scripts/docs.mjs` 循环 + 路径前缀匹配来判断"本次提交是否触及该 Addon"，当
+    `addon_dir` 恰好等于仓库根时，`${addon_dir#"$REPO_ROOT"/}` 因缺少末尾 `/` 不会被替换，
+    `grep -q "^${addon_rel}/"` 用绝对路径去匹配 `git diff` 给的相对路径，永远匹配不上——文档守卫
+    会被此仓库直接跳过、形同虚设。已重写为单项目版本：只要有暂存改动且
+    `scripts/docs.mjs` 存在就直接跑 `--check`，不再需要按 Addon 循环判断。已本地跑
+    `.githooks/pre-commit` 验证：无暂存改动时正常放行、有暂存改动时正确触发文档守卫并通过。
+  - `.github/workflows/ci.yml`：原版按 `working-directory: obsidian-auto-headings` 子目录跑
+    （monorepo 场景），本仓库根目录即项目根，去掉子目录层级直接在根跑 `npm ci`/`test`/`lint`/
+    `format:check`/`build`。
+  - `CLAUDE.md` §7 同步更新为「已配置」，说明补回的背景（历史备注）。
+- **`npm run bump`**：0.7.26 → 0.7.27（README 改动 + 新增基础设施文件，非纯文档——按 CLAUDE.md
+  §4.1 判断新增 `.github/`/`.githooks/`/`.claude/` 三类脚手架文件本身不影响插件运行时行为，但
+  README 卖点改写会影响商店展示，与基础设施改动一并算一次版本递增）。
+
+**没做什么**：未生成截图 / GIF（用户明确暂不做，README 占位保留，纯文字说明已足够支撑本轮上架）；
+未处理上一周期登记的 testplan H8（`clearAllVaultNumbering` 潜在竞态，仍是 backlog）；未跑
+`npm run bump 1.0.0`（M7 手感验证项仍待用户实机确认）。
+
+**下一步**：本次审计到此完成——按用户要求合并回 `master`；后续按上一周期梳理的路径继续：用户实机
+验证 → 补截图/GIF（可选）→ `bump 1.0.0` → `community.obsidian.md` 提交。
+
+**验证方式**：`npm test`（328 passed）/ `npm run lint` / `npm run format:check` 全绿（含新增
+`.github/workflows/ci.yml`、`.claude/settings.json` 的 Prettier 格式化）；本地直接调用
+`.githooks/pre-commit` 验证有/无暂存改动两种场景均按预期放行/拦截；`npm run docs` 校验通过。
+
+---
+
+## 2026-07-03 0.7.26 上架前审计：manifest id 违规修复 + 文档漂移订正（用户要求，claude/plugin-repo-audit-avuhui）
+
+**做了什么**：用户要求全面审计本仓库能否上架 Obsidian 社区插件目录、交叉检查各文档、动手修复问题。
+
+- **发现并修复硬性拦下项**：查证 Obsidian 官方规则（`docs.obsidian.md` 提交要求）明确
+  「manifest id 不能包含 `obsidian`」，而本插件 `id` 一直是 `obsidian-auto-headings`——会被商店
+  审核直接拦下。仓库尚未发布过任何 GitHub Release、也未提交过商店，改的成本最低；征得用户同意后
+  改为 **`auto-headings`**（`name` 早已合规，不含 "Obsidian"/"Plugin"，未动）。同步更新：
+  `README.md`/`README.zh.md` 手动安装路径示例、`src/templates/TemplateStore.ts` 注释、
+  `scripts/sync-release.mjs` 注释、`spec.md` 开发环境搭建示例。**不改**的：frontmatter 开关键
+  `obsidian-auto-headings`（`SWITCH_KEY`，用户数据协议，与 manifest id 无关，改它才是真破坏性变更）、
+  `package.json` name 与 GitHub 仓库名 `AArlert/obsidian-auto-headings`（仓库标识，不受该规则约束）。
+- **核实提交机制已变更**：`spec.md` M7 原描述的「提交至 `obsidianmd/obsidian-releases` PR」流程已被
+  Obsidian 2026-05 上线的 Community Hub（`community.obsidian.md`）取代，改为网页端提交 + 自动化 /
+  人工审核；已更新 spec.md 对应条目并保留前置要求（manifest 在默认分支 HEAD、GitHub Release 资产
+  齐全、release name 与 manifest version 一致不带 `v` 前缀）。
+- **`CLAUDE.md` 全文订正**（用户指出并授权）：本仓库是从私有 monorepo 迁移出的独立发布仓库，
+  却仍原样携带 monorepo 版 `CLAUDE.md`——里面描述的多 Addon 结构（`chrome-tab-tree/` 等）、
+  `<addon>/` 路径前缀、SessionStart 钩子/`.githooks/`/CI workflow 在本仓库均不存在。逐节核实后
+  重写：`§1` 改为单项目结构说明、`§3.1` 路径去掉 addon 前缀、`§6` 多 Addon 表格改为指向
+  `status.jsonl`/`log.md` 的一句话、`§7` 如实说明本仓库当前**没有** pre-commit/CI 自动化。
+- **交叉检查发现的文档漂移一并修复**：`doc/log.md`/`doc/testplan.md` 中 `[CLAUDE.md](../../CLAUDE.md)`
+  链接因迁移少了一层目录嵌套，实际应是 `../CLAUDE.md`（GitHub blob 相对路径验证过，`README.md` 里
+  `../../releases/latest` 因 `/blob/<branch>/` 路径段的存在则确认无误、未动）；`README.zh.md` 安装段落
+  漏了英文版有的「（一旦通过审核）」限定语，补齐中英一致。
+- **代码层面顺带发现一处待修**（**未改代码**，只登记 backlog）：`clearAllVaultNumbering`（面板
+  [清除全库编号]）逐文件用 `vault.read`+`vault.modify`，而非 M18 刚验证过更安全的 `vault.process`/
+  编辑器内存写回路径——若目标文件此刻被打开且有未落盘编辑器改动，理论上与 M18 修复前同源竞态。
+  未实测复现（窗口很窄），登记 `testplan.md` **H8** + `spec.md` §3.10，不阻塞本轮发布。
+- **审计代码是否符合 Obsidian 官方开发规范**（`Plugin guidelines`）：`console.*`、`innerHTML`/
+  `outerHTML`/`insertAdjacentHTML`、全局 `app`（非 `this.app`）、默认快捷键、Node/Electron API
+  引入等逐项 `grep` 排查，均**未发现违规**；`isDesktopOnly: false` 的声明属实。
+- 回答用户「Obsidian 允许 vibe coding（AI 辅助）插件吗」：查证无禁止性规定，官方 2026-05
+  Community Hub 用自动化扫描 + 人工复核把关**代码质量与安全**，不问写作方式；已有插件在商店说明中
+  公开披露部分代码由 AI 辅助编写的先例。
+
+**没做什么**：未生成截图 / GIF（README 占位仍在，需实机 Obsidian）；未跑 `npm run bump 1.0.0`
+（M7 尚有 J9/K12/L17/L22/K11/E14/E16 等待用户实机手感验证，未到转正时机）；未提交
+Community Hub、未打 GitHub Release；未修复新登记的 H8（vault.modify 竞态）——留给下一周期评估是否
+值得在 1.0 前动手。
+
+**下一步**：用户实机手感验证遗留项 → 补截图/GIF → `npm run bump 1.0.0` → 在
+`community.obsidian.md` 提交并打 `v1.0.0` Release → 视时间决定是否顺手修 H8。
+
+**验证方式**：`npm test`（328 passed）/ `npm run lint` / `npm run format:check`（含本次修复
+`CLAUDE.md`/`README.md` 的既存格式化漂移）全绿；`npm run bump` → `npm run release` 确认
+`release/manifest.json` id 已更新为 `auto-headings`、zip 重命名为 `auto-headings.zip`；
+`npm run docs` 校验通过（周期块 3/3、状态行 13/13、目录树与磁盘一致）。
 
 ---
 
@@ -83,73 +178,6 @@ vault 侧有一份「未落盘旧内容」的哨兵值，清除后哨兵值**不
 自身）。用临时切回旧版 `main.ts` 复验：同样两条测试在旧实现下确实失败（自链接完全未更新），确认
 测试真实捕获了该 bug。`npm test`（328 passed）/ `npm run lint` / `format:check` / `npm run test:fuzz`
 （5000×80）全绿；`npm run release` 重建 `release/`。
-
----
-
-## 2026-07-03 0.7.24 打开文件即按当前模板自动重排（testplan J9，用户需求）（claude/obsidian-auto-headings-launch-uzdovw）
-
-**做了什么**：落地用户提出的新需求：路径规则改投了模板（或模板本身改了样式）后，该路径下**尚未打开
-过/编辑过**的文件，此前必须等用户敲一下键盘（触发 `editor-change` 防抖）才会按新格式重排；用户希望
-**只要打开文件就自动刷新**，不必先手动编辑或跑「立即重新编号」命令。
-
-- **`main.ts` 新增 `renumberOnOpen(file)`**：挂在 `file-open` 事件上，走与实时编辑**完全一致**的自动
-  路径门控（`shouldAutoTrigger` + `getTemplateForFile`），命中则调用既有的 `applyRenumber`。不新增
-  设置项——「是否该自动」的判定逻辑与「自动触发」共用一套规则，语义上是把同一套资格判定接到了新的
-  触发事件（打开）上，而非引入新概念。
-- **幂等 no-op 免费获得**：`applyRenumber` 只在内容确有变化时才发起事务（既有机制），已是最新格式的
-  文件打开时重排前后内容相同，静默跳过，不产生多余撤销记录，也不会每次切换标签页都抖一下光标。
-- **与 file-open 内既有的「标题快照播种」（M14 基线）顺序**：`renumberOnOpen` 放在前面——若它写回，
-  `applyRenumber` 内部的 `syncAndSnapshot` 会把快照刷新为写回后的状态，紧随其后的播种逻辑因
-  `headingSnapshots.has()` 已为真而自然短路，不会用「重排前」的旧内容重复播种一份过时快照。
-- `getActiveViewOfType(MarkdownView)` 取活动视图后校验 `view.file?.path === file.path`，防御
-  「打开事件与实际活动编辑器不一致」（如后台预览、极快速切换）的场景，此时不强行处理。
-- `doc/spec.md` §3.9 补充说明；`doc/testplan.md` 新增 **J9**。
-
-**没做什么**：未加开关让用户关掉这个行为——判断是它和「自动触发」共享同一套门控（全局开关/frontmatter），
-关掉自动编号或设 `fm:false` 天然就会连打开也不触发，无需再造一个开关；若后续用户反馈想要「自动编号开
-但打开不重排」这种更细粒度的诉求，再补选项。未处理"文件已打开但插件是后来才装/重载"的追平（重载后
-第一次 `file-open` 才补，这与现有 M7 的 N1 修复模式一致，无需特殊处理）。
-
-**下一步**：用户实机验 J9（改路径规则模板 → 切到其它笔记再切回 / 冷启动打开该路径下笔记 → 确认自动
-刷新且无多余撤销记录）；连同上一周期遗留的 K12/L17/L22/K11 及更早 E14/E16 一并验收 → M7 截图/发布
-自检 → bump 1.0.0。
-
-**验证方式**：`npm test`（326 passed，`main.test.ts` 新增 `renumberOnOpen` 7 条：正常重排 / 幂等
-no-op / 全局关门控 / fm:false 门控 / 无路径规则命中 / 打开文件与活动视图不一致 / 无活动视图不抛错）；
-`npm run lint` / `format:check` 全绿；`npm run release` 重建 `release/`。
-
----
-
-## 2026-07-03 0.7.23 路径规则禁止重复路径（GUI 阻断保存）（claude/obsidian-auto-headings-launch-uzdovw）
-
-**做了什么**：修用户报告的另一处路径规则 GUI 不理想行为（testplan **K12**）：同时设置两条路径都是
-`/` 的规则，一条投模板 A、一条投模板 B，插件会用其中「新建的」那条（即列表里更靠后的那条）套用
-到全库并触发编号——用户认为不应静默生效，而应弹提示、不允许同一路径关联不同模板。这是有意的
-产品决策（已用 `AskUserQuestion` 与用户确认范围）：**阻断保存、强制路径唯一**，且不限于根 `/`，
-任何两条规则的路径模式归一化后相同都算。
-
-- **新增纯函数** `findDuplicatePatternIndex(rules, index)`（`src/pathrules.ts`）：检测某规则的路径
-  是否与列表中其它规则重复（归一化后完全相同；未配置的空串不参与判定，本就不匹配任何文件）。
-- **GUI 接线**（`PathRules.ts` `commitPattern`）：路径输入框失焦提交时，若归一化后与其它行重复，
-  **回退**输入框为改前的值、**不写入** `saveSettings`/不触发编号，弹 Notice「该路径已被第 N 条规则
-  使用……」（中英双语，`i18n.ts` 新增 `pathDuplicateWarn`）。
-- **既有机制降级为遗留兜底**：`resolvePathRule` 里「具体度并列时列表靠后者胜出」的 tie-break **没有
-  删除**——它仍需应付两种情况：① 两条**不同**文件夹名恰好等长（如 `Ab/` 与 `Cd/`，无优劣可分，
-  必须有个确定性结果，这是 testplan K5 的真实场景，与本次改动无关）；② 遗留/手改 `data.json`
-  产生的真重复（GUI 阻断的只是**新建/编辑**路径，不回溯清理已存在的数据）。相应地把 spec.md §3.8
-  第 3 条与 `pathrules.ts` 顶部文档注释的措辞从"鼓励用加规则覆盖"改成"仅确定性兜底、不推荐"。
-- `doc/spec.md` §3.8 补一段说明；`doc/testplan.md` K5 措辞收窄为"不同文件夹名等长"、新增 K12。
-
-**没做什么**：未处理"面板加载时已存在遗留重复数据"的场景（不主动扫描历史 `data.json` 报警，只挡
-新的编辑）；未改动拖拽排序逻辑（拖拽不产生新路径文本，不会制造重复，无需拦截）；GUI 阻断的手感
-（Notice 文案、输入框回退是否顺滑）仍待用户在真实 Obsidian 里点一遍。
-
-**下一步**：用户实机验 K12（新建重复路径 `/` 确认阻断生效、Notice 可读）；连同上一周期遗留的
-L17/L22/K11 及更早的 E14/E16 一并验收 → M7 截图/发布自检 → bump 1.0.0。
-
-**验证方式**：`npm test`（319 passed，`pathrules.test.ts` 新增 `findDuplicatePatternIndex` 6 条 +
-`resolvePathRule` 两条测试拆分为「等长不同文件夹」与「遗留重复数据」）；`npm run lint` /
-`format:check` 全绿；`npm run release` 重建 `release/`。
 
 ---
 
@@ -214,7 +242,7 @@ obsidian-auto-headings/
 将 `release/` 下的三个文件复制到你的 Vault：
 
 ```
-<你的 Vault>/.obsidian/plugins/obsidian-auto-headings/
+<你的 Vault>/.obsidian/plugins/auto-headings/
 ├── main.js
 ├── manifest.json
 └── styles.css

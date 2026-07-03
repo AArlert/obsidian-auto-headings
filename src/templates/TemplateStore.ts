@@ -24,7 +24,7 @@ import {
 
 export class TemplateStore {
 	private readonly adapter: DataAdapter;
-	/** 插件文件夹路径（如 `.obsidian/plugins/obsidian-auto-headings`）。 */
+	/** 插件文件夹路径（如 `.obsidian/plugins/auto-headings`）。 */
 	private readonly pluginDir: string;
 	/** 模板目录路径（`<pluginDir>/templates`）。 */
 	private readonly templatesDir: string;

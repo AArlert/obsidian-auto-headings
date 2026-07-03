@@ -1,3 +1,5 @@
+{"type": "log", "date": "2026-07-02", "version": "0.7.15", "summary": "skipFill 新增 none（跳级标题完全不编号、仅剥旧前缀、仍作重置边界；正常嵌套照编）；GUI 下拉第三项 + schema 收口 + UVM setSkipFill 三策略随机（skipFill=none bin）；testplan F7–F10，+3 测试 298 passed。"}
+{"type": "log", "date": "2026-07-02", "version": "0.7.14", "summary": "startIndex GUI 下拉 0–9 → 仅 0/1（需求大再放开）；引擎 [0,9999] 与 UVM 激励（含 2/5）不变。"}
 {"type": "log", "date": "2026-07-02", "version": "0.7.13", "summary": "startIndex 下拉 0–9（JSON 大值仍在列）；UVM setStartIndex 激励 + startIndex=0/non-default bin，500×60 与 5000×80 全绿；MOB-1 结案（0.7.2 全叶子遍历覆盖）。"}
 {"type": "log", "date": "2026-07-02", "version": "0.7.12", "summary": "M8 批次 1（startIndex 首段渲染偏移 + filterSortWhitelist 搜索/排序，testplan N 类/L14/L15，+15 测试 295 passed）；发布仓库体系（publish/ 模板、sync-plugin-repo.mjs、双语 README、manifest 英文描述+authorUrl）；首推留用户本地执行。"}
 {"type": "log", "date": "2026-07-02", "version": "0.7.11", "summary": "多 TAB 设置页（壳 + tabs/ 五分区、敏感操作 TAB、清库压制防抖 H6、预览 2 例、默认模板显示名随语言）+ Backlink 默认开（迁移缺失=开）+ 首次说明 Notice M17/M18；280 passed；M8 批次 1 与发布仓库任务取消（已回退中途实现）。"}

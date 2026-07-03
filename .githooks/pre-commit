@@ -1,0 +1,31 @@
+#!/bin/bash
+# pre-commit 钩子：防止 doc/log.md 再次膨胀。
+#
+# 若 log.md 的周期块数超过保留上限（即写了新块却忘了归档），
+# `node scripts/docs.mjs --check` 以非零退出，拦下本次提交。
+# 修复办法：跑 `npm run docs` 归档旧块，`git add` 后重新提交。
+#
+# 启用方式（已由 .claude/hooks/session-start.sh 在远程会话自动设置）：
+#   git config core.hooksPath .githooks
+#
+# 跳过本次检查（仅在确有必要时）：git commit --no-verify
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# 本次没有暂存改动就不必检查。
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$staged" ] && exit 0
+
+# 本仓库是单一项目（非 monorepo），文档维护脚本固定在仓库根 scripts/docs.mjs。
+if [ ! -f "$REPO_ROOT/scripts/docs.mjs" ]; then
+	exit 0
+fi
+
+echo "==> 文档守卫"
+if ! (cd "$REPO_ROOT" && node scripts/docs.mjs --check); then
+	echo ""
+	echo "✗ 提交被拦下：文档守卫未通过。请按提示修复后重试（或 git commit --no-verify 跳过）。"
+	exit 1
+fi
+exit 0

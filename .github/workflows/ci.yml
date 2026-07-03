@@ -1,0 +1,31 @@
+# 仓库级 CI：跑质量门槛（test / lint / format / build + 文档守卫）。
+# 本地纪律的机器兜底——pre-commit 可被 --no-verify 跳过，CI 不行。
+name: CI
+
+on:
+    push:
+        branches: [master]
+    pull_request:
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+                  cache-dependency-path: package-lock.json
+            - name: 安装依赖
+              run: npm ci
+            - name: 文档守卫（log 归档 / status 校验）
+              run: node scripts/docs.mjs --check
+            - name: 单元测试（含 UVM 默认压测）
+              run: npm test
+            - name: Lint
+              run: npm run lint
+            - name: 格式检查
+              run: npm run format:check
+            - name: 构建
+              run: npm run build

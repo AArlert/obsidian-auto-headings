@@ -5,6 +5,73 @@
 
 ---
 
+## 2026-07-03 0.7.24 打开文件即按当前模板自动重排（testplan J9，用户需求）（claude/obsidian-auto-headings-launch-uzdovw）
+
+**做了什么**：落地用户提出的新需求：路径规则改投了模板（或模板本身改了样式）后，该路径下**尚未打开
+过/编辑过**的文件，此前必须等用户敲一下键盘（触发 `editor-change` 防抖）才会按新格式重排；用户希望
+**只要打开文件就自动刷新**，不必先手动编辑或跑「立即重新编号」命令。
+
+- **`main.ts` 新增 `renumberOnOpen(file)`**：挂在 `file-open` 事件上，走与实时编辑**完全一致**的自动
+  路径门控（`shouldAutoTrigger` + `getTemplateForFile`），命中则调用既有的 `applyRenumber`。不新增
+  设置项——「是否该自动」的判定逻辑与「自动触发」共用一套规则，语义上是把同一套资格判定接到了新的
+  触发事件（打开）上，而非引入新概念。
+- **幂等 no-op 免费获得**：`applyRenumber` 只在内容确有变化时才发起事务（既有机制），已是最新格式的
+  文件打开时重排前后内容相同，静默跳过，不产生多余撤销记录，也不会每次切换标签页都抖一下光标。
+- **与 file-open 内既有的「标题快照播种」（M14 基线）顺序**：`renumberOnOpen` 放在前面——若它写回，
+  `applyRenumber` 内部的 `syncAndSnapshot` 会把快照刷新为写回后的状态，紧随其后的播种逻辑因
+  `headingSnapshots.has()` 已为真而自然短路，不会用「重排前」的旧内容重复播种一份过时快照。
+- `getActiveViewOfType(MarkdownView)` 取活动视图后校验 `view.file?.path === file.path`，防御
+  「打开事件与实际活动编辑器不一致」（如后台预览、极快速切换）的场景，此时不强行处理。
+- `doc/spec.md` §3.9 补充说明；`doc/testplan.md` 新增 **J9**。
+
+**没做什么**：未加开关让用户关掉这个行为——判断是它和「自动触发」共享同一套门控（全局开关/frontmatter），
+关掉自动编号或设 `fm:false` 天然就会连打开也不触发，无需再造一个开关；若后续用户反馈想要「自动编号开
+但打开不重排」这种更细粒度的诉求，再补选项。未处理"文件已打开但插件是后来才装/重载"的追平（重载后
+第一次 `file-open` 才补，这与现有 M7 的 N1 修复模式一致，无需特殊处理）。
+
+**下一步**：用户实机验 J9（改路径规则模板 → 切到其它笔记再切回 / 冷启动打开该路径下笔记 → 确认自动
+刷新且无多余撤销记录）；连同上一周期遗留的 K12/L17/L22/K11 及更早 E14/E16 一并验收 → M7 截图/发布
+自检 → bump 1.0.0。
+
+**验证方式**：`npm test`（326 passed，`main.test.ts` 新增 `renumberOnOpen` 7 条：正常重排 / 幂等
+no-op / 全局关门控 / fm:false 门控 / 无路径规则命中 / 打开文件与活动视图不一致 / 无活动视图不抛错）；
+`npm run lint` / `format:check` 全绿；`npm run release` 重建 `release/`。
+
+---
+
+## 2026-07-03 0.7.23 路径规则禁止重复路径（GUI 阻断保存）（claude/obsidian-auto-headings-launch-uzdovw）
+
+**做了什么**：修用户报告的另一处路径规则 GUI 不理想行为（testplan **K12**）：同时设置两条路径都是
+`/` 的规则，一条投模板 A、一条投模板 B，插件会用其中「新建的」那条（即列表里更靠后的那条）套用
+到全库并触发编号——用户认为不应静默生效，而应弹提示、不允许同一路径关联不同模板。这是有意的
+产品决策（已用 `AskUserQuestion` 与用户确认范围）：**阻断保存、强制路径唯一**，且不限于根 `/`，
+任何两条规则的路径模式归一化后相同都算。
+
+- **新增纯函数** `findDuplicatePatternIndex(rules, index)`（`src/pathrules.ts`）：检测某规则的路径
+  是否与列表中其它规则重复（归一化后完全相同；未配置的空串不参与判定，本就不匹配任何文件）。
+- **GUI 接线**（`PathRules.ts` `commitPattern`）：路径输入框失焦提交时，若归一化后与其它行重复，
+  **回退**输入框为改前的值、**不写入** `saveSettings`/不触发编号，弹 Notice「该路径已被第 N 条规则
+  使用……」（中英双语，`i18n.ts` 新增 `pathDuplicateWarn`）。
+- **既有机制降级为遗留兜底**：`resolvePathRule` 里「具体度并列时列表靠后者胜出」的 tie-break **没有
+  删除**——它仍需应付两种情况：① 两条**不同**文件夹名恰好等长（如 `Ab/` 与 `Cd/`，无优劣可分，
+  必须有个确定性结果，这是 testplan K5 的真实场景，与本次改动无关）；② 遗留/手改 `data.json`
+  产生的真重复（GUI 阻断的只是**新建/编辑**路径，不回溯清理已存在的数据）。相应地把 spec.md §3.8
+  第 3 条与 `pathrules.ts` 顶部文档注释的措辞从"鼓励用加规则覆盖"改成"仅确定性兜底、不推荐"。
+- `doc/spec.md` §3.8 补一段说明；`doc/testplan.md` K5 措辞收窄为"不同文件夹名等长"、新增 K12。
+
+**没做什么**：未处理"面板加载时已存在遗留重复数据"的场景（不主动扫描历史 `data.json` 报警，只挡
+新的编辑）；未改动拖拽排序逻辑（拖拽不产生新路径文本，不会制造重复，无需拦截）；GUI 阻断的手感
+（Notice 文案、输入框回退是否顺滑）仍待用户在真实 Obsidian 里点一遍。
+
+**下一步**：用户实机验 K12（新建重复路径 `/` 确认阻断生效、Notice 可读）；连同上一周期遗留的
+L17/L22/K11 及更早的 E14/E16 一并验收 → M7 截图/发布自检 → bump 1.0.0。
+
+**验证方式**：`npm test`（319 passed，`pathrules.test.ts` 新增 `findDuplicatePatternIndex` 6 条 +
+`resolvePathRule` 两条测试拆分为「等长不同文件夹」与「遗留重复数据」）；`npm run lint` /
+`format:check` 全绿；`npm run release` 重建 `release/`。
+
+---
+
 ## 2026-07-03 0.7.22 修路径规则「未填路径先选模板」误当根规则套用全库（claude/obsidian-auto-headings-launch-uzdovw）
 
 **做了什么**：修用户报告的路径规则 GUI bug（testplan **K11**）：在设置面板「路径与模板」TAB 点
