@@ -1,0 +1,46 @@
+{"type": "log", "date": "2026-07-02", "version": "0.7.13", "summary": "startIndex 下拉 0–9（JSON 大值仍在列）；UVM setStartIndex 激励 + startIndex=0/non-default bin，500×60 与 5000×80 全绿；MOB-1 结案（0.7.2 全叶子遍历覆盖）。"}
+{"type": "log", "date": "2026-07-02", "version": "0.7.12", "summary": "M8 批次 1（startIndex 首段渲染偏移 + filterSortWhitelist 搜索/排序，testplan N 类/L14/L15，+15 测试 295 passed）；发布仓库体系（publish/ 模板、sync-plugin-repo.mjs、双语 README、manifest 英文描述+authorUrl）；首推留用户本地执行。"}
+{"type": "log", "date": "2026-07-02", "version": "0.7.11", "summary": "多 TAB 设置页（壳 + tabs/ 五分区、敏感操作 TAB、清库压制防抖 H6、预览 2 例、默认模板显示名随语言）+ Backlink 默认开（迁移缺失=开）+ 首次说明 Notice M17/M18；280 passed；M8 批次 1 与发布仓库任务取消（已回退中途实现）。"}
+{"type":"log","date":"2026-07-02","version":"0.7.10","summary":"D1 落地：computeWhitelistExemptionDetail 标出子树块成员，numberHeadings 块后 counter.reset()（exact/partial 不重置且不打断）；中英 GUI 文案注明；whitelist.test D9/D10 五例 + D4 期望更新，276 passed。"}
+{"type":"log","date":"2026-07-02","version":"0.7.9","summary":"结构重构零行为变化：numbering.ts 1115 行拆为 template/count/render/strip/whitelist 五模块 + barrel 转发（import 零改动）；settings.ts→settings/model.ts 消同名；删 codemap（脚本/文档/守卫/纪律），读盘纪律改「源码拆到可整读」。"}
+{"type":"log","date":"2026-07-02","version":"0.7.8","summary":"修 M14/M15：Backlink 纯文本改名同步——headingSnapshots 快照基线（file-open 播种/写回刷新）+ computeSnapshotRenames 按序配对，结构变化回退编号口径（M16 取舍）；271 passed（+11）。"}
+{"type":"log","date":"2026-07-02","version":"0.7.7","summary":"文档与工作流调理（未碰 src/）：spec/testplan/README 对账去陈旧，登记 M14/M15/D9/D10/MOB-1，ideas-analysis 落位后删除，UVM 蓝图单一事实源化，status 瘦身，新增 CI 与 preflight，release zip 出库。"}
+{"type":"log","date":"2026-06-30","version":"0.7.6","summary":"UVM 扩展阶段 2：World→Vault 多文件+多模板+路径规则+模板生命周期+S7 记分板；8000×80+20000×80 全绿未发现引擎 bug；未改 src/。"}
+{"type":"log","date":"2026-06-30","version":"0.7.5","summary":"UVM 扩展阶段 1：清除命令激励+S4/S5 还原律、两层门控+S6 冻结律；8000×80 全绿；S5b 取舍登记；未改 src/。"}
+{"type":"log","date":"2026-06-30","version":"0.7.4","summary":"UVM 扩展蓝图（纯文档待评审）：盘点用户操作面定位四大缺口，设计 S4–S7 记分板与 World→Vault 升级，落 testplan §4.1。"}
+{"type":"log","date":"2026-06-30","version":"0.7.3","summary":"修 M11 Backlink 实测断链：锚点拆匹配/写入双口径（linkAnchor 剥 WJ / displayAnchor 保 WJ），写出链接与含 WJ 标题字节对齐；260 passed。"}
+{"type":"log","date":"2026-06-30","version":"0.7.2","summary":"修 3 个实测 GUI/触发 bug：N1 改模板后已编号不刷新（改遍历全部 markdown 叶子）、N2 新增模板卡顿（内存先行+后台落盘）、N3 整行拖拽妨碍选词（draggable 移至手柄）。"}
+{"type":"log","date":"2026-06-30","version":"0.7.1","summary":"Backlink 同步落地（M7 核心，opt-in 默认关）：backlinks.ts 纯函数核心 + vault.process 原子写回 + UVM 第三记分板；比 Header Enhancer 改进 4 处；256 passed。"}
+{"type":"log","date":"2026-06-30","version":"0.7.0","summary":"上架冲刺立项（纯文档）：两轮竞品调研定位 Backlink 为唯一硬短板，新建 competitive.md，Roadmap 重构 M7 上架冲刺/M8 backlog。"}
+{"type":"log","date":"2026-06-30","version":"0.6.9","summary":"新增 scripts/codemap.mjs：TS compiler API 生成 doc/codemap.md 符号地图（全局索引+大文件大纲），接入 npm run docs 与 pre-commit 守卫。"}
+{"type":"log","date":"2026-06-30","version":"0.6.8","summary":"工作流瘦身：新增 bump.mjs 一键版本同步、docs.mjs 归档/摘要/校验，log.md 滚动归档进 log-archive.md，pre-commit 文档守卫落地。"}
+{"type":"log","date":"2026-06-30","version":"0.6.7","summary":"修 U4（WJ 后前导空白非幂等）：写出端去首白与 parser 对称；explore 压测用例转正入 CI；232 passed 0 skip。"}
+{"type":"log","date":"2026-06-30","version":"0.6.6","summary":"方案A落地（stripPrefix 纯 WJ 边界，根治 U1/U2/U3『正文被当编号吃』整类问题）+ 新命令清理外来编号 + UVM 真实白名单驱动 + WL-int 预览口径修复。"}
+{"type":"log","date":"2026-06-29","version":"0.6.5","summary":"bottomLevel 编号区间、i18n 中英双语（src/i18n.ts+语言下拉）、路径 GUI 打磨（滚动/分层补全/行内清空）、危险区默认折叠；216 passed。"}
+{"type":"log","date":"2026-06-29","version":"0.6.4","summary":"buildPrefix 末尾写入 Word Joiner（U+2060）标记，stripPrefix WJ 快速路径精确截断，『1 2024』完全幂等；旧无 WJ 格式向后兼容。"}
+{"type":"log","date":"2026-06-29","version":"0.6.3","summary":"罗马数字样式 + 修 U1（低于 topLevel 分支循环剥到定点）+ 修 U2（tolerantInnerSeparator 保住标点 titleSep 下的 2024）。"}
+{"type":"log","date":"2026-06-29","version":"0.6.2","summary":"UVM 升级：explore 模式+幂等性第二记分板+就地编辑/破坏前缀激励，20000×80 撞出 U1/U2/U3（登记不修）；known_bugs.test 钉现状保 CI 绿。"}
+{"type":"log","date":"2026-06-29","version":"0.6.1","summary":"frontmatter 开关布尔化（true/false 复选框，旧 ON/OFF 视为非法），onload 注册 checkbox 属性类型。"}
+{"type":"log","date":"2026-06-29","version":"0.6.0","summary":"M6 落地：cleanup.ts 全样式并集剥离器、清除当前文件/全库命令、防抖滑块、危险区域，修 C3（level<top 剥离分支）。"}
+{"type":"log","date":"2026-06-29","version":"0.5.0","summary":"M5 落地：pathrules.ts 路径规则解析、双层开关重构、自动/手动分路判定、路径规则表 GUI、DeleteTemplateModal 删模板降级；178 passed。"}
+{"type":"log","date":"2026-06-29","version":"0.4.0","summary":"M4 白名单系统落地：三种匹配+归一化+并集解析引擎、GUI chip 编辑器+实时命中预览、默认中英词表 16 条；158 passed。"}
+{"type":"log","date":"2026-06-29","version":"0.3.19","summary":"Layer 2 集成测试落地：obsidian-mock.ts + main.test.ts 17 例覆盖防抖/开关/frontmatter 门控真实触发路径。"}
+{"type":"log","date":"2026-06-29","version":"0.3.18","summary":"修 B2/B3/B9（改前后缀后叠加，affixAlternation 候选并集）+『2024 折中』（只剥一层+分隔符容差类拆分）；放开 UVM 两约束 15000×80 全绿。"}
+{"type":"log","date":"2026-06-28","version":"0.3.17","summary":"新增 UVM 风格约束随机序列压测框架（参考模型记分板+功能覆盖率+mulberry32 种子复现），bring-up 收口三类已知局限。"}
+{"type":"log","date":"2026-06-28","version":"0.3.16","summary":"修 B1/B4/B5 分隔符族叠加：stripPrefix 容差匹配历史分隔符；不误伤非序号起头标题。"}
+{"type":"log","date":"2026-06-28","version":"0.3.15","summary":"新建 doc/testplan.md 场景真值表（状态转移一等公民），登记『改配置后再触发』叠加类 bug；未改引擎。"}
+{"type":"log","date":"2026-06-26","version":"0.3.14","summary":"修标题间隔符预览失真：previewLevel 不再 trim 尾随空白，预览如实显示；编号逻辑未动。"}
+{"type":"log","date":"2026-06-26","version":"0.3.13","summary":"新增每模板 ancestorNumeral 开关（self=各自样式/arabic=祖先统一阿拉伯），支持中文书『一』+『1.1』惯例。"}
+{"type":"log","date":"2026-06-26","version":"0.3.12","summary":"release 脚本增强（adm-zip 可复现打包）；评估混合样式祖先渲染缺自由度，定 ancestorNumeral 方向（仅评估）。"}
+{"type":"log","date":"2026-06-26","version":"0.3.11","summary":"修空行转标题的前缀叠加复生：Heading 新增保留行尾空白的 rawText，剥离改用它。"}
+{"type":"log","date":"2026-06-26","version":"0.3.10","summary":"规格定稿（仅文档）：双层开关、fm 强制语义、/ 根规则、删模板知情确认、清除编号 §3.10。"}
+{"type":"log","date":"2026-06-26","version":"0.3.9","summary":"协作机制：doc/README 更名 spec.md、新建根 README 与 status.jsonl 状态索引、CLAUDE.md 三层记忆读序；另交叉审查补 README 过时描述。"}
+{"type":"log","date":"2026-06-26","version":"0.3.8","summary":"修两实测 bug（改样式旧前缀叠加、改模板后当前文件不更新→renumberActiveFile）；文档厘清与官方『页内标题』兼容关系。"}
+{"type":"log","date":"2026-06-25","version":"0.3.7","summary":"topLevel 起始编号层级（每模板）取代 H1 降级——插件不再改写 # 层级。"}
+{"type":"log","date":"2026-06-25","version":"0.3.6","summary":"新增每级『后缀』字段（配前缀实现『第1章』）；跳级占位字符限数字保证可剥离。"}
+{"type":"log","date":"2026-06-25","version":"0.3.5","summary":"跳级占位策略改为每模板可配置（补位/不补位+占位字符）。"}
+{"type":"log","date":"2026-06-25","version":"0.3.4","summary":"修跳级少一段序号；设置面板显示版本号；测试目录重组为 dev_tests/user_tests。"}
+{"type":"log","date":"2026-06-25","version":"0.3.2","summary":"修跨级拼接父级样式与改样式后叠加（样式并集 token+循环剥离）。"}
+{"type":"log","date":"2026-06-25","version":"0.3.1","summary":"修非 arabic 样式反复重写前缀累加（stripPrefix 继承分支对齐 buildPrefix 结构）。"}
+{"type":"log","date":"2026-06-25","version":"0.3.0","summary":"白名单 M4 设计加固（归一化/并集/子树/告警规格，仅文档）；仓库统一 Agent 交接约定（根 CLAUDE.md+SessionStart 钩子）。"}
+{"type":"log","date":"2026-06-24","version":"0.3.0","summary":"M3 模板系统完成（渲染器/schema/TemplateStore/GUI 编辑面板）；交付物规范化 release/ + npm run release。"}

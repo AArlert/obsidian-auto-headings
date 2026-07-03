@@ -1,0 +1,44 @@
+{
+	"name": "obsidian-auto-headings",
+	"version": "0.7.25",
+	"description": "自动为 Markdown 文件中的标题编号，支持完全自定义的多模板与按路径配置，中英双语界面。",
+	"main": "main.js",
+	"type": "module",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"release": "npm run build && node scripts/sync-release.mjs",
+		"publish:repo": "node scripts/sync-plugin-repo.mjs",
+		"bump": "node scripts/bump.mjs",
+		"docs": "node scripts/docs.mjs",
+		"preflight": "npm run docs && npm run release && npm test && npm run lint && npm run format:check",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:fuzz": "AAH_FUZZ_RUNS=5000 AAH_FUZZ_OPS=80 vitest run tests/dev_tests/random_sequence.test.ts --testTimeout=120000",
+		"lint": "eslint . --ext .ts",
+		"format": "prettier --write .",
+		"format:check": "prettier --check ."
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"headings",
+		"numbering"
+	],
+	"author": "AArlert",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "22.10.2",
+		"@typescript-eslint/eslint-plugin": "8.18.0",
+		"@typescript-eslint/parser": "8.18.0",
+		"adm-zip": "^0.5.17",
+		"builtin-modules": "3.3.0",
+		"esbuild": "0.28.1",
+		"eslint": "8.57.1",
+		"obsidian": "1.7.2",
+		"prettier": "3.3.3",
+		"tslib": "2.8.1",
+		"typescript": "5.6.3",
+		"vitest": "3.2.6"
+	}
+}

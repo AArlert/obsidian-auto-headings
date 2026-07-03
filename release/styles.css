@@ -1,0 +1,551 @@
+/* obsidian-auto-headings 设置面板样式（Milestone 3） */
+
+/* 版本号：面板右上角，弱化呈现但清晰可读 */
+.ah-version {
+	text-align: right;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	margin: 0 0 0.5em;
+}
+
+.ah-section-desc {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	margin: 0.25em 0 0.75em;
+}
+
+.ah-template-list {
+	margin-top: 0.5em;
+}
+
+.ah-template-row {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	margin-bottom: 0.5em;
+	padding: 0 0.75em;
+}
+
+/* 行内编辑面板 */
+.ah-edit-panel {
+	border-top: 1px solid var(--background-modifier-border);
+	padding: 0.5em 0 0.75em;
+}
+
+/* 五级 × 五列网格 */
+.ah-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	overflow-x: auto;
+}
+
+.ah-grid-row {
+	display: grid;
+	/* 级别 前缀 序号 后缀 序号间隔符 标题间隔符 继承前级 预览 */
+	grid-template-columns: 48px 1fr 1.4fr 1fr 1fr 1fr 72px 2fr;
+	gap: 6px;
+	align-items: center;
+}
+
+.ah-grid-head {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	font-weight: var(--font-medium);
+	padding-bottom: 2px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ah-grid-cell {
+	min-width: 0;
+}
+
+/* 低于起始编号层级的行：置灰，表示当前不参与编号（仍可编辑，待提升起始层级后生效） */
+.ah-grid-row-inactive {
+	opacity: 0.45;
+}
+
+.ah-level-label {
+	font-weight: var(--font-medium);
+	color: var(--text-normal);
+}
+
+.ah-text-input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.ah-grid-cell select.dropdown {
+	width: 100%;
+}
+
+.ah-inherit-cell {
+	display: flex;
+	justify-content: center;
+}
+
+.ah-preview-cell {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-accent);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* —— 白名单编辑器（Milestone 4）—— */
+.ah-whitelist {
+	margin-top: 0.75em;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 8px 10px;
+}
+
+.ah-wl-input-row {
+	margin: 0.25em 0 0.5em;
+}
+
+.ah-wl-input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* 搜索 + 排序工具栏（M8 批次 1）：搜索框弹性占满，排序下拉靠右不换行 */
+.ah-wl-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0 0 0.5em;
+}
+
+.ah-wl-toolbar:empty {
+	display: none;
+}
+
+.ah-wl-filter {
+	flex: 1;
+	width: auto;
+}
+
+.ah-wl-sort {
+	flex-shrink: 0;
+}
+
+/* 行布局（0.7.16，替代 chips，testplan L16）：每条一行，词语弹性占满、控件靠右对齐 */
+.ah-wl-rows {
+	margin-bottom: 0.5em;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+}
+
+.ah-wl-rows > .ah-section-desc {
+	display: block;
+	padding: 6px 8px;
+}
+
+.ah-wl-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	font-size: var(--font-ui-small);
+}
+
+.ah-wl-row + .ah-wl-row {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.ah-wl-row:hover {
+	background: var(--background-secondary);
+}
+
+.ah-wl-row-text {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-normal);
+	cursor: text;
+}
+
+/* 行内编辑输入框（L18）：占词语位，不撑破行 */
+.ah-wl-row-edit {
+	flex: 1;
+	width: auto;
+	min-width: 0;
+	font-size: var(--font-ui-small);
+}
+
+/* 匹配方式分段控件（L17）：三项常驻，选中项背景高亮 */
+.ah-wl-seg {
+	display: inline-flex;
+	flex-shrink: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	overflow: hidden;
+}
+
+/* 显式重置而非 all:unset——移动端 Obsidian 对 button 的默认样式曾令选中高亮失效（L17）。 */
+.ah-wl-seg-btn {
+	appearance: none;
+	-webkit-appearance: none;
+	margin: 0;
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+	height: auto;
+	padding: 1px 8px;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	cursor: pointer;
+	line-height: 1.4;
+}
+
+.ah-wl-seg-btn + .ah-wl-seg-btn {
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.ah-wl-seg-btn:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* !important：部分主题会对裸 button 加高特异性/!important 背景规则，
+   选中态若被吃掉会导致三种匹配方式无法区分（用户实测反馈），故在此强制生效。 */
+.ah-wl-seg-active,
+.ah-wl-seg-active:hover {
+	background: var(--interactive-accent) !important;
+	color: var(--text-on-accent) !important;
+	font-weight: 700;
+}
+
+/* 命中数角标（tooltip 列命中标题，L19） */
+.ah-wl-row-count {
+	flex-shrink: 0;
+	min-width: 1.2em;
+	padding: 0 0.3em;
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-align: center;
+	cursor: help;
+}
+
+.ah-wl-row-warn {
+	flex-shrink: 0;
+	color: var(--text-warning);
+	cursor: help;
+}
+
+.ah-wl-row-del {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	cursor: pointer;
+	padding: 0 2px;
+}
+
+.ah-wl-row-del:hover {
+	color: var(--text-error);
+}
+
+.ah-wl-preview {
+	margin-top: 0.25em;
+}
+
+/* 白名单预览：当前文件实际模板 ≠ 正在编辑模板时的警示 */
+.ah-wl-mismatch {
+	color: var(--text-warning);
+	margin-top: 0.25em;
+}
+
+/* —— 路径规则表格（Milestone 5）—— */
+.ah-path-warn {
+	color: var(--text-warning);
+	font-size: var(--font-ui-small);
+	margin: 0.25em 0;
+}
+
+.ah-path-table {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0.5em 0;
+	overflow-x: auto;
+	/* 路径过多时可纵向滚动，避免列表撑满整页、看不全（M6）。 */
+	max-height: 280px;
+	overflow-y: auto;
+}
+
+/* 表头在纵向滚动时吸顶，始终可见 */
+.ah-path-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--background-primary);
+}
+
+.ah-path-row {
+	display: grid;
+	/* 拖拽手柄 行号 路径模式 模板 删除 */
+	grid-template-columns: 24px 32px 1fr 1fr 40px;
+	gap: 6px;
+	align-items: center;
+}
+
+.ah-path-head {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	font-weight: var(--font-medium);
+	padding-bottom: 2px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ah-path-cell {
+	min-width: 0;
+}
+
+.ah-path-cell select.dropdown,
+.ah-path-cell .ah-text-input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* 路径输入单元格：输入框右侧叠一个「清空」小按钮（不删除整条规则） */
+.ah-path-pattern-cell {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.ah-path-pattern-cell .ah-text-input {
+	padding-right: 1.6em; /* 给右侧清空按钮留位 */
+}
+
+.ah-input-clear {
+	position: absolute;
+	right: 0.4em;
+	color: var(--text-faint);
+	cursor: pointer;
+	font-size: var(--font-ui-smaller);
+	line-height: 1;
+	padding: 0 1px;
+	user-select: none;
+}
+
+.ah-input-clear:hover {
+	color: var(--text-normal);
+}
+
+.ah-path-handle {
+	cursor: grab;
+	color: var(--text-faint);
+	text-align: center;
+	user-select: none;
+}
+
+.ah-path-index {
+	color: var(--text-muted);
+	text-align: center;
+}
+
+/* 删除整条规则的 ✕：纯文本图标，不再被按钮的椭圆背景包住（M6） */
+.ah-path-del {
+	color: var(--text-faint);
+	cursor: pointer;
+	text-align: center;
+	user-select: none;
+	line-height: 1;
+}
+
+.ah-path-del:hover {
+	color: var(--text-error);
+}
+
+/* 危险区域标题：可点击折叠/展开 */
+.ah-danger-heading .setting-item-name {
+	cursor: pointer;
+}
+
+.ah-path-dragging {
+	opacity: 0.5;
+}
+
+.ah-path-dragover {
+	box-shadow: 0 -2px 0 0 var(--interactive-accent);
+}
+
+/* ==== M7 多 TAB 设置页 ==== */
+
+/* TAB 栏（0.7.17，L21/L22）：栏自身横向滑动、绝不撑宽设置页；
+   未激活 = 仅 lucide 图标（灰），激活 = 图标 + 文字 + 主题强调色背景。 */
+.ah-tabs {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 4px;
+	margin-bottom: 14px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+.ah-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	white-space: nowrap;
+	background: none;
+	border: none;
+	box-shadow: none;
+	padding: 6px 10px;
+	cursor: pointer;
+	color: var(--text-muted);
+	border-radius: var(--radius-s) var(--radius-s) 0 0;
+	/* 切换 TAB 时背景色渐变过渡（按钮元素跨切换保留、不重建，见 SettingsTab.ts switchTab） */
+	transition:
+		background-color 0.15s ease,
+		color 0.15s ease;
+}
+
+.ah-tab-icon {
+	display: flex;
+	align-items: center;
+}
+
+.ah-tab-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.ah-tab:hover {
+	color: var(--text-normal);
+}
+
+.ah-tab-active,
+.ah-tab-active:hover {
+	background: var(--interactive-accent) !important;
+	color: var(--text-on-accent) !important;
+	font-weight: 600;
+}
+
+/* 敏感操作 TAB 的 ⚠ 说明 */
+.ah-danger-intro {
+	color: var(--text-warning, var(--text-muted));
+	font-size: var(--font-ui-small);
+	margin: 4px 0 12px;
+}
+
+/* 关于 TAB 的链接行 */
+.ah-about-links {
+	display: flex;
+	gap: 16px;
+	margin-top: 12px;
+}
+
+/* 模板网格与路径表格：窄屏（移动端）横向滚动，不挤压列宽 */
+.ah-grid,
+.ah-path-table {
+	overflow-x: auto;
+}
+
+.ah-grid .ah-grid-row {
+	min-width: 640px;
+}
+
+.ah-path-table .ah-path-row {
+	min-width: 480px;
+}
+
+/* —— 「路径模板」TAB 分区节头视觉强化（0.7.16，testplan L20）——
+   左侧强调色竖条 + 加大字号，让「路径规则」「模板」两分区一眼可分。 */
+.ah-section-head {
+	margin-top: 1.25em;
+}
+
+.ah-section-head .setting-item-name {
+	font-size: var(--font-ui-large);
+	font-weight: 700;
+	padding-left: 8px;
+	border-left: 3px solid var(--interactive-accent);
+}
+
+/* —— 模板行与编辑面板大框（0.7.17，L23）—— */
+
+/* 折叠态：普通行 + 分隔线 */
+.ah-template-row {
+	padding: 4px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* 展开态：大框扩住标题行 + 编辑面板 */
+.ah-template-row-expanded {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	padding: 8px 12px;
+	margin: 8px 0;
+	background: var(--background-primary);
+}
+
+/* 标题行：[▸/▾] 模板名 …说明… [删除] */
+.ah-template-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 32px;
+}
+
+.ah-template-chevron {
+	display: flex;
+	align-items: center;
+	width: 18px;
+	flex-shrink: 0;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.ah-template-chevron svg {
+	width: 16px;
+	height: 16px;
+}
+
+.ah-template-name {
+	font-weight: 600;
+	color: var(--text-normal);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.ah-template-desc {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.ah-template-del {
+	flex-shrink: 0;
+}
+
+/* 编辑面板缩进 = 折叠钮宽 18px + gap 8px，使模板名与面板内容左对齐（折叠钮悬在左侧沟槽）。 */
+.ah-template-row-expanded > .ah-edit-panel {
+	margin-left: 26px;
+}
+
+/* 子框（级别格式 / 白名单共用，0.7.17）：带标题的边框容器 */
+.ah-subbox {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 8px 10px;
+	margin: 10px 0;
+}
+
+.ah-subbox-title {
+	font-weight: 600;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	margin-bottom: 6px;
+}

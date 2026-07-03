@@ -1,0 +1,9 @@
+node_modules/
+main.js
+main.js.map
+coverage/
+dist/
+package-lock.json
+doc/
+release/
+tests/user_tests/

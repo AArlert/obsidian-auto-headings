@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output（根目录的构建产物由 esbuild 生成，不入库）
+main.js
+main.js.map
+
+# 例外：release/ 下的可分发插件文件是交付物，需入库
+!release/main.js
+
+# zip 是本地/发布时由 npm run release 即时生成的打包副本，不入库（避免二进制膨胀 git 历史）
+release/*.zip
+
+# Test / coverage
+coverage/
+
+# Logs
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
