@@ -78,8 +78,8 @@ export function renderEditPanel(
 					}
 					tab.display();
 				};
-				// 失焦或回车时提交，避免逐键创建中间文件。
-				text.inputEl.addEventListener("blur", commit);
+				// 失焦或回车时提交，避免逐键创建中间文件（包一层丢弃 Promise，满足 void 回调签名）。
+				text.inputEl.addEventListener("blur", () => void commit());
 				text.inputEl.addEventListener("keydown", (e) => {
 					if (e.key === "Enter") {
 						e.preventDefault();
@@ -226,7 +226,7 @@ export function renderEditPanel(
 					plugin.renumberActiveFile();
 				};
 				text.inputEl.addEventListener("input", (e) => {
-					if ((e as InputEvent).isComposing) {
+					if (e instanceof InputEvent && e.isComposing) {
 						return;
 					}
 					void commit();
@@ -284,9 +284,9 @@ export function renderEditPanel(
 				opt.selected = true;
 			}
 		});
-		select.addEventListener("change", async () => {
+		select.addEventListener("change", () => {
 			fmt.numeral = select.value as NumeralStyle;
-			await saveAndPreview(tab, template, level, key, previewEls);
+			void saveAndPreview(tab, template, level, key, previewEls);
 		});
 
 		// 序号间隔符。
@@ -311,9 +311,9 @@ export function renderEditPanel(
 		const inheritCell = row.createDiv({ cls: "ah-grid-cell ah-inherit-cell" });
 		const checkbox = inheritCell.createEl("input", { type: "checkbox" });
 		checkbox.checked = fmt.inherit;
-		checkbox.addEventListener("change", async () => {
+		checkbox.addEventListener("change", () => {
 			fmt.inherit = checkbox.checked;
-			await saveAndPreview(tab, template, level, key, previewEls);
+			void saveAndPreview(tab, template, level, key, previewEls);
 		});
 
 		// 预览。
@@ -340,7 +340,7 @@ function textCell(
 	// IME 感知（testplan L25）：拼音组合期间不提交（否则半截拼音被当值保存、且逐键重编标题）；
 	// 上屏（compositionend）后提交一次。
 	input.addEventListener("input", (e) => {
-		if ((e as InputEvent).isComposing) {
+		if (e instanceof InputEvent && e.isComposing) {
 			return;
 		}
 		void onChange(input.value);

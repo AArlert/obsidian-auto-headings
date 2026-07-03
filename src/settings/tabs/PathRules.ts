@@ -88,7 +88,7 @@ function renderPathRuleRow(
 	input.placeholder = t.pathInputPlaceholder;
 
 	// 每行独立的 datalist，随输入分层更新（输入 `/` 先给根 + 第一层，逐层展开）。
-	const datalist = patternCell.createEl("datalist") as HTMLDataListElement;
+	const datalist = patternCell.createEl("datalist");
 	datalist.id = `ah-path-suggest-${index}`;
 	input.setAttr("list", datalist.id);
 	updatePathDatalist(tab, datalist, input.value);
@@ -152,10 +152,11 @@ function renderPathRuleRow(
 		});
 		opt.selected = true;
 	}
-	select.addEventListener("change", async () => {
+	select.addEventListener("change", () => {
 		rule.template = select.value;
-		await plugin.saveSettings();
-		plugin.renumberActiveFile();
+		void plugin.saveSettings().then(() => {
+			plugin.renumberActiveFile();
+		});
 	});
 
 	// 删除整条规则（无背景的 ✕，不再是被椭圆按钮包住的样式）。
@@ -163,11 +164,12 @@ function renderPathRuleRow(
 	const del = delCell.createEl("span", { cls: "ah-path-del", text: "✕" });
 	del.setAttr("aria-label", t.deleteRuleTooltip);
 	del.title = t.deleteRuleTooltip;
-	del.addEventListener("click", async () => {
+	del.addEventListener("click", () => {
 		rules.splice(index, 1);
-		await plugin.saveSettings();
-		plugin.renumberActiveFile();
-		tab.display();
+		void plugin.saveSettings().then(() => {
+			plugin.renumberActiveFile();
+			tab.display();
+		});
 	});
 
 	// —— 拖拽排序 ——
@@ -182,7 +184,7 @@ function renderPathRuleRow(
 		row.addClass("ah-path-dragover");
 	});
 	row.addEventListener("dragleave", () => row.removeClass("ah-path-dragover"));
-	row.addEventListener("drop", async (e) => {
+	row.addEventListener("drop", (e) => {
 		e.preventDefault();
 		row.removeClass("ah-path-dragover");
 		const from = Number(e.dataTransfer?.getData("text/plain"));
@@ -191,9 +193,10 @@ function renderPathRuleRow(
 		}
 		const [moved] = rules.splice(from, 1);
 		rules.splice(index, 0, moved);
-		await plugin.saveSettings();
-		plugin.renumberActiveFile();
-		tab.display();
+		void plugin.saveSettings().then(() => {
+			plugin.renumberActiveFile();
+			tab.display();
+		});
 	});
 }
 

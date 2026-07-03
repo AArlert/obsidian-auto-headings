@@ -5,6 +5,50 @@
 
 ---
 
+## 2026-07-03 0.7.27 README 大改（卖点先行）+ 补回迁移遗漏的 CI/钩子（用户要求，claude/plugin-repo-audit-avuhui）
+
+**做了什么**：延续上一周期的上架审计，处理用户追加的三项要求。
+
+- **README.md / README.zh.md 重写**：原版是功能清单式写法，改为**痛点先行**——开篇三段直接点出
+  「插入一节后手动改编号」「改标题名链接跟着断」「一种编号风格套不了整个库」三个真实用户痛点，
+  再给出本插件的对应解法。`## Features` 从「亮点五条」展开为按主题分类的详细小节（编号引擎本身 /
+  模板 / 路径规则 / 白名单 / Backlink 同步 / 清除命令 / 单文件覆盖 / 双语与移动端），补齐此前只在
+  `spec.md` 里才有的细节——如白名单**点击词条原地编辑**、`=/≈/▸` 分段控件切换匹配方式带 tooltip、
+  命中数角标 hover 列出具体标题、⚠ 子标题告警、过滤排序工具栏；模板的祖先序号渲染两种风格；路径
+  规则拖拽排序 + 路径自动补全 + 无根规则告警。GIF/截图占位保留（用户明确暂不做，纯文字说明已足够
+  支撑上架）。双语内容逐段对照，非机翻腔。
+- **补回 monorepo 迁移时遗漏的基础设施**（用户提供原件，按单项目结构改写）：
+  - `.claude/settings.json` + `.claude/hooks/session-start.sh`：远程会话启动自动 `npm install`
+    + 启用 `.githooks`；原版按"monorepo 多 Addon 循环安装"写的，本仓库只有一个项目，简化为直接
+    对仓库根操作。
+  - `.githooks/pre-commit`：文档守卫。**原版有个在单项目仓库里会静默失效的 bug**——它用
+    `find *//scripts/docs.mjs` 循环 + 路径前缀匹配来判断"本次提交是否触及该 Addon"，当
+    `addon_dir` 恰好等于仓库根时，`${addon_dir#"$REPO_ROOT"/}` 因缺少末尾 `/` 不会被替换，
+    `grep -q "^${addon_rel}/"` 用绝对路径去匹配 `git diff` 给的相对路径，永远匹配不上——文档守卫
+    会被此仓库直接跳过、形同虚设。已重写为单项目版本：只要有暂存改动且
+    `scripts/docs.mjs` 存在就直接跑 `--check`，不再需要按 Addon 循环判断。已本地跑
+    `.githooks/pre-commit` 验证：无暂存改动时正常放行、有暂存改动时正确触发文档守卫并通过。
+  - `.github/workflows/ci.yml`：原版按 `working-directory: obsidian-auto-headings` 子目录跑
+    （monorepo 场景），本仓库根目录即项目根，去掉子目录层级直接在根跑 `npm ci`/`test`/`lint`/
+    `format:check`/`build`。
+  - `CLAUDE.md` §7 同步更新为「已配置」，说明补回的背景（历史备注）。
+- **`npm run bump`**：0.7.26 → 0.7.27（README 改动 + 新增基础设施文件，非纯文档——按 CLAUDE.md
+  §4.1 判断新增 `.github/`/`.githooks/`/`.claude/` 三类脚手架文件本身不影响插件运行时行为，但
+  README 卖点改写会影响商店展示，与基础设施改动一并算一次版本递增）。
+
+**没做什么**：未生成截图 / GIF（用户明确暂不做，README 占位保留，纯文字说明已足够支撑本轮上架）；
+未处理上一周期登记的 testplan H8（`clearAllVaultNumbering` 潜在竞态，仍是 backlog）；未跑
+`npm run bump 1.0.0`（M7 手感验证项仍待用户实机确认）。
+
+**下一步**：本次审计到此完成——按用户要求合并回 `master`；后续按上一周期梳理的路径继续：用户实机
+验证 → 补截图/GIF（可选）→ `bump 1.0.0` → `community.obsidian.md` 提交。
+
+**验证方式**：`npm test`（328 passed）/ `npm run lint` / `npm run format:check` 全绿（含新增
+`.github/workflows/ci.yml`、`.claude/settings.json` 的 Prettier 格式化）；本地直接调用
+`.githooks/pre-commit` 验证有/无暂存改动两种场景均按预期放行/拦截；`npm run docs` 校验通过。
+
+---
+
 ## 2026-07-03 0.7.26 上架前审计：manifest id 违规修复 + 文档漂移订正（用户要求，claude/plugin-repo-audit-avuhui）
 
 **做了什么**：用户要求全面审计本仓库能否上架 Obsidian 社区插件目录、交叉检查各文档、动手修复问题。

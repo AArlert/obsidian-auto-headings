@@ -21,9 +21,7 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 			dd.addOption("zh", t.langZh);
 			dd.addOption("en", t.langEn);
 			dd.setValue(plugin.settings.language).onChange(async (value) => {
-				plugin.settings.language = (
-					value === "zh" || value === "en" ? value : "auto"
-				) as typeof plugin.settings.language;
+				plugin.settings.language = value === "zh" || value === "en" ? value : "auto";
 				await plugin.saveSettings();
 				tab.display(); // 立即用新语言重绘面板。
 			});

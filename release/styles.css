@@ -210,12 +210,12 @@
 	background: var(--background-modifier-hover);
 }
 
-/* !important：部分主题会对裸 button 加高特异性/!important 背景规则，
-   选中态若被吃掉会导致三种匹配方式无法区分（用户实测反馈），故在此强制生效。 */
-.ah-wl-seg-active,
-.ah-wl-seg-active:hover {
-	background: var(--interactive-accent) !important;
-	color: var(--text-on-accent) !important;
+/* 选中态：叠写三层类名抬高特异性（0,3,0），压过主题对按钮类的背景规则而不用 !important
+   （商店审核不允许）。部分主题若用 !important 强写按钮底色仍可能盖过此处，属主题侧问题。 */
+button.ah-wl-seg-btn.ah-wl-seg-active,
+button.ah-wl-seg-btn.ah-wl-seg-active:hover {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
 	font-weight: 700;
 }
 
@@ -422,10 +422,11 @@
 	color: var(--text-normal);
 }
 
-.ah-tab-active,
-.ah-tab-active:hover {
-	background: var(--interactive-accent) !important;
-	color: var(--text-on-accent) !important;
+/* 活动 TAB：同上，用叠写类名替代 !important 压过主题按钮底色。 */
+button.ah-tab.ah-tab-active,
+button.ah-tab.ah-tab-active:hover {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
 	font-weight: 600;
 }
 

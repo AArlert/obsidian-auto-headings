@@ -11,6 +11,8 @@
  * 仓库守则要求注释 / 文档用简体中文；面向用户的字符串则按所选语言呈现，故本文件**同时**含中英文案。
  */
 
+import { getLanguage } from "obsidian";
+
 /** 已落地的界面语言。 */
 export type Lang = "zh" | "en";
 
@@ -21,14 +23,13 @@ export type LangSetting = "auto" | Lang;
 export const DEFAULT_LANG_SETTING: LangSetting = "auto";
 
 /**
- * 探测 Obsidian 的界面语言。Obsidian 把界面语言存于 `localStorage["language"]`
- * （英文时通常缺省 / 为空）。以 `zh` 前缀（含 `zh-TW` 等）判为中文，其余一律英文。
- * 读取失败（无 `window` / 受限环境）时回退英文（与 Obsidian 默认界面一致）。
+ * 探测 Obsidian 的界面语言：走官方 {@link getLanguage}（1.8.0+，返回如 `en` / `zh` / `zh-TW`）。
+ * 以 `zh` 前缀（含 `zh-TW` 等）判为中文，其余一律英文。
+ * 调用失败（受限 / 异常环境）时回退英文（与 Obsidian 默认界面一致）。
  */
 export function detectObsidianLang(): Lang {
 	try {
-		const v = window.localStorage.getItem("language") ?? "";
-		return v.toLowerCase().startsWith("zh") ? "zh" : "en";
+		return getLanguage().toLowerCase().startsWith("zh") ? "zh" : "en";
 	} catch {
 		return "en";
 	}

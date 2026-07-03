@@ -4,7 +4,10 @@ import {
 	MarkdownView,
 	Notice,
 	Plugin,
+	type App,
 	type EditorChange,
+	type MetadataCache,
+	type TFile,
 } from "obsidian";
 import {
 	AutoHeadingsSettings,
@@ -69,7 +72,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/**
 	 * IME 组合（composition）进行中标志（0.7.17，testplan J8）：中文拼音等输入法组合期间，
 	 * editor-change 会携带**尚未上屏的拼音字母**——此时防抖到点不写回、顺延一个周期，
-	 * 避免把组合中间态编入标题。由 document 级 compositionstart/end 事件维护，仅内存标志。
+	 * 避免把组合中间态编入标题。由 activeDocument 级 compositionstart/end 事件维护，仅内存标志。
 	 */
 	imeComposing = false;
 
@@ -93,9 +96,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 		await this.loadSettings();
 		const t = this.messages();
 
-		// 向 Obsidian 注册 frontmatter 属性为复选框类型（内部 API，1.4.0+）。
-		// 注册后用户在属性面板看到勾选框，写入 true/false 而非文本。
-		const mtm = (this.app as any).metadataTypeManager; // eslint-disable-line @typescript-eslint/no-explicit-any
+		// 向 Obsidian 注册 frontmatter 属性为复选框类型（内部 API，官方类型未声明，
+		// 故以「可选方法」的结构化形状收窄，缺失时静默跳过）。注册后用户在属性面板看到
+		// 勾选框，写入 true/false 而非文本。
+		const mtm = (
+			this.app as App & {
+				metadataTypeManager?: {
+					setPropertyInfo?: (key: string, info: { type: string }) => void;
+				};
+			}
+		).metadataTypeManager;
 		if (typeof mtm?.setPropertyInfo === "function") {
 			mtm.setPropertyInfo(SWITCH_KEY, { type: "checkbox" });
 		}
@@ -110,8 +120,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.addSettingTab(this.settingTab);
 
 		// 全局切换命令：与「全局自动编号」面板开关双向同步（统一经由 setAutoNumber）。
+		// 命令 ID 不含插件 ID（Obsidian 注册时自动加 `auto-headings:` 前缀，审核要求不重复）。
 		this.addCommand({
-			id: "toggle-auto-headings",
+			id: "toggle-auto-numbering",
 			name: t.cmdToggle,
 			callback: async () => {
 				await this.setAutoNumber(!this.settings.autoNumber);
@@ -154,11 +165,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}),
 		);
 
-		// IME 组合状态（J8）：捕获阶段挂 document，编辑器与设置面板输入框的组合都能覆盖。
-		this.registerDomEvent(document, "compositionstart", () => {
+		// IME 组合状态（J8）：挂当前活动窗口的 document（activeDocument，弹出窗口兼容），
+		// 编辑器与设置面板输入框的组合都能覆盖。
+		this.registerDomEvent(activeDocument, "compositionstart", () => {
 			this.imeComposing = true;
 		});
-		this.registerDomEvent(document, "compositionend", () => {
+		this.registerDomEvent(activeDocument, "compositionend", () => {
 			this.imeComposing = false;
 		});
 
@@ -174,14 +186,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 				if (this.headingSnapshots.has(file.path)) {
 					return;
 				}
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const vault = this.app.vault as any;
-				if (typeof vault?.cachedRead !== "function") {
-					return; // 防御：无 cachedRead 时跳过播种（首次插件写回时会补上）。
-				}
-				void vault
+				void this.app.vault
 					.cachedRead(file)
-					.then((content: string) => {
+					.then((content) => {
 						if (!this.headingSnapshots.has(file.path)) {
 							this.headingSnapshots.set(file.path, snapshotHeadings(content));
 						}
@@ -193,24 +200,20 @@ export default class AutoHeadingsPlugin extends Plugin {
 		);
 
 		// 文件改名 / 删除时同步快照键，避免基线错挂到旧路径。
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const vaultAny = this.app.vault as any;
-		if (typeof vaultAny?.on === "function") {
-			this.registerEvent(
-				vaultAny.on("rename", (file: { path: string }, oldPath: string) => {
-					const snap = this.headingSnapshots.get(oldPath);
-					if (snap) {
-						this.headingSnapshots.delete(oldPath);
-						this.headingSnapshots.set(file.path, snap);
-					}
-				}),
-			);
-			this.registerEvent(
-				vaultAny.on("delete", (file: { path: string }) => {
-					this.headingSnapshots.delete(file.path);
-				}),
-			);
-		}
+		this.registerEvent(
+			this.app.vault.on("rename", (file, oldPath) => {
+				const snap = this.headingSnapshots.get(oldPath);
+				if (snap) {
+					this.headingSnapshots.delete(oldPath);
+					this.headingSnapshots.set(file.path, snap);
+				}
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on("delete", (file) => {
+				this.headingSnapshots.delete(file.path);
+			}),
+		);
 	}
 
 	onunload(): void {
@@ -815,19 +818,18 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		let total = selfCount;
 		const map = new Map(renames.map((r) => [r.from, r.to]));
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const mc = this.app.metadataCache as any;
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const vault = this.app.vault as any;
-		if (typeof mc?.getBacklinksForFile === "function" && vault) {
-			const raw = mc.getBacklinksForFile(target);
-			// 适配半公开 API：可能直接是 Map，也可能是 `{ data: Map }` 包装。
-			const data: Map<string, unknown[]> | undefined =
-				raw?.data instanceof Map ? raw.data : raw instanceof Map ? raw : undefined;
+		// 半公开 API：官方类型未声明 getBacklinksForFile，以「可选方法」的结构化形状收窄（非 any）。
+		const mc = this.app.metadataCache as MetadataCache & {
+			getBacklinksForFile?: (file: LinkTarget) => unknown;
+		};
+		const vault = this.app.vault;
+		if (typeof mc.getBacklinksForFile === "function") {
+			const raw: unknown = mc.getBacklinksForFile(target);
+			const data = backlinkMap(raw);
 			if (data) {
 				const basename = target.basename ?? linkBasename(target.path);
 				for (const sourcePath of data.keys()) {
-					if (sourcePath === target.path) {
+					if (typeof sourcePath !== "string" || sourcePath === target.path) {
 						continue; // 本文件自身已由 foldSelfBacklinks 随主事务处理，跳过避免竞态重复写。
 					}
 					const file = vault.getAbstractFileByPath(sourcePath);
@@ -835,7 +837,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 					if (!file || "children" in file) {
 						continue;
 					}
-					await vault.process(file, (content: string) => {
+					await vault.process(file as TFile, (content) => {
 						const result = rewriteBacklinksInContent(content, basename, false, map);
 						total += result.count;
 						return result.content;
@@ -861,6 +863,23 @@ export default class AutoHeadingsPlugin extends Plugin {
 interface LinkTarget {
 	path: string;
 	basename?: string;
+}
+
+/**
+ * 从半公开 `getBacklinksForFile` 的返回值提取反链 Map（适配两种形状：裸 `Map`，或
+ * `{ data: Map }` 包装）；形状不符时返回 undefined，调用方静默降级。
+ */
+function backlinkMap(raw: unknown): Map<unknown, unknown> | undefined {
+	if (raw instanceof Map) {
+		return raw as Map<unknown, unknown>;
+	}
+	if (raw && typeof raw === "object") {
+		const data = (raw as { data?: unknown }).data;
+		if (data instanceof Map) {
+			return data as Map<unknown, unknown>;
+		}
+	}
+	return undefined;
 }
 
 /** 从文件路径取 basename（去目录与 `.md` 后缀），用作 `TFile.basename` 缺失时的回退。 */

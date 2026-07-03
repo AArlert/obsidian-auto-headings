@@ -2,6 +2,9 @@
  * i18n（Milestone 6）单测：语言解析、双语文案形状一致性、插值文案。
  */
 import { afterEach, describe, expect, it } from "vitest";
+// vitest.config.ts 把 "obsidian" alias 到 obsidian-mock.ts；这里直连替身文件（同一模块实例）
+// 取测试专用开关，避免经 "obsidian" 导入时撞真实类型声明。
+import { __setMockLanguage } from "./obsidian-mock";
 import {
 	DEFAULT_LANG_SETTING,
 	detectObsidianLang,
@@ -17,7 +20,7 @@ describe("resolveLang", () => {
 	});
 
 	it("auto / 缺失走 Obsidian 探测", () => {
-		// detectObsidianLang 在无 localStorage 的环境回退 en（见下条）。
+		// detectObsidianLang 走 obsidian-mock 的 getLanguage 替身（默认 en，见下组用例）。
 		expect(["zh", "en"]).toContain(resolveLang("auto"));
 		expect(["zh", "en"]).toContain(resolveLang(undefined));
 	});
@@ -28,33 +31,24 @@ describe("resolveLang", () => {
 });
 
 describe("detectObsidianLang", () => {
-	const orig = globalThis.window;
 	afterEach(() => {
-		globalThis.window = orig;
+		__setMockLanguage(() => "en");
 	});
 
-	it("localStorage language 以 zh 前缀 → 中文", () => {
-		(globalThis as { window?: unknown }).window = {
-			localStorage: { getItem: () => "zh-TW" },
-		};
+	it("getLanguage 以 zh 前缀 → 中文", () => {
+		__setMockLanguage(() => "zh-TW");
 		expect(detectObsidianLang()).toBe("zh");
 	});
 
-	it("localStorage language 为 en / 其它 → 英文", () => {
-		(globalThis as { window?: unknown }).window = {
-			localStorage: { getItem: () => "en" },
-		};
+	it("getLanguage 为 en / 其它 → 英文", () => {
+		__setMockLanguage(() => "en");
 		expect(detectObsidianLang()).toBe("en");
 	});
 
-	it("读取失败（无 window）→ 回退英文", () => {
-		(globalThis as { window?: unknown }).window = {
-			localStorage: {
-				getItem: () => {
-					throw new Error("no storage");
-				},
-			},
-		};
+	it("getLanguage 抛错（受限环境）→ 回退英文", () => {
+		__setMockLanguage(() => {
+			throw new Error("no api");
+		});
 		expect(detectObsidianLang()).toBe("en");
 	});
 });
