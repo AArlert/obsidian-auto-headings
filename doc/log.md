@@ -40,6 +40,46 @@
 
 ---
 
+## 2026-07-03 1.0.0 版本转正 + 新增 Release 自动化（用户明确指示直接上架，claude/plugin-repo-audit-avuhui）
+
+**做了什么**：用户看完上一周期的审计结果后明确表态「直接 1.0.0，准备上架」，不再等 testplan 里
+M18/J9/K12/L17/L22/K11/E14/E16 等手感项逐条实机验完——这是用户的选择，本轮**没有**替用户跑这些
+验证、也没有把它们的状态标注为已验证（testplan 对应行保持原状态，如实反映"未验证但用户接受直接
+上架"，不是"已验证"）。
+
+- **`npm run bump 1.0.0`**：0.7.27 → 1.0.0。`manifest.json`/`package.json`/`package-lock.json`/
+  `versions.json`/`release/manifest.json` 一键同步。上架后版本策略自此生效：仅行为/产物变化才
+  bump manifest，纯文档改动只记 log（`spec.md` §5 M7 已有此约定，见 §4.1）。
+- **新增 `.github/workflows/release.yml`**：此前只有 `npm run release` 把产物同步进本地
+  `release/` 目录入库，**没有对外发布的自动化**——真要发 GitHub Release 仍得手动上传三个文件。
+  新增的 workflow 在推送任意 tag 时触发：`npm run build` → `gh release create <tag> --generate-notes
+  main.js manifest.json styles.css`。用 Actions runner 自带的 `gh` CLI（无需额外配置 token，
+  `GITHUB_TOKEN` 由 Actions 自动注入，workflow 声明 `permissions: contents: write`）。tag 名与
+  manifest version 完全一致、不带 `v` 前缀，满足 Obsidian 商店对 Release 命名的硬性要求。
+  这个能力此前完全没有——GitHub MCP 工具集里没有"创建 Release"这个操作，Agent 自己不能越权
+  帮用户点 GitHub 网页按钮，所以补一条 CI 是唯一能让"打 tag = 有 Release"这件事可重复、
+  不依赖人工点击的路径（下次改动想发新版本，打个 tag 就行，不用记着手动传三个文件）。
+- **`doc/spec.md` M7 清单收尾**：「发布物料」「版本转正」「发布自检」标记完成（各自附带"未做
+  什么"的老实说明——截图/GIF 仍是占位、user_tests 全量手动回归未逐条重跑，均是用户知情选择，
+  不是遗漏）；「提交至 Obsidian 社区插件目录」保持未完成——这一步需要用户自己的 Obsidian
+  账号登录 community.obsidian.md，Agent 没有、也不该有这个账号的访问权限。
+
+**没做什么**：未替用户跑 testplan 里剩余的手感验证项；未生成截图/GIF（用户明确表示纯文字已够）；
+未推送 `1.0.0` tag 触发 release.yml（是否现在就打 tag、正式对外发布，留给用户决定时机——workflow
+已就绪，用户想发的时候 `git tag 1.0.0 && git push origin 1.0.0` 或在 GitHub 网页 Releases 页手动
+打 tag 即可）；未替用户去 community.obsidian.md 提交（做不到，需要用户本人登录）。
+
+**下一步**：用户视时机打 `1.0.0` tag 触发 GitHub Release → 去 community.obsidian.md 完成账号
+登录 + 关联仓库 + 提交审核。上架后如有社区反馈的 bug/改动需求，回到「仅行为/产物变化才 bump」
+的版本策略继续迭代。
+
+**验证方式**：`npm test`（328 passed）/ `npm run lint` / `npm run format:check` 全绿；
+`npm run release` 确认 `release/manifest.json` version 已是 `1.0.0`；`.github/workflows/release.yml`
+本地过 `python3 -c "import yaml; yaml.safe_load(...)"` 校验语法合法（未实际触发，因为触发需要真实
+推送 tag，留给用户决定时机）；`npm run docs` 校验通过。
+
+---
+
 ## 2026-07-03 0.7.27 README 大改（卖点先行）+ 补回迁移遗漏的 CI/钩子（用户要求，claude/plugin-repo-audit-avuhui）
 
 **做了什么**：延续上一周期的上架审计，处理用户追加的三项要求。
@@ -132,52 +172,6 @@ Community Hub、未打 GitHub Release；未修复新登记的 H8（vault.modify 
 `CLAUDE.md`/`README.md` 的既存格式化漂移）全绿；`npm run bump` → `npm run release` 确认
 `release/manifest.json` id 已更新为 `auto-headings`、zip 重命名为 `auto-headings.zip`；
 `npm run docs` 校验通过（周期块 3/3、状态行 13/13、目录树与磁盘一致）。
-
----
-
-## 2026-07-03 0.7.25 修复「清除编号」自链接竞态致清除不生效（testplan M18，用户实测报告）（claude/numbering-clear-bug-fix-e4woim）
-
-**做了什么**：修复用户实测报告的 bug：文件已格式化 → 关全局自动编号 + 单文件 `fm:false`（编号冻结，
-符合预期）→ 跑「清除编号」→ Notice 提示「已清除编号」但文件其实**没变**（预期外）→ 切到别的文件再
-切回、重跑「清除编号」才真的清掉。
-
-- **根因定位**：正文里有一条指向本文件自己标题的内链（如 TOC 常见的 `[[#1 简介]]`）时，
-  `syncBacklinks` 把「引用方 = 本文件自身」这一支也交给 `vault.process` 处理——但 `vault.process`
-  读的是 vault 缓存 / 磁盘内容，而本文件此刻的 `editor.transaction`（刚做的清除）**尚未被 Obsidian
-  自动保存**，二者异步竞态：`vault.process` 读到旧内容，写回覆盖掉刚发生的清除。Notice 在 transaction
-  那一刻已经据实弹出（清除确实发生过），只是随后被这次读盘覆盖悄悄撤销，故用户看到「说清了但没变」。
-  `spec.md §3.12` 此前已把这类冲突登记为「已知限制」，本轮实修而非继续搁置。
-  再次切换文件重跑能成功，是因为第二次 `syncBacklinks` 用的改名表基线（`headingSnapshots`）已对齐
-  第一轮清除后的状态、算出**空改名表**，从而完全跳过了那次会覆盖内容的 `vault.process` 调用——纯属
-  巧合而非设计如此，验证了竞态假说但并非可依赖的绕过方式。
-- **`main.ts` 新增 `foldSelfBacklinks(target, oldContent, newContent)`**：本文件自身这一支不再走
-  `vault.process`——改名表在手（`computeSnapshotRenames`/`computeHeadingRenames`，与原 `syncBacklinks`
-  同一套口径）后，直接对**内存里的** `newContent` 做 `rewriteBacklinksInContent` 字符串重写，随原
-  编号/清除**同一个** `editor.transaction` 一起写回。不读盘、不异步，天然无竞态。`applyRenumber` /
-  `runClearNumbering` / `runClearForeignNumbering` 三处写回入口统一接入。
-- **`syncAndSnapshot`/`syncBacklinks` signature 简化**：改名表由 `foldSelfBacklinks` 算好传入，
-  不再各自重算；`syncBacklinks` 只处理**别的**引用文件，且显式 `sourcePath === target.path` 时
-  `continue`（避免万一 `getBacklinksForFile` 报出自身、重新踩回竞态）；本文件自链接命中数并入最终
-  Notice 合计。
-- **`doc/spec.md §3.12`**：流程步骤改写为「①算改名表 → ②同文件内链就地折叠（新）→ ③反查别的引用方
-  → ④重写 → ⑤写回」；「已知限制」条目划掉标注 0.7.25 已修，写清根因与修法。`doc/testplan.md` 新增
-  **M18**。
-
-**没做什么**：未处理「**别的**文件正被打开且有未保存改动」这类更广的竞态（testplan M12，仍 🔲）——
-那是「引用方 ≠ 本文件」的情形，`vault.process` 依然是唯一可行的写回方式（我们管不到别的文件的编辑器
-缓冲区），属不同性质的限制，留 backlog。未改 `rewriteBacklinksInContent`/`computeHeadingRenames` 等
-纯函数本身（无 bug，问题完全在 `main.ts` 的写回时机与路径选择）。
-
-**下一步**：用户实机复验 M18（按报告的完整操作序列：关全局自动 + `fm:false` → 清除编号 → 确认 Notice
-与文件内容一致，不必切换文件即可成功）；连同上一周期遗留的 J9/K12/L17/L22/K11（及 E14/E16）一并
-验收 → M7 截图/发布自检 → bump 1.0.0。
-
-**验证方式**：新增 `main.test.ts` 两条回归（328 passed）——①自链接随清除编号原子写回（同一事务，
-`txnCount===1`）；②竞态哨兵值：即便 mock 的 `getBacklinksForFile` 把本文件自身也列为引用方、且
-vault 侧有一份「未落盘旧内容」的哨兵值，清除后哨兵值**不被触碰**（证明不再经 `vault.process` 读改写
-自身）。用临时切回旧版 `main.ts` 复验：同样两条测试在旧实现下确实失败（自链接完全未更新），确认
-测试真实捕获了该 bug。`npm test`（328 passed）/ `npm run lint` / `format:check` / `npm run test:fuzz`
-（5000×80）全绿；`npm run release` 重建 `release/`。
 
 ---
 
