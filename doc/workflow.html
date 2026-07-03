@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Addon Monorepo · Harness 工作流</title>
+<style>
+  :root {
+    --bg: #FAF9F5;
+    --surface: #F0EEE6;
+    --surface-2: #E8E5DA;
+    --border: #E0DCCF;
+    --ink: #29261F;
+    --ink-soft: #57534A;
+    --muted: #87816F;
+    --accent: #C15F3C;
+    --accent-soft: #D97757;
+    --accent-bg: #F5E5DD;
+    --green: #5E7D5A;
+    --term-bg: #262624;
+    --term-ink: #EDEAE1;
+    --radius: 14px;
+    --serif: "Tiempos Text", "Source Han Serif SC", Georgia, "Songti SC", "SimSun", serif;
+    --sans: "Styrene B", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: "Berkeley Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1F1E1B;
+      --surface: #262624;
+      --surface-2: #30302E;
+      --border: #3D3B36;
+      --ink: #F0EEE6;
+      --ink-soft: #C9C4B6;
+      --muted: #8F8A7B;
+      --accent: #D97757;
+      --accent-soft: #E08D6F;
+      --accent-bg: #3B2E27;
+      --green: #8FAE8B;
+      --term-bg: #171614;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; padding: 96px 0 72px; text-align: center; overflow: hidden; }
+  .orb {
+    position: absolute; border-radius: 50%; filter: blur(70px); opacity: .5;
+    pointer-events: none; animation: drift 16s ease-in-out infinite alternate;
+  }
+  .orb-a { width: 420px; height: 420px; background: #E8B098; top: -160px; left: -120px; }
+  .orb-b { width: 360px; height: 360px; background: #D9CDA8; bottom: -180px; right: -100px; animation-delay: -8s; }
+  @media (prefers-color-scheme: dark) {
+    .orb-a { background: #6B3E2C; } .orb-b { background: #4A452F; }
+  }
+  @keyframes drift {
+    from { transform: translate(0, 0) scale(1); }
+    to   { transform: translate(60px, 40px) scale(1.15); }
+  }
+  .hero-badge {
+    display: inline-block; font-size: 13px; letter-spacing: .08em;
+    color: var(--accent); background: var(--accent-bg);
+    border: 1px solid var(--accent); border-radius: 999px;
+    padding: 4px 16px; margin-bottom: 24px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 500; font-size: clamp(34px, 6vw, 56px);
+    line-height: 1.2; letter-spacing: .01em;
+  }
+  h1 .em { color: var(--accent); font-style: italic; }
+  .hero p.sub {
+    margin: 20px auto 0; max-width: 620px; color: var(--ink-soft); font-size: 17px;
+  }
+  .hero-meta { margin-top: 28px; color: var(--muted); font-size: 13px; font-family: var(--mono); }
+
+  /* ---------- Sections ---------- */
+  section { padding: 56px 0; position: relative; }
+  section + section { border-top: 1px solid var(--border); }
+  .kicker {
+    font-size: 13px; letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; font-weight: 600; margin-bottom: 10px;
+  }
+  h2 { font-family: var(--serif); font-weight: 500; font-size: clamp(26px, 4vw, 34px); margin-bottom: 14px; }
+  .lede { color: var(--ink-soft); max-width: 720px; margin-bottom: 36px; }
+
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ---------- Cards ---------- */
+  .grid { display: grid; gap: 18px; }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(41,38,31,.10); }
+  .card .icon { font-size: 26px; margin-bottom: 12px; display: block; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 19px; margin-bottom: 8px; }
+  .card p { font-size: 14.5px; color: var(--ink-soft); }
+  .card code, .lede code, .flow-note code, td code {
+    font-family: var(--mono); font-size: .88em; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; white-space: nowrap;
+  }
+
+  /* ---------- Stats ---------- */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 18px; margin-top: 36px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 24px; text-align: center;
+  }
+  .stat .num {
+    font-family: var(--serif); font-size: 40px; color: var(--accent); line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .lbl { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+  /* ---------- Pipeline ---------- */
+  .pipe-scroll { overflow-x: auto; padding: 8px 2px 18px; }
+  .pipe { display: flex; align-items: stretch; min-width: 900px; gap: 0; counter-reset: step; }
+  .pstep {
+    flex: 1; position: relative; padding: 18px 14px 16px; text-align: center;
+    border: 1px solid var(--border); background: var(--surface); border-radius: 12px;
+    margin-right: 34px; transition: border-color .4s, background .4s, transform .4s;
+  }
+  .pstep:last-child { margin-right: 0; }
+  .pstep::before {
+    counter-increment: step; content: counter(step);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%; margin-bottom: 8px;
+    background: var(--surface-2); color: var(--muted); font-size: 13px; font-weight: 700;
+    transition: background .4s, color .4s;
+  }
+  .pstep::after {
+    content: "→"; position: absolute; right: -27px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 18px;
+  }
+  .pstep:last-child::after { content: none; }
+  .pstep .t { font-weight: 600; font-size: 14px; display: block; }
+  .pstep .d { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 4px; display: block; }
+  .pstep.on {
+    border-color: var(--accent); background: var(--accent-bg); transform: translateY(-4px);
+    box-shadow: 0 10px 24px rgba(193,95,60,.16);
+  }
+  .pstep.on::before { background: var(--accent); color: #fff; }
+  .pipe-caption { text-align: center; font-size: 14px; color: var(--ink-soft); min-height: 1.8em; }
+  .pipe-caption strong { color: var(--accent); }
+
+  /* ---------- Memory flow ---------- */
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; margin-bottom: 18px; }
+  .flow .card { border-top: 3px solid var(--accent); }
+  .flow .tag {
+    font-family: var(--mono); font-size: 12px; color: var(--accent);
+    display: inline-block; margin-bottom: 8px;
+  }
+  .flow-note { font-size: 14px; color: var(--muted); }
+
+  /* ---------- Doc table ---------- */
+  .tbl-scroll { overflow-x: auto; margin-top: 30px; border: 1px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; background: var(--surface); }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  th { font-size: 12.5px; letter-spacing: .06em; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+  tr:last-child td { border-bottom: none; }
+  .hot { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .cold { color: var(--muted); white-space: nowrap; }
+
+  /* ---------- Terminal ---------- */
+  .term {
+    background: var(--term-bg); color: var(--term-ink); border-radius: var(--radius);
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.7;
+    box-shadow: 0 18px 48px rgba(20,18,14,.28); overflow: hidden; margin-top: 8px;
+  }
+  .term-bar { display: flex; align-items: center; gap: 7px; padding: 12px 16px; background: rgba(255,255,255,.05); }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot:nth-child(1) { background: #E0685E; } .dot:nth-child(2) { background: #E7B65A; } .dot:nth-child(3) { background: #7CB979; }
+  .term-title { margin-left: 8px; font-size: 12px; color: rgba(237,234,225,.5); }
+  .term-body { padding: 18px 20px 22px; min-height: 300px; }
+  .term-body .ps1 { color: #7CB979; }
+  .term-body .cmd { color: #F0D8A8; }
+  .term-body .ok { color: #7CB979; }
+  .term-body .warn { color: #E7B65A; }
+  .term-body .dim { color: rgba(237,234,225,.55); }
+  .term-body .acc { color: #E08D6F; }
+  .caret {
+    display: inline-block; width: 8px; height: 16px; background: var(--term-ink);
+    vertical-align: -2px; animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- Guards ---------- */
+  .guard .card { border-left: 4px solid var(--accent); }
+  .guard .stage {
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+    letter-spacing: .06em; display: block; margin-bottom: 6px;
+  }
+  .pulse { position: relative; }
+  .pulse::after {
+    content: ""; position: absolute; inset: -1px; border-radius: var(--radius);
+    border: 1px solid var(--accent); opacity: 0; pointer-events: none;
+  }
+  .pulse.hit::after { animation: ring 1.4s ease-out; }
+  @keyframes ring { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.045); } }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 40px 0 56px; text-align: center;
+    color: var(--muted); font-size: 13.5px;
+  }
+  footer .serif { font-family: var(--serif); font-style: italic; font-size: 15px; color: var(--ink-soft); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="orb orb-a"></div><div class="orb orb-b"></div>
+  <div class="wrap">
+    <span class="hero-badge">Addon Monorepo · Agent Harness</span>
+    <h1>让每一次交接<br>都从<span class="em">一条命令</span>开始</h1>
+    <p class="sub">本仓库为多 Agent / 多会话协作设计了一套「记忆 + 守卫」工作流：厚存储、薄读口，机械整理交给脚本，语义内容留给 Agent，四道守卫防文档漂移。</p>
+    <div class="hero-meta">CLAUDE.md 守则 · scripts/docs.mjs · .githooks/pre-commit · CI</div>
+  </div>
+</header>
+
+<section id="philosophy">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="kicker">Design Principles</div>
+      <h2>三条设计哲学</h2>
+      <p class="lede">工作流的一切细节都从这三条推导出来。</p>
+    </div>
+    <div class="grid grid-3 reveal">
+      <div class="card"><span class="icon">🗄️</span><h3>厚存储 · 薄读口</h3>
+        <p>历史细节全部留档（log-archive、status-archive、spec），但接手时的<b>热读取路径</b>被压缩到约百行——status 首行 + log 最新块 + testplan 待办摘要。</p></div>
+      <div class="card"><span class="icon">🤝</span><h3>机械交脚本 · 语义留 Agent</h3>
+        <p>归档、滚动、计数、校验、版本号同步都是幂等脚本（<code>docs.mjs</code> / <code>bump.mjs</code>）。Agent 只写两样东西：新周期块 + 一句话状态概括。</p></div>
+      <div class="card"><span class="icon">📌</span><h3>单一事实源 + 守卫</h3>
+        <p>同一份设计只详写一处（规格→spec、验证→testplan、周期→log），其余只放链接。写了两处的，用<b>自动比对守卫</b>逼着保持一致。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="memory">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="kicker">Memory System</div>
+      <h2>记忆系统：接手只要一条命令</h2>
+      <p class="lede">新 Agent 接手时不通读代码、不翻全部日志——跑 <code>npm run docs -- --handover</code>，三段信息一次打印：</p>
+    </div>
+    <div class="flow reveal">
+      <div class="card"><span class="tag">status.jsonl · 首行</span><h3>当前总览</h3>
+        <p>版本、里程碑、一句话现状、下一步。首行强制精简（超 200 字告警），细节一律下沉 log.md。</p></div>
+      <div class="card"><span class="tag">log.md · 最新周期块</span><h3>开工起点</h3>
+        <p>上个周期「做了什么 / 没做什么 / 下一步 / 验证方式」。只保留最新 3 块，更旧自动滚入归档。</p></div>
+      <div class="card"><span class="tag">testplan.md · §2 摘要</span><h3>待办清单</h3>
+        <p>场景真值表按状态计数，列出全部非 ✅ 行（ID + 行号）。只统计场景区间，说明行不误报。</p></div>
+    </div>
+    <p class="flow-note reveal">再往深处走才按需 <code>grep</code> 定位：查规格先取 <code>spec.md</code> 节行号再截读；查历史周期在归档文件里搜版本号。<b>✅ 的场景、已归档的周期，不读。</b></p>
+
+    <div class="tbl-scroll reveal">
+      <table>
+        <thead><tr><th>文件</th><th>职责</th><th>读取温度</th></tr></thead>
+        <tbody>
+          <tr><td><code>status.jsonl</code></td><td>状态索引：首行总览 + 最新 12 条周期概括</td><td class="hot">🔥 每次接手</td></tr>
+          <tr><td><code>log.md</code></td><td>交接日志：最新 3 个周期块 + 常青块（强制规则 / 目录树）</td><td class="hot">🔥 每次接手</td></tr>
+          <tr><td><code>testplan.md</code></td><td>场景真值表：操作序列 + 预期 + 状态 + 已知 bug</td><td class="hot">🌤 跑脚本看摘要</td></tr>
+          <tr><td><code>spec.md</code></td><td>详细规格 / 设计决策 / Roadmap</td><td class="cold">🌤 涉及规格时截读</td></tr>
+          <tr><td><code>log-archive.md</code></td><td>滚动出去的历史周期块</td><td class="cold">❄️ 平时不读</td></tr>
+          <tr><td><code>status-archive.jsonl</code></td><td>滚动出去的历史概括行</td><td class="cold">❄️ 平时不读</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="stats reveal">
+      <div class="stat"><div class="num" data-count="3800">0</div><div class="lbl">行文档冷存储（全历史可追溯）</div></div>
+      <div class="stat"><div class="num" data-count="90">0</div><div class="lbl">行接手热读取（handover 输出）</div></div>
+      <div class="stat"><div class="num" data-count="152">0</div><div class="lbl">条 testplan 场景（§2 真值表）</div></div>
+      <div class="stat"><div class="num" data-count="301">0</div><div class="lbl">个自动化单测全绿</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="cycle">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="kicker">Development Cycle</div>
+      <h2>一个开发周期的完整闭环</h2>
+      <p class="lede">从加场景到合并 master，八步走完。中间的机械环节全部一条命令化。</p>
+    </div>
+    <div class="pipe-scroll reveal">
+      <div class="pipe" id="pipe">
+        <div class="pstep" data-cap="<strong>testplan 先行</strong>：先把「操作 + 预期 + 初始状态」写成场景行，再动代码——状态转移是一等公民。"><span class="t">加场景行</span><span class="d">testplan.md</span></div>
+        <div class="pstep" data-cap="<strong>代码与测试同提交</strong>：dev_tests / user_tests 均可追溯回 testplan 场景 ID；动引擎另跑 fuzz。"><span class="t">改代码 + 测试</span><span class="d">src/ · tests/</span></div>
+        <div class="pstep" data-cap="<strong>一键版本号</strong>：manifest / package / lockfile / versions / release 副本五处同步，免手改。"><span class="t">bump 版本</span><span class="d">npm run bump</span></div>
+        <div class="pstep" data-cap="<strong>只写语义</strong>：log.md 顶部一个新周期块 + status.jsonl 一行概括，其余交给脚本。"><span class="t">写记忆</span><span class="d">log.md + status</span></div>
+        <div class="pstep" data-cap="<strong>一条命令收尾</strong>：docs 归档滚动 + release 重建 + test + lint + format:check，全绿才算完。"><span class="t">preflight</span><span class="d">npm run preflight</span></div>
+        <div class="pstep" data-cap="<strong>pre-commit 守卫</strong>：忘归档、忘滚动、目录树漂移——任一命中，提交被拦下。"><span class="t">提交</span><span class="d">git commit</span></div>
+        <div class="pstep" data-cap="<strong>长期授权仅限 master</strong>：工作分支推送后 merge --no-ff 回 master；有冲突就停下问人。"><span class="t">合并 master</span><span class="d">merge --no-ff</span></div>
+        <div class="pstep" data-cap="<strong>CI 机器兜底</strong>：pre-commit 可被 --no-verify 跳过，CI 不能——文档守卫 + 完整质量门槛再跑一遍。"><span class="t">CI 兜底</span><span class="d">GitHub Actions</span></div>
+      </div>
+    </div>
+    <p class="pipe-caption" id="pipeCap"></p>
+  </div>
+</section>
+
+<section id="terminal">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="kicker">Live Demo</div>
+      <h2>脚本长什么样</h2>
+      <p class="lede">接手与收尾各一条命令。下面是模拟回放：</p>
+    </div>
+    <div class="term reveal">
+      <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">obsidian-auto-headings — zsh</span></div>
+      <div class="term-body" id="termBody"></div>
+    </div>
+  </div>
+</section>
+
+<section id="guards" class="guard">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="kicker">Anti-Drift Guards</div>
+      <h2>四道防漂移守卫</h2>
+      <p class="lede">文档规则靠自觉必然漂移。这里的每一条纪律背后都有一个<b>机器执行</b>的守卫。</p>
+    </div>
+    <div class="grid grid-4 reveal" id="guardGrid">
+      <div class="card pulse"><span class="stage">pre-commit · --check</span><span class="icon">📚</span><h3>日志膨胀守卫</h3>
+        <p>log.md 周期块 &gt; 3 个 = 写了新块忘归档，提交被拦下。</p></div>
+      <div class="card pulse"><span class="stage">pre-commit · --check</span><span class="icon">📇</span><h3>状态索引守卫</h3>
+        <p>status.jsonl 概括行 &gt; 12 条即拦下；每行超 200 字告警——索引永远保持一屏内。</p></div>
+      <div class="card pulse"><span class="stage">pre-commit · --check</span><span class="icon">🌲</span><h3>目录树守卫</h3>
+        <p>log.md 目录结构块与磁盘 .ts/.mjs <b>双向比对</b>——新增 / 拆分文件忘回填地图，立即报错。</p></div>
+      <div class="card pulse"><span class="stage">push / PR · CI</span><span class="icon">🛡️</span><h3>CI 机器兜底</h3>
+        <p><code>--no-verify</code> 骗得过钩子骗不过 CI：同一套守卫 + test + lint + build 在云端再跑一遍。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="scripts">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="kicker">Automation</div>
+      <h2>脚本一览</h2>
+      <p class="lede">每个脚本都幂等、可重复跑，「写」与「挪」解耦。</p>
+    </div>
+    <div class="grid grid-4 reveal">
+      <div class="card"><span class="icon">🧭</span><h3>docs.mjs</h3>
+        <p><code>--handover</code> 接手三段式；缺省归档 log / 滚动 status / testplan 摘要；<code>--check</code> 守卫模式给钩子和 CI 用。</p></div>
+      <div class="card"><span class="icon">🔢</span><h3>bump.mjs</h3>
+        <p>版本号唯一真相源，一条命令同步五处文件；支持打磨递增 / 新里程碑 / 显式指定。</p></div>
+      <div class="card"><span class="icon">📦</span><h3>sync-release.mjs</h3>
+        <p>构建产物刷进 <code>release/</code>——每个周期必须产出可实测插件并随提交入库。</p></div>
+      <div class="card"><span class="icon">🚀</span><h3>sync-plugin-repo.mjs</h3>
+        <p>开发（monorepo）与发布（干净插件仓库）分离，向 Obsidian 社区目录发布时单向同步。</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="serif">"机械的挪动交给脚本，Agent 只写语义。"</p>
+    <p>Addon Monorepo Harness · 详细守则见 <span style="font-family:var(--mono)">CLAUDE.md</span> 与各 Addon 的 <span style="font-family:var(--mono)">doc/</span></p>
+  </div>
+</footer>
+
+<script>
+  /* 滚动渐显 */
+  const io = new IntersectionObserver((es) => {
+    es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+  /* 数字滚动 */
+  const cio = new IntersectionObserver((es) => {
+    es.forEach((e) => {
+      if (!e.isIntersecting) return;
+      cio.unobserve(e.target);
+      const end = +e.target.dataset.count, t0 = performance.now(), dur = 1400;
+      const tick = (t) => {
+        const p = Math.min((t - t0) / dur, 1), eased = 1 - Math.pow(1 - p, 3);
+        e.target.textContent = Math.round(end * eased).toLocaleString("zh-CN") + (p >= 1 && end >= 1000 ? "+" : "");
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  }, { threshold: 0.4 });
+  document.querySelectorAll(".stat .num").forEach((el) => cio.observe(el));
+
+  /* 流水线步进高亮 */
+  const steps = [...document.querySelectorAll("#pipe .pstep")];
+  const cap = document.getElementById("pipeCap");
+  let cur = 0;
+  function stepOn(i) {
+    steps.forEach((s, j) => s.classList.toggle("on", j === i));
+    cap.innerHTML = steps[i].dataset.cap;
+  }
+  stepOn(0);
+  setInterval(() => { cur = (cur + 1) % steps.length; stepOn(cur); }, 2600);
+  steps.forEach((s, i) => s.addEventListener("mouseenter", () => { cur = i; stepOn(i); }));
+
+  /* 终端回放 */
+  const scenes = [
+    { cmd: "npm run docs -- --handover", out: [
+      ["dim", ""],
+      ["acc", "══ 当前总览（status.jsonl 首行）══"],
+      ["", "  版本 0.7.18 · M7 上架冲刺"],
+      ["", "  下一步：发布仓库首推 → 实机截图 → bump 1.0.0 → 社区 PR"],
+      ["acc", "══ 最新周期块（log.md）══"],
+      ["dim", "  ## 2026-07-03 …（做了什么 / 没做什么 / 下一步 / 验证方式）"],
+      ["acc", "══ testplan 待办 ══"],
+      ["", "  [testplan] §2 场景 152 条：✅114 / ❌0 / ⚠️5 / 🔲33"],
+      ["dim", "  L250 🔲 L7 … 读这里即可，不必整读 testplan"],
+    ]},
+    { cmd: "npm run preflight", out: [
+      ["dim", ""],
+      ["ok", "  [log]    周期块共 3 个，≤ 保留数 3 ✓"],
+      ["ok", "  [status] 首行 + 12 行概括，全部合法 ✓"],
+      ["ok", "  [tree]   目录结构约定与磁盘一致（30 个 .ts/.mjs）✓"],
+      ["ok", "  [build]  tsc + esbuild → release/ 已刷新 ✓"],
+      ["ok", "  Test Files 18 passed · Tests 301 passed ✓"],
+      ["ok", "  eslint / prettier --check 全绿 ✓"],
+      ["warn", "  ready to commit."],
+    ]},
+  ];
+  const body = document.getElementById("termBody");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let played = false;
+  async function typeLine(cmd) {
+    const line = document.createElement("div");
+    line.innerHTML = '<span class="ps1">➜  obsidian-auto-headings</span> <span class="cmd"></span>';
+    const target = line.querySelector(".cmd");
+    const caret = document.createElement("span"); caret.className = "caret";
+    line.appendChild(caret);
+    body.appendChild(line);
+    for (const ch of cmd) { target.textContent += ch; await sleep(34); }
+    await sleep(350); caret.remove();
+  }
+  async function playTerm() {
+    for (;;) {
+      body.innerHTML = "";
+      for (const sc of scenes) {
+        await typeLine(sc.cmd);
+        for (const [cls, text] of sc.out) {
+          const d = document.createElement("div");
+          if (cls) d.className = cls;
+          d.textContent = text || " ";
+          body.appendChild(d);
+          await sleep(140);
+        }
+        await sleep(1800);
+      }
+      await sleep(2600);
+    }
+  }
+  const tio = new IntersectionObserver((es) => {
+    es.forEach((e) => { if (e.isIntersecting && !played) { played = true; playTerm(); tio.disconnect(); } });
+  }, { threshold: 0.3 });
+  tio.observe(body);
+
+  /* 守卫卡片轮流脉冲 */
+  const guards = [...document.querySelectorAll("#guardGrid .pulse")];
+  let g = 0;
+  setInterval(() => {
+    guards.forEach((c) => c.classList.remove("hit"));
+    guards[g].classList.add("hit");
+    g = (g + 1) % guards.length;
+  }, 1800);
+</script>
+</body>
+</html>

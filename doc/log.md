@@ -189,7 +189,7 @@ obsidian-auto-headings/
 │   ├── dev_tests/          自动化单元测试（Vitest，无需 Obsidian 运行时，npm test 跑它）+ uvm/ 压测框架
 │   └── user_tests/         可复制粘贴进 Obsidian 实测的 .md 样例（每个对应 testplan 某场景）
 ├── README.md             ← 面向读者的简介（核心功能 + Milestone 概览，入口文档）
-├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive/competitive，见 CLAUDE.md §3.1）
+├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive，见 CLAUDE.md §3.1）
 ├── release/              ← 可分发插件文件（main.js/manifest/styles/README；zip 本地生成不入库）★每周期必更新
 ├── publish/              ← 对外发布仓库的专属模板（双语 README、精简 package.json；npm run publish:repo 同步）
 ├── scripts/
