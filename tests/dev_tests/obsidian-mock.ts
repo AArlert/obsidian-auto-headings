@@ -84,6 +84,15 @@ export class Setting {
 export class MarkdownView {}
 
 /**
+ * `TFile` 替身：main.ts 的 Backlink 同步改用 `file instanceof TFile` 收窄（商店审核要求）后，
+ * 假 vault 的 `getAbstractFileByPath` 必须返回本类实例才能进入 `vault.process` 分支。
+ */
+export class TFile {
+	path = "";
+	basename = "";
+}
+
+/**
  * 对话框基类替身：`SettingsTab.ts` 的 `DeleteTemplateModal extends Modal` 在**模块加载时**即需要
  * Modal 为可构造的类（即便本测试不实例化对话框）。仅提供构造与开关空方法。
  */

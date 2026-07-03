@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AutoHeadingsPlugin from "../../src/main";
 import { DEFAULT_TEMPLATE, WORD_JOINER, type Template } from "../../src/numbering";
 import type { PathRule } from "../../src/pathrules";
-import { Notice } from "./obsidian-mock";
+import { Notice, TFile as MockTFile } from "./obsidian-mock";
 
 /** 假编辑器：持有按行切分的文本，记录 `transaction` 调用次数（用于「单一事务」断言）。 */
 class FakeEditor {
@@ -129,12 +129,14 @@ function makePlugin(
 	// renumberActiveFile 现遍历 getLeavesOfType("markdown")（修设置面板打开时活动视图为 null 的 bug）。
 	let leaves: Array<{ view: { editor: FakeEditor; file?: { path: string } } }> = [];
 	const templates = () => opts.allTemplates ?? [tplBox.current];
-	// 假 vault：getAbstractFileByPath 返回同形 TFile（path+basename），process 读改写回内存。
+	// 假 vault：getAbstractFileByPath 返回 mock TFile 实例（main.ts 用 instanceof TFile 收窄，
+	// 对象字面量会被判为「非文件」跳过），process 读改写回内存。
 	const vaultFiles = new Map<string, string>(Object.entries(opts.vaultFiles ?? {}));
 	const fileBasename = (p: string) => (p.split("/").pop() ?? p).replace(/\.md$/i, "");
+	const makeTFile = (p: string) =>
+		Object.assign(new MockTFile(), { path: p, basename: fileBasename(p) });
 	const vault = {
-		getAbstractFileByPath: (p: string) =>
-			vaultFiles.has(p) ? { path: p, basename: fileBasename(p) } : null,
+		getAbstractFileByPath: (p: string) => (vaultFiles.has(p) ? makeTFile(p) : null),
 		process: async (file: { path: string }, fn: (c: string) => string) => {
 			const next = fn(vaultFiles.get(file.path) ?? "");
 			vaultFiles.set(file.path, next);

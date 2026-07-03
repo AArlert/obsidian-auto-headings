@@ -225,8 +225,9 @@ export function renderEditPanel(
 					await plugin.templateStore.save(template);
 					plugin.renumberActiveFile();
 				};
+				// isComposing 用 in 收窄读取：不依赖全局 InputEvent 构造器身份，弹出窗口下同样成立。
 				text.inputEl.addEventListener("input", (e) => {
-					if (e instanceof InputEvent && e.isComposing) {
+					if ("isComposing" in e && e.isComposing === true) {
 						return;
 					}
 					void commit();
@@ -339,8 +340,9 @@ function textCell(
 	input.placeholder = placeholder;
 	// IME 感知（testplan L25）：拼音组合期间不提交（否则半截拼音被当值保存、且逐键重编标题）；
 	// 上屏（compositionend）后提交一次。
+	// isComposing 用 in 收窄读取：不依赖全局 InputEvent 构造器身份，弹出窗口下同样成立。
 	input.addEventListener("input", (e) => {
-		if (e instanceof InputEvent && e.isComposing) {
+		if ("isComposing" in e && e.isComposing === true) {
 			return;
 		}
 		void onChange(input.value);

@@ -220,7 +220,8 @@ export function renderWhitelistEditor(
 		filterInput.value = tab.wlFilter;
 		filterInput.addEventListener("input", (e) => {
 			// IME 组合中的半截拼音不参与过滤（避免行列表闪烁，L25）；上屏后再过滤一次。
-			if (e instanceof InputEvent && e.isComposing) {
+			// isComposing 用 in 收窄读取：不依赖全局 InputEvent 构造器身份，弹出窗口下同样成立。
+			if ("isComposing" in e && e.isComposing === true) {
 				return;
 			}
 			tab.wlFilter = filterInput.value;

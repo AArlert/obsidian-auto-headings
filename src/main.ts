@@ -4,10 +4,10 @@ import {
 	MarkdownView,
 	Notice,
 	Plugin,
+	TFile,
 	type App,
 	type EditorChange,
 	type MetadataCache,
-	type TFile,
 } from "obsidian";
 import {
 	AutoHeadingsSettings,
@@ -833,11 +833,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 						continue; // 本文件自身已由 foldSelfBacklinks 随主事务处理，跳过避免竞态重复写。
 					}
 					const file = vault.getAbstractFileByPath(sourcePath);
-					// 仅处理文件（排除文件夹：它们有 children 字段）。
-					if (!file || "children" in file) {
+					// 仅处理文件（instanceof 收窄，排除文件夹，商店审核要求勿用 as TFile 断言）。
+					if (!(file instanceof TFile)) {
 						continue;
 					}
-					await vault.process(file as TFile, (content) => {
+					await vault.process(file, (content) => {
 						const result = rewriteBacklinksInContent(content, basename, false, map);
 						total += result.count;
 						return result.content;
