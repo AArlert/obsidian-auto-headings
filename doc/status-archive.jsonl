@@ -1,3 +1,4 @@
+{"type": "log", "date": "2026-07-02", "version": "0.7.16", "summary": "白名单行布局（词语行内编辑 + =/≈/▸ 分段控件 + 命中标题 tooltip[analyzeWhitelist.matches] + 空态引导）；「路径模板」TAB 改名 + 节头强调竖条；文本模式决策不做；testplan L16–L20，+1 测试 299 passed。"}
 {"type": "log", "date": "2026-07-02", "version": "0.7.15", "summary": "skipFill 新增 none（跳级标题完全不编号、仅剥旧前缀、仍作重置边界；正常嵌套照编）；GUI 下拉第三项 + schema 收口 + UVM setSkipFill 三策略随机（skipFill=none bin）；testplan F7–F10，+3 测试 298 passed。"}
 {"type": "log", "date": "2026-07-02", "version": "0.7.14", "summary": "startIndex GUI 下拉 0–9 → 仅 0/1（需求大再放开）；引擎 [0,9999] 与 UVM 激励（含 2/5）不变。"}
 {"type": "log", "date": "2026-07-02", "version": "0.7.13", "summary": "startIndex 下拉 0–9（JSON 大值仍在列）；UVM setStartIndex 激励 + startIndex=0/non-default bin，500×60 与 5000×80 全绿；MOB-1 结案（0.7.2 全叶子遍历覆盖）。"}

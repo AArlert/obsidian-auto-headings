@@ -1,0 +1,35 @@
+# 打 tag 时自动构建并创建 GitHub Release，附带 Obsidian 商店要求的三个二进制文件
+# （main.js / manifest.json / styles.css）。tag 名必须与 manifest.json 的 version 完全一致，
+# 不带 v 前缀（Obsidian 约定）。
+name: Release
+
+on:
+    push:
+        tags:
+            - "*"
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+            - name: 安装依赖
+              run: npm ci
+            - name: 构建
+              run: npm run build
+            - name: 创建 Release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  tag="${GITHUB_REF#refs/tags/}"
+                  gh release create "$tag" \
+                    --title "$tag" \
+                    --generate-notes \
+                    main.js manifest.json styles.css
