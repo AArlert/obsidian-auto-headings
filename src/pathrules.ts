@@ -151,3 +151,69 @@ export function findDuplicatePatternIndex(rules: PathRule[], index: number): num
 	}
 	return -1;
 }
+
+/**
+ * 一条路径建议候选：来自 vault 的真实文件夹或文件（供 GUI 建议弹窗使用，见 `PathSuggest.ts`）。
+ * 文件夹 `path` 不含尾斜杠（与 Obsidian `TFolder.path` 一致，根文件夹为空串）。
+ */
+export interface PathCandidate {
+	path: string;
+	isFolder: boolean;
+}
+
+/**
+ * 按输入过滤 + 排序路径建议候选（大小写不敏感子串匹配，参考 numeroflip/obsidian-auto-template-trigger
+ * 的文件夹建议思路，见 doc/spec.md §3.8「参考实现」）。
+ *
+ * 排序：**命中位置越靠前越优先**（如输入 `pro` 时 `Projects/` 排在 `My Projects/` 之前）；位置并列时
+ * **文件夹优先于文件**（配路径规则时文件夹更常用）；再并列时**路径更短（更浅）优先**，最后按字典序。
+ */
+export function filterPathCandidates(
+	candidates: readonly PathCandidate[],
+	input: string,
+	limit = 30,
+): PathCandidate[] {
+	const needle = input.trim().toLowerCase();
+	return candidates
+		.map((c) => ({ c, idx: c.path.toLowerCase().indexOf(needle) }))
+		.filter(({ idx }) => needle === "" || idx >= 0)
+		.sort((a, b) => {
+			if (a.idx !== b.idx) {
+				return a.idx - b.idx;
+			}
+			if (a.c.isFolder !== b.c.isFolder) {
+				return a.c.isFolder ? -1 : 1;
+			}
+			if (a.c.path.length !== b.c.path.length) {
+				return a.c.path.length - b.c.path.length;
+			}
+			return a.c.path.localeCompare(b.c.path);
+		})
+		.slice(0, limit)
+		.map(({ c }) => c);
+}
+
+/**
+ * 提交路径输入时的自动补全：若输入未以 `/` 结尾、但去掉前导斜杠后与某个**真实存在的文件夹路径**
+ * 精确相等，视为用户想指该文件夹、自动补上尾斜杠；否则原样返回（含未配置空串、已是文件夹写法、
+ * 或压根不对应任何已知文件夹——如指向尚未创建的文件夹——的情形，均不改写）。
+ *
+ * **动机（用户报告 bug）**：本插件把「文件夹规则」与「文件规则」的区分**完全系于尾斜杠**（见本文件
+ * 顶部说明），手动输入时极易漏打——填 `新路径` 会被当成对一个不存在的同名文件的精确匹配规则，
+ * 而非文件夹规则，导致该文件夹下的文件仍回退到更泛的规则，行为上像是「改了模板没生效」。GUI 建议
+ * 弹窗（`PathSuggest.ts`）选中文件夹建议时已直接带上尾斜杠；本函数是**手动输入路径**时的兜底防线
+ * （testplan K13）。
+ */
+export function autocompleteFolderSlash(pattern: string, folderPaths: readonly string[]): string {
+	const trimmed = pattern.trim();
+	if (trimmed === "" || trimmed.endsWith("/")) {
+		return pattern;
+	}
+	// 仅用归一化后的副本做查找比对；补全时拼在**原始**（未转换分隔符的）trimmed 之后，
+	// 不改写用户输入里的其它字符（如反斜杠），只补那一个漏打的尾斜杠。
+	const normalized = trimmed.replace(/\\/g, "/").replace(/^\.?\//, "");
+	if (folderPaths.includes(normalized)) {
+		return `${trimmed}/`;
+	}
+	return pattern;
+}

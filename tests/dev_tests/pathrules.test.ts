@@ -7,8 +7,11 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+	autocompleteFolderSlash,
+	filterPathCandidates,
 	findDuplicatePatternIndex,
 	hasRootRule,
+	type PathCandidate,
 	type PathRule,
 	resolvePathRule,
 	ruleMatches,
@@ -173,5 +176,74 @@ describe("findDuplicatePatternIndex（testplan K12：GUI 阻断重复路径）",
 			{ pattern: "/Projects//", template: "B" },
 		];
 		expect(findDuplicatePatternIndex(rules, 1)).toBe(0);
+	});
+});
+
+describe("filterPathCandidates（testplan K13：路径建议弹窗排序）", () => {
+	const candidates: PathCandidate[] = [
+		{ path: "Projects", isFolder: true },
+		{ path: "My Projects", isFolder: true },
+		{ path: "Projects/todo.md", isFolder: false },
+		{ path: "Archive", isFolder: true },
+	];
+
+	it("空输入：返回全部候选（截至 limit），不过滤", () => {
+		expect(filterPathCandidates(candidates, "")).toHaveLength(4);
+	});
+
+	it("大小写不敏感子串匹配", () => {
+		const result = filterPathCandidates(candidates, "PROJ");
+		expect(result.map((c) => c.path)).toEqual(
+			expect.arrayContaining(["Projects", "My Projects", "Projects/todo.md"]),
+		);
+		expect(result.some((c) => c.path === "Archive")).toBe(false);
+	});
+
+	it("排序：命中位置越靠前越优先", () => {
+		const result = filterPathCandidates(candidates, "proj");
+		// "Projects" 与 "Projects/todo.md" 命中位置为 0；"My Projects" 命中位置为 3。
+		expect(result[0].path === "Projects" || result[0].path === "Projects/todo.md").toBe(true);
+		expect(result[result.length - 1].path).toBe("My Projects");
+	});
+
+	it("位置并列时文件夹优先于文件", () => {
+		const result = filterPathCandidates(candidates, "projects");
+		const idxFolder = result.findIndex((c) => c.path === "Projects");
+		const idxFile = result.findIndex((c) => c.path === "Projects/todo.md");
+		expect(idxFolder).toBeLessThan(idxFile);
+	});
+
+	it("limit 截断结果数量", () => {
+		expect(filterPathCandidates(candidates, "", 2)).toHaveLength(2);
+	});
+});
+
+describe("autocompleteFolderSlash（testplan K13：用户报告 bug——手动输入文件夹路径漏打尾斜杠）", () => {
+	const folderPaths = ["Projects", "Projects/sub", "读书笔记"];
+
+	it("输入恰好等于某真实文件夹路径（未带尾斜杠）：自动补全", () => {
+		expect(autocompleteFolderSlash("Projects", folderPaths)).toBe("Projects/");
+		expect(autocompleteFolderSlash("读书笔记", folderPaths)).toBe("读书笔记/");
+	});
+
+	it("已带尾斜杠：原样返回，不重复添加", () => {
+		expect(autocompleteFolderSlash("Projects/", folderPaths)).toBe("Projects/");
+	});
+
+	it("不对应任何真实文件夹（如指向具体文件，或尚未创建的文件夹）：原样返回", () => {
+		expect(autocompleteFolderSlash("读书笔记/深度工作.md", folderPaths)).toBe(
+			"读书笔记/深度工作.md",
+		);
+		expect(autocompleteFolderSlash("尚不存在的文件夹", folderPaths)).toBe("尚不存在的文件夹");
+	});
+
+	it("未配置的空串：原样返回", () => {
+		expect(autocompleteFolderSlash("", folderPaths)).toBe("");
+		expect(autocompleteFolderSlash("   ", folderPaths)).toBe("   ");
+	});
+
+	it("前导斜杠 / 反斜杠归一化后仍能识别对应的真实文件夹", () => {
+		expect(autocompleteFolderSlash("/Projects", folderPaths)).toBe("/Projects/");
+		expect(autocompleteFolderSlash("Projects\\sub", folderPaths)).toBe("Projects\\sub/");
 	});
 });

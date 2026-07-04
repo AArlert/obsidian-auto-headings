@@ -5,6 +5,51 @@
 
 ---
 
+## 2026-07-03 1.0.1 商店完整扫描反馈修复：源码 Error/Warning 清零（claude/obsidian-plugin-review-fixes-8fy6ck）
+
+**做了什么**：用户带回 Community Hub 的**完整扫描报告**（比上周期多出源码级检查），逐项修复。
+本次含行为变化（命令 ID、语言探测、minAppVersion），按 §4.1 bump 到 **1.0.1**。
+
+- **Error：`as any` + 无说明 eslint-disable（main.ts 98/177/196/818/820，审核明确不允许）**：
+  五处全部消灭——① `metadataTypeManager`（内部 API）改用 `App & { metadataTypeManager?: … }`
+  结构化收窄；② file-open 播种改用**公开** `vault.cachedRead`（typings 一直有，原 any 属历史包袱）；
+  ③ rename/delete 快照同步改用**公开** `vault.on("rename"/"delete")` 重载；④⑤ `syncBacklinks` 的
+  `getBacklinksForFile`（仍是半公开，1.13 typings 依旧未声明）以「可选方法」形状收窄，新增纯函数
+  `backlinkMap()` 适配裸 Map / `{data:Map}` 两种返回形状。src 现已零 `any`、零 eslint-disable。
+- **localStorage 语言探测（Behavior 标记 + Warning）**：`detectObsidianLang` 改走官方
+  `getLanguage()`（1.8.0+）；obsidian devDep 1.7.2 → 1.13.1（取类型）；**minAppVersion 1.4.0 →
+  1.8.0**（getLanguage 硬下限；顺带满足 css-scrollbar 的 Chromium 版本要求）。obsidian-mock 补
+  `getLanguage` 替身（`__setMockLanguage` 可注入返回值/抛错），i18n.test 三个用例改走替身。
+- **命令 ID 含插件 ID**：`toggle-auto-headings` → `toggle-auto-numbering`（Obsidian 注册时自动加
+  `auto-headings:` 前缀）。副作用：已给旧命令设过快捷键的用户需重新绑定（上架前改，代价最小）。
+- **`document` → `activeDocument`（弹出窗口兼容）**：main.ts IME 组合监听两处 +
+  WhitelistEditor 行内编辑 `createElement` 一处。
+- **Promise-in-void 回调（8 处）**：EditPanel / PathRules / WhitelistEditor 里 `addEventListener`
+  的 `async` 回调统一改同步包装 `void fn()` / `void save().then(…)`，执行顺序不变。
+- **多余类型断言（5 处）**：GeneralTab 语言三元、PathRules `createEl("datalist")`、
+  `(e as InputEvent).isComposing` ×3 改 `e instanceof InputEvent && e.isComposing`。
+- **`builtin-modules` 依赖（Warning，es-tooling 建议弃用）**：esbuild.config 改用官方
+  `node:module` 的 `builtinModules`（含 `node:` 前缀双份 external），依赖已卸载。
+- **CSS `!important`（4 处）**：分段控件选中态 / 活动 TAB 改为 `button.类.类` 叠写特异性
+  （(0,2,1)，压过主题的类级规则）；主题若也用 !important 仍会盖过，属主题侧问题，注释已注明。
+- **TemplateStore `JSON.parse` 未类型化**：显式标注 `unknown`（下游 `normalizeTemplate` 本就收
+  `unknown`）。
+- 扫描报告里的 License / README 两条 Warning 经核实**已在上周期修掉**（报告是旧快照）；
+  「Vault Enumeration」标记来自 `getMarkdownFiles`（全库清除编号功能所必需）属合理使用，不改。
+
+**没做什么**：未验证 Community Hub 重扫结果（需用户推 master 后触发）；未对 activeDocument 做
+多弹出窗口的完整覆盖（仅活动窗口注册，与原 document 行为等价，真正的多窗口 IME 覆盖属 backlog）；
+旧命令 ID 未做迁移兼容（上架前无存量用户）。
+
+**下一步**：推 master 后回 Community Hub 触发重新扫描，确认 Error 清零、Warning 只剩可解释项
+（如主题级 CSS 判定若仍报，可在提交说明里引用本块理由）；随后继续商店审核流程。
+
+**验证方式**：`npm test` 328 passed / `npm run test:fuzz` 通过 / `npm run lint`、
+`npm run format:check`、`npm run build`（tsc 严格类型检查）全绿；`grep` 复核 src 零
+`as any`、零 `eslint-disable`、零裸 `document`；`npm run release` 产物已重建入库。
+
+---
+
 ## 2026-07-03 1.0.0 商店自动审核反馈修复：README 占位符 + LICENSE 无法识别（claude/plugin-repo-audit-avuhui）
 
 **做了什么**：用户提交后收到 Obsidian Community Hub 自动审核的两条 Warning，逐条修复。**纯文档

@@ -337,6 +337,38 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 	color: var(--text-normal);
 }
 
+/* 路径建议弹窗（testplan K13，参考 numeroflip/obsidian-auto-template-trigger 的建议交互）：
+   挂在 activeDocument.body 上、position: fixed，不受 .ah-path-table 自身滚动裁剪影响。 */
+.ah-path-suggest {
+	position: fixed;
+	z-index: var(--layer-popover, 70);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s, 4px);
+	box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.2));
+	max-height: 240px;
+	overflow-y: auto;
+}
+
+.ah-path-suggest-item {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	padding: 0.3em 0.6em;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ah-path-suggest-item.is-selected {
+	background: var(--background-modifier-hover);
+}
+
+.ah-path-suggest-icon {
+	flex-shrink: 0;
+}
+
 .ah-path-handle {
 	cursor: grab;
 	color: var(--text-faint);
@@ -442,6 +474,21 @@ button.ah-tab.ah-tab-active:hover {
 	display: flex;
 	gap: 16px;
 	margin-top: 12px;
+}
+
+/* 关于 TAB 的鸣谢列表 */
+.ah-about-credits {
+	display: flex;
+	flex-direction: column;
+	gap: 0.6em;
+}
+
+.ah-about-credit-item .ah-section-desc {
+	margin: 0.2em 0 0;
+}
+
+.ah-about-credit-repo {
+	font-weight: var(--font-medium);
 }
 
 /* 模板网格与路径表格：窄屏（移动端）横向滚动，不挤压列宽 */
