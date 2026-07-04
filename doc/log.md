@@ -40,6 +40,37 @@
 
 ---
 
+## 2026-07-04 1.0.3 修复「关于」TAB 仓库链接指向旧 monorepo（claude/auto-headings-compliance-wx7w37）
+
+**做了什么**：用户反馈插件商店 About 页指向的仓库不对；排查发现是本仓库（早年从私有
+monorepo 迁移而来）遗留的旧地址——`src/settings/tabs/AboutTab.ts` 的 `REPO_URL` 硬编码为
+`https://github.com/AArlert/Addon`（monorepo 内该 Addon 的旧路径），而不是当前对外发布仓库
+`AArlert/obsidian-auto-headings`。导致插件内「关于」TAB 的仓库链接与 Issues 链接都打到一个
+不存在 / 不相关的地址。**改为** `https://github.com/AArlert/obsidian-auto-headings`。全仓
+`grep` 复核，仅此一处硬编码引用（`manifest.json` 的 `authorUrl` 指向作者主页，非本问题）。
+Bump **1.0.3**（`npm run bump`），`npm run release` 重建 `release/` 三件套并核对 `release/main.js`
+内联字符串已更新。
+
+**关于社区插件商店重扫反馈（第三轮）的三条 Recommendation**（`display` / `setWarning` /
+`setDynamicTooltip` 已弃用）：**沿用 1.0.1/1.0.2 两轮已记录的结论，本轮未改动**——替代 API
+（`getSettingDefinitions` / `setDestructive`）均为 **Obsidian 1.13.0+** 才提供，本插件
+`minAppVersion` 现为 1.8.7，若现在迁移，重扫会把这三条「弃用提示」升级成「不支持 API」的
+**Error**（比现状更差）。License Warning 与 Vault Enumeration Recommendation 同样维持前两轮
+结论（前者是 GitHub licensee 缓存滞后，后者是全库清除功能的必需权限）。
+
+**没做什么**：未处理三条已弃用 API 迁移（版本下限不满足，见上）；未新增自动化测试覆盖
+「关于」TAB 的链接渲染——`REPO_URL` 是无分支逻辑的静态常量，为一行字符串常量新增 DOM 渲染
+测试基建收益过低，未做。
+
+**下一步**：确认无其他遗留 monorepo 引用后，按 §5.1 合并回 `master` 并推送；后续若
+`minAppVersion` 抬高到 1.13+，一并处理三条弃用 API 迁移。
+
+**验证方式**：`npm test` 328 passed / `npm run lint` / `npm run format:check` 全绿；
+`grep -rn "AArlert/Addon"` 全仓确认清零；`grep` 复核 `release/main.js` 内联字符串已替换为
+`AArlert/obsidian-auto-headings`。
+
+---
+
 ## 2026-07-03 1.0.2 商店重扫第二轮反馈：getLanguage 版本下限 + 跨窗口类型检查（claude/obsidian-plugin-review-fixes-8fy6ck）
 
 **做了什么**：1.0.1 推上去后 Community Hub 重扫，Error 从「any/eslint-disable」换成一条新的
@@ -123,40 +154,6 @@
 **验证方式**：`npm test` 328 passed / `npm run test:fuzz` 通过 / `npm run lint`、
 `npm run format:check`、`npm run build`（tsc 严格类型检查）全绿；`grep` 复核 src 零
 `as any`、零 `eslint-disable`、零裸 `document`；`npm run release` 产物已重建入库。
-
----
-
-## 2026-07-03 1.0.0 商店自动审核反馈修复：README 占位符 + LICENSE 无法识别（claude/plugin-repo-audit-avuhui）
-
-**做了什么**：用户提交后收到 Obsidian Community Hub 自动审核的两条 Warning，逐条修复。**纯文档
-改动、不涉及行为/产物**，按 §4.1「上架后策略」不 bump manifest 版本，只记本条 log。
-
-- **README 占位符警告**：审核器逐字扫描源码文本里的字面 `TODO`，命中 `README.md`/`README.zh.md`
-  里各一行 `<!-- hero screenshot / GIF 占位 -->` 注释——尽管渲染后不可见，源码里确有 `TODO` 字样。
-  用户此前已决定不做 GIF、纯文字说明足够撑起上架，故直接删掉这两行占位注释（不是留白等着填，是
-  确认这次发布就不需要它），警告随之消失。
-- **LICENSE 无法识别警告**：排查发现现有 `LICENSE` 文件其实是 **MIT + Commons Clause（禁商用）+
-  Anti-996** 三段拼接、且自相矛盾——MIT 正文写"可自由使用/复制/修改/**出售**"，紧接着 Commons
-  Clause 又说"不得商用"，GitHub 的 `licensee` 库（Obsidian 该警告大概率的数据来源）做的是模糊
-  文本比对，认不出这种自定义拼接文本，判定"无法识别标准许可证"。
-  查证 `licensee` 当前收录的许可证列表（57 个，`cc-by-4.0`/`cc0-1.0`/`mit` 等）**不含任何非商业
-  许可证**——CC-BY-NC 系列、PolyForm Noncommercial 均不在其中。这意味着用户最初想要的"非商业+
-  消除警告"两个目标**互斥**：换成任何真实的非商业许可证文本，警告大概率依然存在（该工具压根不
-  认识这类许可证）。就此用 `AskUserQuestion` 请用户裁决，用户选择**优先消除警告**——改回纯净、
-  未加料的标准 MIT 文本（保留原 `Copyright (c) 2025 AArlert`），删掉 Commons Clause 与 Anti-996
-  两段。
-
-**没做什么**：未保留非商业限制（用户主动放弃，换取许可证可被识别）；未额外验证 Community Hub
-的警告扫描器是否真的就是调用 GitHub `licensee`（是我方合理推断，未见到官方文档明确写死数据源，
-但两处线索一致——① Obsidian 提交要求页原话提到需要"LICENSE 文件"、② licensee 是 GitHub 生态
-里事实标准的许可证检测工具）；未重新提交 Community Hub 审核（是用户下一步的动作）。
-
-**下一步**：用户把改动推到 `master`（这次 Agent 已代为 commit + merge）后，回 Community Hub 页面
-触发重新扫描 / 重新提交，确认两条 Warning 是否清零。
-
-**验证方式**：`npm test`（328 passed，未受影响，纯文档改动）/ `npm run lint` / `npm run format:check`
-全绿；`grep -n -i "TODO"` 复核 README 两个文件已无残留；`LICENSE` 手工核对确认只剩单一 MIT 正文、
-无拼接痕迹。
 
 ---
 
