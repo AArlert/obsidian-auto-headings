@@ -5,6 +5,54 @@
 
 ---
 
+## 2026-07-04 1.0.4 路径规则建议弹窗重做 + 三处鸣谢（claude/path-suggest-upgrade）
+
+**做了什么**：用户报告 bug（testplan K13）：路径规则新增一行投新模板，路径填 `新路径`（漏打
+尾斜杠），该文件夹下已按旧规则编号过的文件重新打开不会按新模板重排——复现确认根因不在
+`renumberOnOpen`（J9）机制本身（补上 `/` 后立即正常），而是本插件把「文件夹规则」与「文件
+规则」的区分**系于路径末尾是否带 `/`**，纯文本输入 + 原生 `<datalist>` 极易漏打。用户同时
+指出原生 `<datalist>` 不会主动补全，并给出参考实现 numeroflip/obsidian-auto-template-trigger
+（`FolderSuggest`/`TextInputSuggest`：自绘建议弹窗、键盘 ↑↓/Enter 选择、体验明显更好）。
+
+- **`src/pathrules.ts` 新增两个纯函数**（`filterPathCandidates`、`autocompleteFolderSlash`），
+  配 `pathrules.test.ts` 10 条新单测：前者按输入模糊匹配 + 排序候选（命中位置优先、位置并列
+  文件夹优先于文件）；后者是**手动输入不经弹窗时的兜底**——输入若与某个真实存在的文件夹路径
+  精确相等但缺尾斜杠，自动补全，直接根治用户报告的 bug（无论走不走建议弹窗都生效）。
+- **新增 `src/settings/tabs/PathSuggest.ts`**：自绘建议弹窗（不依赖 Popper），参考引用仓库的
+  `TextInputSuggest` 交互——挂 `activeDocument.body`、`position: fixed`（`.ah-path-table` 有
+  `max-height`+`overflow-y:auto`，行内绝对定位会被裁切，故不挂在行内）；键盘 ↑↓/Enter/Esc +
+  鼠标点击/悬停；选中文件夹自动带尾斜杠。`OPEN_POPUPS` 模块级集合 + `closeAllPathSuggestPopups`
+  在每次 `renderPathRules` 渲染前清场，防止弹窗 DOM 节点因挂在 body 上、不随所在行的容器一起
+  被 `tab.display()` 清空而变成孤儿节点。
+- **`src/settings/tabs/PathRules.ts` 接线**：移除旧的「分层 datalist」（`updatePathDatalist`），
+  换成 `collectPathCandidates`（列出 vault 全部文件夹/文件，含代表根 `/` 的 `{path:"", isFolder:
+  true}`）供弹窗做模糊排序；`commitPattern` 里手动输入分支调用 `autocompleteFolderSlash` 兜底；
+  输入框 `keydown` 先交给 `suggest.handleKeydown(e)`（弹窗展开时消费 ↑↓/Enter/Esc），未消费时
+  才落回原有的「Enter → blur → 提交」逻辑。
+- **鸣谢（用户要求，「关于」TAB 新增鸣谢分区）**：`i18n.ts` 新增 5 个文案键（标题/引言/三条
+  说明，中英双语），`AboutTab.ts` 渲染三条鸣谢——numeroflip/obsidian-auto-template-trigger（本轮
+  路径建议弹窗参考）、hobeedzc/obsidian-header-enhancer-plugin（Backlink 同步最初参考，已在
+  spec.md §3.12 记录、本轮补上仓库 URL + About 页可见）、gurjar1/auto-heading-obsidian
+  （WJ 单哨兵边界最初参考，本插件升级为双哨兵，spec.md §2.5 补记）。后两条是**追认**——功能早
+  已实现（0.7.8/0.7.20），只是当初没写鸣谢，本轮补上。
+- `doc/spec.md` §3.8 重写「路径输入补全」段（datalist → 建议弹窗 + 自动补全，含参考实现 pointer）；
+  §2.5、§3.12 各补一行参考仓库 URL + 「见关于 TAB 鸣谢」pointer。
+
+**没做什么**：未改 `PathRule` 的存储 schema（未引入显式 `kind: folder|file` 字段）——文件夹/
+文件规则的区分仍系于尾斜杠约定，只是从「容易漏打」变成「弹窗自动带 + 手动漏打时兜底自动补」，
+双重防线覆盖了实际报告的场景，未做破坏性数据迁移（风险/收益比更低，且现有 `resolvePathRule`
+匹配算法本身没问题，问题纯在输入层）；建议弹窗的 DOM 交互（排序观感、键盘选择、动画）无法在
+本环境的无头 vitest（`environment:"node"`，无 DOM）中验证，testplan K13 标记为待用户实测。
+
+**下一步**：用户在真实 Obsidian 里手验建议弹窗（排序是否符合直觉、键盘操作是否顺手、自动补全
+是否在预期时机触发）；若弹窗定位/裁切有问题（如设置面板窗口很窄时），再迭代。
+
+**验证方式**：`npm test` 338 passed（含新增 10 条 `pathrules.test.ts` 用例）/ `npm run test:fuzz`
+（5000×80，两块记分板全绿，路径规则不在被测范围内但核心编号引擎无回归）/ `npx tsc -noEmit`
+/ `npm run lint` / `npm run format:check` 全绿；`npm run build` 确认 `PathSuggest.ts` 编译无误。
+
+---
+
 ## 2026-07-04 1.0.3 修复「关于」TAB 仓库链接指向旧 monorepo（claude/auto-headings-compliance-wx7w37）
 
 **做了什么**：用户反馈插件商店 About 页指向的仓库不对；排查发现是本仓库（早年从私有

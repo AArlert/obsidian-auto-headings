@@ -40,6 +40,48 @@
 
 ---
 
+## 2026-07-04 1.0.6 M8 规格重整：修文档漂移 + 拆 M8a/M8b + 内容迁移（claude/spec-m8-feasibility-8f233f）
+
+**做了什么**：应用户要求审查 `spec.md` Milestone 8（侧栏大纲导航 + 结构编辑）的可行性，本周期是讨论
+产出的落地，**未改任何源码/测试**。
+
+1. **修文档漂移**：`spec.md` 中有三处写着「审阅模式 / 全库扫描修复留 M8」（§3.12 两处 + 旧 M7 Roadmap
+   一处），但实际这两项内容一直在 Milestone 9 候选清单里，M8（8.0–8.7）自身从未提过它们——三处引用
+   已改为「留待 M9」，与实际落点对齐。
+2. **拆分 M8a / M8b**：可行性审查发现 M8 原文把「大纲导航（只读展示/搜索/跳转）」与「拖放重排+行内
+   编辑（结构性写入）」混在一个 milestone 里，后者引入的是当前写入模型（「整文件重写、从不批量扫库」）
+   之外的新写入路径（剪切—拼接—重排—同步 backlink），边界情况数量级预计超过 M6/M7 已加固的「原地改
+   标签」场景，且拖拽手势/动画完全没有自动化验证手段。故拆成 **M8a**（低风险，可独立发布）与 **M8b**
+   （高风险，架构新增最多，建议独立排期）。
+3. **内容迁移**：原先整段 UI 设计稿 + 详尽 bullet list 直接堆在 Roadmap §5 里（与项目「单一事实源」
+   纪律相悖——其余 milestone 的 Roadmap 条目都只是一行 + 链接，详细设计在 §3）。本次把实质内容迁到
+   新增 **§3.14 侧栏大纲导航（M8a）**、**§3.15 拖放重排与结构编辑（M8b）**，§2.1 核心需求表补
+   CR-15/CR-16，§4 架构设计补一段「M8 规划中」注记（新增 `views/OutlineView.ts` 是本仓库第一次引入
+   Leaf/View 基础设施）；Roadmap §5 的 M8a/M8b 只留精简 checklist + 链接。
+4. **测试基建可行性结论**（本次审查的重点发现，已写入 §3.14/§3.15/§4）：
+   - `vitest.config.ts` 固定 `environment: "node"`，`obsidian-mock.ts` 的 `containerEl` 只是空对象——
+     现状对这类面板完全没有自动化验证空间。M8a 落地时可按新增测试文件用
+     `// @vitest-environment jsdom` 引入最小 jsdom 依赖（不影响既有测试），覆盖树构建/搜索过滤/键盘
+     导航等结构性断言；但真实 CSS 过渡/fade 效果 jsdom 验证不到，维持交给 `user_tests` 手验，与
+     testplan 现有「面板类交互无文本语义、留手验」原则一致。
+   - M8b 风险最高的拖放重排，建议**架构上**把「结构变更执行」拆成独立纯函数（如
+     `moveHeadingBlock(content, source, target)`，不碰 DOM）与「拖放手势识别」（DOM 事件层）两层——
+     前者可以按 `tests/dev_tests/uvm/` 现有的约束随机序列模式**新增一种随机操作**（随机移动标题），
+     配套不变量做回归，是 M8 里少数能被机器持续验证、而非仅靠人工点击的部分。这个拆分建议已写进
+     §3.15「测试策略」，值得在真正实现 M8b 前就定下来，而不是先写成一个揉在一起的 DOM 事件处理函数。
+
+**没做什么**：M8a/M8b 均未开工，`views/` 目录、`moveHeadingBlock` 均不存在；这是规格/可行性层面的
+整理，不是实现。
+
+**下一步**：等待用户决定何时排期 M8a；M8b 实现前先按 §3.15 的建议把纯函数层设计出来再动手写 DOM
+拖拽逻辑，以便从第一天起就能接入 UVM。
+
+**验证方式**：纯文档改动，无代码变更。`npx prettier --check doc/spec.md` 通过；内部锚点链接（3.14/3.15
+及新增交叉引用）逐一核对生成的 slug 与既有同风格标题（如 3.12/3.13）一致。未触发 `npm test`/`lint`/
+`release` 重建（无源码改动，遵循「上架后策略：仅行为/产物变化才 bump」，本次不 bump 版本号）。
+
+---
+
 ## 2026-07-04 1.0.6 白名单归一化补 HTML 标签 / `==`/`~~`（claude/whitelist-appendix-formatting-n2xdhq）
 
 **做了什么**：用户反馈子树白名单「附录」无法排除 `<u>附录</u>`、`==附录==`、
@@ -109,54 +151,6 @@
 **验证方式**：`npm test` 338 passed（无新增用例——本次是纯 CSS 数值修复，无新增可测逻辑分支）
 / `npx tsc -noEmit` / `npm run lint` / `npm run format:check` 全绿；`npm run build` 确认样式
 改动正确同步进 `release/styles.css`。
-
----
-
-## 2026-07-04 1.0.4 路径规则建议弹窗重做 + 三处鸣谢（claude/path-suggest-upgrade）
-
-**做了什么**：用户报告 bug（testplan K13）：路径规则新增一行投新模板，路径填 `新路径`（漏打
-尾斜杠），该文件夹下已按旧规则编号过的文件重新打开不会按新模板重排——复现确认根因不在
-`renumberOnOpen`（J9）机制本身（补上 `/` 后立即正常），而是本插件把「文件夹规则」与「文件
-规则」的区分**系于路径末尾是否带 `/`**，纯文本输入 + 原生 `<datalist>` 极易漏打。用户同时
-指出原生 `<datalist>` 不会主动补全，并给出参考实现 numeroflip/obsidian-auto-template-trigger
-（`FolderSuggest`/`TextInputSuggest`：自绘建议弹窗、键盘 ↑↓/Enter 选择、体验明显更好）。
-
-- **`src/pathrules.ts` 新增两个纯函数**（`filterPathCandidates`、`autocompleteFolderSlash`），
-  配 `pathrules.test.ts` 10 条新单测：前者按输入模糊匹配 + 排序候选（命中位置优先、位置并列
-  文件夹优先于文件）；后者是**手动输入不经弹窗时的兜底**——输入若与某个真实存在的文件夹路径
-  精确相等但缺尾斜杠，自动补全，直接根治用户报告的 bug（无论走不走建议弹窗都生效）。
-- **新增 `src/settings/tabs/PathSuggest.ts`**：自绘建议弹窗（不依赖 Popper），参考引用仓库的
-  `TextInputSuggest` 交互——挂 `activeDocument.body`、`position: fixed`（`.ah-path-table` 有
-  `max-height`+`overflow-y:auto`，行内绝对定位会被裁切，故不挂在行内）；键盘 ↑↓/Enter/Esc +
-  鼠标点击/悬停；选中文件夹自动带尾斜杠。`OPEN_POPUPS` 模块级集合 + `closeAllPathSuggestPopups`
-  在每次 `renderPathRules` 渲染前清场，防止弹窗 DOM 节点因挂在 body 上、不随所在行的容器一起
-  被 `tab.display()` 清空而变成孤儿节点。
-- **`src/settings/tabs/PathRules.ts` 接线**：移除旧的「分层 datalist」（`updatePathDatalist`），
-  换成 `collectPathCandidates`（列出 vault 全部文件夹/文件，含代表根 `/` 的 `{path:"", isFolder:
-  true}`）供弹窗做模糊排序；`commitPattern` 里手动输入分支调用 `autocompleteFolderSlash` 兜底；
-  输入框 `keydown` 先交给 `suggest.handleKeydown(e)`（弹窗展开时消费 ↑↓/Enter/Esc），未消费时
-  才落回原有的「Enter → blur → 提交」逻辑。
-- **鸣谢（用户要求，「关于」TAB 新增鸣谢分区）**：`i18n.ts` 新增 5 个文案键（标题/引言/三条
-  说明，中英双语），`AboutTab.ts` 渲染三条鸣谢——numeroflip/obsidian-auto-template-trigger（本轮
-  路径建议弹窗参考）、hobeedzc/obsidian-header-enhancer-plugin（Backlink 同步最初参考，已在
-  spec.md §3.12 记录、本轮补上仓库 URL + About 页可见）、gurjar1/auto-heading-obsidian
-  （WJ 单哨兵边界最初参考，本插件升级为双哨兵，spec.md §2.5 补记）。后两条是**追认**——功能早
-  已实现（0.7.8/0.7.20），只是当初没写鸣谢，本轮补上。
-- `doc/spec.md` §3.8 重写「路径输入补全」段（datalist → 建议弹窗 + 自动补全，含参考实现 pointer）；
-  §2.5、§3.12 各补一行参考仓库 URL + 「见关于 TAB 鸣谢」pointer。
-
-**没做什么**：未改 `PathRule` 的存储 schema（未引入显式 `kind: folder|file` 字段）——文件夹/
-文件规则的区分仍系于尾斜杠约定，只是从「容易漏打」变成「弹窗自动带 + 手动漏打时兜底自动补」，
-双重防线覆盖了实际报告的场景，未做破坏性数据迁移（风险/收益比更低，且现有 `resolvePathRule`
-匹配算法本身没问题，问题纯在输入层）；建议弹窗的 DOM 交互（排序观感、键盘选择、动画）无法在
-本环境的无头 vitest（`environment:"node"`，无 DOM）中验证，testplan K13 标记为待用户实测。
-
-**下一步**：用户在真实 Obsidian 里手验建议弹窗（排序是否符合直觉、键盘操作是否顺手、自动补全
-是否在预期时机触发）；若弹窗定位/裁切有问题（如设置面板窗口很窄时），再迭代。
-
-**验证方式**：`npm test` 338 passed（含新增 10 条 `pathrules.test.ts` 用例）/ `npm run test:fuzz`
-（5000×80，两块记分板全绿，路径规则不在被测范围内但核心编号引擎无回归）/ `npx tsc -noEmit`
-/ `npm run lint` / `npm run format:check` 全绿；`npm run build` 确认 `PathSuggest.ts` 编译无误。
 
 ---
 
