@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-07-04 1.0.3 修复「关于」TAB 仓库链接指向旧 monorepo（claude/auto-headings-compliance-wx7w37）
+
+**做了什么**：用户反馈插件商店 About 页指向的仓库不对；排查发现是本仓库（早年从私有
+monorepo 迁移而来）遗留的旧地址——`src/settings/tabs/AboutTab.ts` 的 `REPO_URL` 硬编码为
+`https://github.com/AArlert/Addon`（monorepo 内该 Addon 的旧路径），而不是当前对外发布仓库
+`AArlert/obsidian-auto-headings`。导致插件内「关于」TAB 的仓库链接与 Issues 链接都打到一个
+不存在 / 不相关的地址。**改为** `https://github.com/AArlert/obsidian-auto-headings`。全仓
+`grep` 复核，仅此一处硬编码引用（`manifest.json` 的 `authorUrl` 指向作者主页，非本问题）。
+Bump **1.0.3**（`npm run bump`），`npm run release` 重建 `release/` 三件套并核对 `release/main.js`
+内联字符串已更新。
+
+**关于社区插件商店重扫反馈（第三轮）的三条 Recommendation**（`display` / `setWarning` /
+`setDynamicTooltip` 已弃用）：**沿用 1.0.1/1.0.2 两轮已记录的结论，本轮未改动**——替代 API
+（`getSettingDefinitions` / `setDestructive`）均为 **Obsidian 1.13.0+** 才提供，本插件
+`minAppVersion` 现为 1.8.7，若现在迁移，重扫会把这三条「弃用提示」升级成「不支持 API」的
+**Error**（比现状更差）。License Warning 与 Vault Enumeration Recommendation 同样维持前两轮
+结论（前者是 GitHub licensee 缓存滞后，后者是全库清除功能的必需权限）。
+
+**没做什么**：未处理三条已弃用 API 迁移（版本下限不满足，见上）；未新增自动化测试覆盖
+「关于」TAB 的链接渲染——`REPO_URL` 是无分支逻辑的静态常量，为一行字符串常量新增 DOM 渲染
+测试基建收益过低，未做。
+
+**下一步**：确认无其他遗留 monorepo 引用后，按 §5.1 合并回 `master` 并推送；后续若
+`minAppVersion` 抬高到 1.13+，一并处理三条弃用 API 迁移。
+
+**验证方式**：`npm test` 328 passed / `npm run lint` / `npm run format:check` 全绿；
+`grep -rn "AArlert/Addon"` 全仓确认清零；`grep` 复核 `release/main.js` 内联字符串已替换为
+`AArlert/obsidian-auto-headings`。
+
+---
+
 ## 2026-07-03 1.0.2 商店重扫第二轮反馈：getLanguage 版本下限 + 跨窗口类型检查（claude/obsidian-plugin-review-fixes-8fy6ck）
 
 **做了什么**：1.0.1 推上去后 Community Hub 重扫，Error 从「any/eslint-disable」换成一条新的

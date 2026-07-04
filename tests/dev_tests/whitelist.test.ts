@@ -43,6 +43,24 @@ describe("normalizeForWhitelist（白名单归一化）", () => {
 		expect(normalizeForWhitelist("[参考文献](https://x)")).toBe("参考文献");
 	});
 
+	it("D11：HTML 标签（含属性）整体剥离、保留标签内文字", () => {
+		expect(normalizeForWhitelist("<u>附录</u>")).toBe("附录");
+		expect(normalizeForWhitelist('<font color="#c3d69b">附录</font>')).toBe("附录");
+		expect(normalizeForWhitelist('<span style="color:red">附录</span>')).toBe("附录");
+		expect(normalizeForWhitelist("<mark>附录</mark>")).toBe("附录");
+		expect(normalizeForWhitelist("附录<br>A")).toBe("附录a");
+	});
+
+	it("D11：高亮 ==文字== 与删除线 ~~文字~~ 成对剥离", () => {
+		expect(normalizeForWhitelist("==附录==")).toBe("附录");
+		expect(normalizeForWhitelist("~~附录~~")).toBe("附录");
+	});
+
+	it("D11：HTML 标签与 Markdown 强调可叠加", () => {
+		expect(normalizeForWhitelist("<u>**附录**</u>")).toBe("附录");
+		expect(normalizeForWhitelist("<mark>==附录==</mark>")).toBe("附录");
+	});
+
 	it("NFKC 折叠全角空格、trim 与折叠内部空白", () => {
 		// 全角空格 U+3000 → 普通空格，再被 trim/折叠。
 		expect(normalizeForWhitelist("　目录　")).toBe("目录");
@@ -141,6 +159,18 @@ describe("D4 — subtree 子树匹配", () => {
 			"## 后续", // 同级，终止 → 正常编号
 		].join("\n");
 		expect(prefixes(content, tpl)).toEqual([null, null, `${WORD_JOINER}1 ${WORD_JOINER}`]);
+	});
+
+	it("D11：根标题带 HTML 标签 / 高亮 / 删除线时仍能命中子树", () => {
+		for (const heading of [
+			"## <u>附录</u>",
+			"## ==附录==",
+			'## <font color="#c3d69b">附录</font>',
+			"## ~~附录~~",
+		]) {
+			const content = [heading, "### 子"].join("\n");
+			expect(prefixes(content, tpl)).toEqual([null, null]);
+		}
 	});
 });
 

@@ -12,19 +12,31 @@ import { stripHeadingPrefix, stripPrefix, type StripAffixOptions } from "./strip
 import type { Template, WhitelistEntry } from "./template";
 
 /**
- * 去除行内 Markdown 标记，仅用于白名单归一化（见 {@link normalizeForWhitelist}）。
+ * 去除行内 Markdown / HTML 标记，仅用于白名单归一化（见 {@link normalizeForWhitelist}）。
+ * - HTML 标签（含属性）整体删除、保留内部文字：`<u>附录</u>`、`<font color="#c3d69b">附录</font>`、
+ *   `<mark>`/`<span style="...">`/`<sup>`/`<br>` 等均归一为其中的文字（不逐一枚举标签名，通用剥离）。
+ * - 高亮 `==文字==`、删除线 `~~文字~~` 成对剥离，还原为「文字」。
  * - 链接 / 图片 `[文字](url)` / `![alt](url)` → 还原为「文字」/「alt」。
  * - 强调 / 代码标记 `*`、`_`、`` ` `` 直接删除（`**目录**`、`_目录_`、`` `目录` `` 均归一为「目录」）。
+ *
+ * 顺序有意义：先剥 HTML 标签（连同标签内的属性 `=` 一并去掉），再处理成对的 `==`/`~~`，
+ * 避免属性里的 `=`、`~` 干扰后两步的成对匹配；`<u>**附录**</u>` 这类标签套 Markdown 强调的写法，
+ * 剥完标签后剩下的 `**附录**` 仍会被最后一步的字符类删除命中。
  */
 function stripInlineMarkdown(s: string): string {
-	return s.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`]/g, "");
+	return s
+		.replace(/<\/?[a-zA-Z][^<>]*>/g, "")
+		.replace(/==([^=]+)==/g, "$1")
+		.replace(/~~([^~]+)~~/g, "$1")
+		.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+		.replace(/[*_`]/g, "");
 }
 
 /**
  * 白名单命中判定前对文本的**归一化**（见 spec.md §3.7）。**仅用于命中判定，绝不改写写入文件的内容。**
  *
  * 步骤（标题文本须先由调用方剥离编号前缀，见 {@link computeWhitelistExemptions}）：
- * 1. 去除行内 Markdown 标记（`**` / `*` / `_` / `` ` `` 与链接）。
+ * 1. 去除行内 Markdown / HTML 标记（`**` / `*` / `_` / `` ` `` / `==` / `~~` / 链接 / HTML 标签）。
  * 2. Unicode **NFKC** 归一（折叠全角 / 半角等价字符，如全角空格 U+3000 → 普通空格）。
  * 3. 双侧 `trim()` 并将内部连续空白折叠为单个空格。
  * 4. 拉丁字母统一转小写（使「Appendix」≡「appendix」）。
