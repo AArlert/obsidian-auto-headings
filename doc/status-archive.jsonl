@@ -1,3 +1,4 @@
+{"type": "log", "date": "2026-07-03", "version": "0.7.22", "summary": "修 pathrules.ts：空串路径（新增规则行初始态）曾被 normalizePattern 折算为根 /，导致未填路径就先选模板会立刻套用全库并触发编号；改为空串恒不匹配任何文件，hasRootRule 同步修正。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.21", "summary": "修用户反馈两处 GUI 样式 bug：① 白名单分段控件（=/≈/▸）选中态改为主题强调色 + !important 常驻高亮，防部分主题的裸 button 背景规则覆盖；② 设置面板 TAB 栏重构为按钮跨切换复用（原每次点击整栏重建，CSS 过渡无从播放），配合 `.ah-tab` 加 `transition` 实现切换背景色渐变。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.20", "summary": "双哨兵（②）根治「删后缀致序号重复」：前缀首尾各带 WJ 哨兵，尾哨兵被删时首哨兵作证据触发有界剥离愈合；③ 降级残留清理（cleanDemotedResidue）由 renumber 与清除命令共享；弃用①（无证据回归 E5）；UVM 加 demoteHeading 逮出并修清除命令不清残留的缺口。310 passed / fuzz 5000×80 全绿。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.19", "summary": "README（publish/ 双语）重定位：Backlink 同步前置为第一卖点 + 新增 Rename-freely 示例小节，模板/规则等原有功能未删减；纯文档改动，零源码/测试变化。合并时与 0.7.18 文档防漂移加固分支独立顺延。"}

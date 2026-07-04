@@ -341,7 +341,12 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
    挂在 activeDocument.body 上、position: fixed，不受 .ah-path-table 自身滚动裁剪影响。 */
 .ah-path-suggest {
 	position: fixed;
-	z-index: var(--layer-popover, 70);
+	/* 弹窗挂在 activeDocument.body 上，与「设置」模态框（--layer-modal，Obsidian 官方层级约
+	   30/50/65/70/80 依次为 popover/modal/menu/tooltip/dragged-item）同处顶层堆叠上下文；
+	   若仍用 --layer-popover（低于 modal）会被设置模态框盖住、视觉上「点了没反应」——键盘
+	   Enter 选中仍能生效（纯逻辑，不依赖可见性），但用户看不到下拉框，正是本次用户报告的症状。
+	   改用 --layer-menu（高于 modal）确保设置面板内也可见。 */
+	z-index: var(--layer-menu, 9999);
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s, 4px);
