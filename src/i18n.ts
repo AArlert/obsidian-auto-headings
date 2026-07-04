@@ -193,6 +193,13 @@ export interface Messages {
 	aboutLinkRepo: string;
 	aboutLinkIssues: string;
 
+	// —— 关于：鸣谢（开发中参考的开源插件）——
+	aboutCreditsHeading: string;
+	aboutCreditsIntro: string;
+	aboutCreditPathSuggest: string;
+	aboutCreditBacklinks: string;
+	aboutCreditWordJoiner: string;
+
 	// —— 默认模板显示名（文件名恒 default.json，显示名随语言）——
 	defaultTemplateDisplay: string;
 
@@ -377,6 +384,15 @@ const zh: Messages = {
 	aboutVersionLabel: "版本",
 	aboutLinkRepo: "GitHub 仓库",
 	aboutLinkIssues: "反馈问题（Issues）",
+
+	aboutCreditsHeading: "鸣谢",
+	aboutCreditsIntro: "开发过程中参考了以下开源插件的实现思路，在此致谢：",
+	aboutCreditPathSuggest:
+		"路径输入的文件夹/文件建议弹窗与匹配思路——本插件在此基础上补充了「文件级精确规则」，并加入了漏打尾斜杠时的自动补全。",
+	aboutCreditBacklinks:
+		"Backlink 同步的最初参考实现（反查引用方 + 重写锚点）——本插件补充了别名/嵌入链接解析，并升级为标题编号与正文文本的全覆盖同步。",
+	aboutCreditWordJoiner:
+		"用不可见 Word Joiner 字符标记编号前缀边界的最初参考——本插件升级为「首尾双哨兵」，具备残缺前缀自愈能力。",
 
 	defaultTemplateDisplay: "默认",
 
@@ -568,6 +584,15 @@ const en: Messages = {
 	aboutVersionLabel: "Version",
 	aboutLinkRepo: "GitHub repository",
 	aboutLinkIssues: "Report an issue",
+
+	aboutCreditsHeading: "Credits",
+	aboutCreditsIntro: "Development referenced the following open-source plugins:",
+	aboutCreditPathSuggest:
+		"Folder/file suggestion popup and matching approach for path input — extended here with exact-file rules and automatic trailing-slash completion when a folder name is typed without one.",
+	aboutCreditBacklinks:
+		"Original reference implementation for backlink sync (reverse-lookup references + rewrite anchors) — extended here with alias/embed link parsing and full coverage of both the heading number and its text.",
+	aboutCreditWordJoiner:
+		'Original reference for marking numbering prefixes with an invisible Word Joiner boundary — upgraded here to a "double sentinel" (head + tail) scheme with self-healing for damaged prefixes.',
 
 	defaultTemplateDisplay: "Default",
 

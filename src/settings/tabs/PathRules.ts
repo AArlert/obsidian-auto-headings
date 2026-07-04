@@ -1,14 +1,29 @@
 import { Notice, Setting } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
-import { findDuplicatePatternIndex, hasRootRule, type PathRule } from "../../pathrules";
+import {
+	autocompleteFolderSlash,
+	findDuplicatePatternIndex,
+	hasRootRule,
+	type PathCandidate,
+	type PathRule,
+} from "../../pathrules";
 import { DEFAULT_TEMPLATE_NAME } from "../../templates/schema";
+import { closeAllPathSuggestPopups, PathSuggestPopup } from "./PathSuggest";
 
 /**
  * 「路径与模板」TAB 的**路径规则**分区（见 spec.md §3.8）：可视化表格（路径模式 → 模板），
  * 可增删、可拖拽排序、可滚动（移动端横向滚动）；顶部在「无 `/` 根规则且全局自动编号=开」时
  * 显示兜底缺失提示条与快捷添加按钮。
+ *
+ * 路径输入接建议弹窗（`PathSuggest.ts`，testplan K13，参考 numeroflip/obsidian-auto-template-trigger
+ * 的文件夹建议交互）：模糊匹配 vault 内全部文件夹 / 文件，选中文件夹自动带尾斜杠；手动输入不经
+ * 弹窗时也有 {@link autocompleteFolderSlash} 兜底补全，避免「填文件夹名漏打尾斜杠→被当成对一个
+ * 不存在的文件的精确匹配规则→该文件夹下文件仍套用旧规则」这一用户报告过的 bug。
  */
 export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLElement): void {
+	// 每次重渲染前先清场：旧行的建议弹窗挂在 activeDocument.body 上，不随本函数的容器一起被清空。
+	closeAllPathSuggestPopups();
+
 	const t = tab.t;
 	const plugin = tab.plugin;
 	const rules = plugin.settings.pathRules;
@@ -81,22 +96,20 @@ function renderPathRuleRow(
 	// 行号。
 	row.createDiv({ cls: "ah-path-cell ah-path-index", text: String(index + 1) });
 
-	// 路径模式输入（接**分层** datalist 补全 + 行内清空按钮）。
+	// 路径模式输入（接建议弹窗 + 行内清空按钮）。
 	const patternCell = row.createDiv({ cls: "ah-path-cell ah-path-pattern-cell" });
 	const input = patternCell.createEl("input", { type: "text", cls: "ah-text-input" });
 	input.value = rule.pattern;
 	input.placeholder = t.pathInputPlaceholder;
 
-	// 每行独立的 datalist，随输入分层更新（输入 `/` 先给根 + 第一层，逐层展开）。
-	const datalist = patternCell.createEl("datalist");
-	datalist.id = `ah-path-suggest-${index}`;
-	input.setAttr("list", datalist.id);
-	updatePathDatalist(tab, datalist, input.value);
-	input.addEventListener("input", () => updatePathDatalist(tab, datalist, input.value));
-
 	const commitPattern = async () => {
 		const previous = rule.pattern;
-		rule.pattern = input.value.trim();
+		const folderPaths = collectPathCandidates(tab)
+			.filter((c) => c.isFolder)
+			.map((c) => c.path);
+		// 手动输入未选建议项时的兜底：填的是某个真实文件夹名却漏打尾斜杠，自动补全
+		// （testplan K13）；已选自建议弹窗的路径已在 `selectSuggestion` 里补过，这里是幂等的。
+		rule.pattern = autocompleteFolderSlash(input.value, folderPaths).trim();
 		// 阻断保存：同一路径模式（归一化后）不允许被两条规则同时占用，否则命中哪条取决于
 		// 「靠后者胜出」的内部兜底顺序，用户体验上等于随机（见 pathrules.ts findDuplicatePatternIndex）。
 		const dupIndex = findDuplicatePatternIndex(rules, index);
@@ -111,13 +124,26 @@ function renderPathRuleRow(
 		plugin.renumberActiveFile();
 		tab.display(); // 重新渲染以更新「兜底提示条」等。
 	};
-	input.addEventListener("blur", () => void commitPattern());
+
+	const suggest = new PathSuggestPopup(
+		input,
+		() => collectPathCandidates(tab),
+		(candidate) => {
+			input.value = candidate.isFolder ? `${candidate.path}/` : candidate.path;
+			input.focus();
+			void commitPattern();
+		},
+	);
 	input.addEventListener("keydown", (e) => {
+		if (suggest.handleKeydown(e)) {
+			return; // 弹窗展开时，↑↓/Enter/Esc 交给弹窗自己处理（见 PathSuggest.ts）。
+		}
 		if (e.key === "Enter") {
 			e.preventDefault();
 			input.blur();
 		}
 	});
+	input.addEventListener("blur", () => void commitPattern());
 
 	// 清空此路径的小按钮（只清空输入框文本，不删除整条规则）。
 	const clearBtn = patternCell.createEl("span", {
@@ -128,7 +154,6 @@ function renderPathRuleRow(
 	clearBtn.title = t.clearInputTooltip;
 	clearBtn.addEventListener("click", () => {
 		input.value = "";
-		updatePathDatalist(tab, datalist, "");
 		input.focus();
 	});
 
@@ -201,47 +226,22 @@ function renderPathRuleRow(
 }
 
 /**
- * **分层**填充路径补全 `<datalist>`：仅列出当前输入所在目录的**直接子项**（输入 `/` 先给根与
- * 第一层文件夹/文件，选定某文件夹后再出现其下一层），避免一次抛出全库路径让用户无从选择。
- *
- * 实现：取输入里最后一个 `/` 之前的部分为「基目录」`base`，列出 `path` 恰好落在 `base` 下一层
- * 的文件夹（以 `/` 结尾）与文件；根（`base===""`）下额外补一个 `/` 选项。最多 50 项防溢出。
+ * 收集 vault 内全部文件夹 / 文件，转成建议弹窗用的候选列表（`PathSuggest.ts` 按输入模糊过滤 + 排序）。
+ * 与旧版「分层 datalist」不同——不再局限于当前输入所在目录的直接子项，而是让模糊匹配 + 排序
+ * 自己挑出相关项（参考 numeroflip/obsidian-auto-template-trigger 的 `FolderSuggest`）。
  */
-function updatePathDatalist(
-	tab: AutoHeadingsSettingTab,
-	datalist: HTMLDataListElement,
-	inputValue: string,
-): void {
-	datalist.empty();
-	const slash = inputValue.lastIndexOf("/");
-	const base = slash >= 0 ? inputValue.slice(0, slash + 1) : "";
-
+function collectPathCandidates(tab: AutoHeadingsSettingTab): PathCandidate[] {
 	const vault = tab.plugin.app.vault as unknown as {
 		getAllLoadedFiles?: () => Array<{ path: string; children?: unknown }>;
 	};
 	const all = vault.getAllLoadedFiles?.() ?? [];
-
-	const options: string[] = [];
-	if (base === "") {
-		options.push("/"); // 根规则始终可选。
-	}
+	// 根目录本身（`TFolder.path === ""`）恒可选，渲染 / 选中时按 `${path}/` 规则自然显示 `/`。
+	const candidates: PathCandidate[] = [{ path: "", isFolder: true }];
 	for (const f of all) {
-		if (!f.path || f.path === "/") {
+		if (!f.path) {
 			continue;
 		}
-		// 仅取 base 的直接子项：path 须以 base 开头，且剩余部分不含更深的 `/`。
-		if (!f.path.startsWith(base)) {
-			continue;
-		}
-		const rest = f.path.slice(base.length);
-		if (rest === "" || rest.includes("/")) {
-			continue;
-		}
-		const isFolder = Array.isArray(f.children);
-		options.push(isFolder ? `${f.path}/` : f.path);
+		candidates.push({ path: f.path, isFolder: Array.isArray(f.children) });
 	}
-
-	for (const value of options.slice(0, 50)) {
-		datalist.createEl("option", { value });
-	}
+	return candidates;
 }
