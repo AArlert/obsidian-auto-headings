@@ -2,7 +2,7 @@ import { Setting } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 
 /** 仓库地址：Issues 反馈也挂在该仓库下。 */
-const REPO_URL = "https://github.com/AArlert/Addon";
+const REPO_URL = "https://github.com/AArlert/obsidian-auto-headings";
 
 /**
  * 「关于」TAB（M7 多 TAB 重构）：插件名 + 版本 + 简介 + 链接（GitHub 仓库 / 反馈问题）。

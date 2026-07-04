@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-07-03 1.0.0 商店自动审核反馈修复：README 占位符 + LICENSE 无法识别（claude/plugin-repo-audit-avuhui）
+
+**做了什么**：用户提交后收到 Obsidian Community Hub 自动审核的两条 Warning，逐条修复。**纯文档
+改动、不涉及行为/产物**，按 §4.1「上架后策略」不 bump manifest 版本，只记本条 log。
+
+- **README 占位符警告**：审核器逐字扫描源码文本里的字面 `TODO`，命中 `README.md`/`README.zh.md`
+  里各一行 `<!-- hero screenshot / GIF 占位 -->` 注释——尽管渲染后不可见，源码里确有 `TODO` 字样。
+  用户此前已决定不做 GIF、纯文字说明足够撑起上架，故直接删掉这两行占位注释（不是留白等着填，是
+  确认这次发布就不需要它），警告随之消失。
+- **LICENSE 无法识别警告**：排查发现现有 `LICENSE` 文件其实是 **MIT + Commons Clause（禁商用）+
+  Anti-996** 三段拼接、且自相矛盾——MIT 正文写"可自由使用/复制/修改/**出售**"，紧接着 Commons
+  Clause 又说"不得商用"，GitHub 的 `licensee` 库（Obsidian 该警告大概率的数据来源）做的是模糊
+  文本比对，认不出这种自定义拼接文本，判定"无法识别标准许可证"。
+  查证 `licensee` 当前收录的许可证列表（57 个，`cc-by-4.0`/`cc0-1.0`/`mit` 等）**不含任何非商业
+  许可证**——CC-BY-NC 系列、PolyForm Noncommercial 均不在其中。这意味着用户最初想要的"非商业+
+  消除警告"两个目标**互斥**：换成任何真实的非商业许可证文本，警告大概率依然存在（该工具压根不
+  认识这类许可证）。就此用 `AskUserQuestion` 请用户裁决，用户选择**优先消除警告**——改回纯净、
+  未加料的标准 MIT 文本（保留原 `Copyright (c) 2025 AArlert`），删掉 Commons Clause 与 Anti-996
+  两段。
+
+**没做什么**：未保留非商业限制（用户主动放弃，换取许可证可被识别）；未额外验证 Community Hub
+的警告扫描器是否真的就是调用 GitHub `licensee`（是我方合理推断，未见到官方文档明确写死数据源，
+但两处线索一致——① Obsidian 提交要求页原话提到需要"LICENSE 文件"、② licensee 是 GitHub 生态
+里事实标准的许可证检测工具）；未重新提交 Community Hub 审核（是用户下一步的动作）。
+
+**下一步**：用户把改动推到 `master`（这次 Agent 已代为 commit + merge）后，回 Community Hub 页面
+触发重新扫描 / 重新提交，确认两条 Warning 是否清零。
+
+**验证方式**：`npm test`（328 passed，未受影响，纯文档改动）/ `npm run lint` / `npm run format:check`
+全绿；`grep -n -i "TODO"` 复核 README 两个文件已无残留；`LICENSE` 手工核对确认只剩单一 MIT 正文、
+无拼接痕迹。
+
+---
+
 ## 2026-07-03 1.0.0 版本转正 + 新增 Release 自动化（用户明确指示直接上架，claude/plugin-repo-audit-avuhui）
 
 **做了什么**：用户看完上一周期的审计结果后明确表态「直接 1.0.0，准备上架」，不再等 testplan 里
