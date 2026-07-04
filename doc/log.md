@@ -40,6 +40,48 @@
 
 ---
 
+## 2026-07-04 1.0.6 白名单归一化补 HTML 标签 / `==`/`~~`（claude/whitelist-appendix-formatting-n2xdhq）
+
+**做了什么**：用户反馈子树白名单「附录」无法排除 `<u>附录</u>`、`==附录==`、
+`<font color="#c3d69b">附录</font>` 等带行内格式的标题，会被正常编号。根因：
+`whitelist.ts` 的 `stripInlineMarkdown` 只剥 `**`/`*`/`_`/`` ` ``/链接，不认识 HTML 标签
+与 Obsidian 的高亮 `==文字==`/删除线 `~~文字~~` 语法，归一化后文本仍带标签/标记，与白名单
+词语「附录」比对不相等，判定为未命中。**修复**：`stripInlineMarkdown` 新增两步——① 用通用
+正则 `<\/?[a-zA-Z][^<>]*>` 整体剥掉任意 HTML 标签（含属性，不逐一枚举 `<u>`/`<font>`/
+`<span>`/`<mark>`/`<sup>`/`<br>` 等标签名，只保留标签内文字）；② 成对剥离 `==文字==` 与
+`~~文字~~`（仿照既有链接 `[文字](url)` 的「还原为文字」思路，而非像 `*`/`_` 那样逐字符裸删——
+`=`/`~` 单独出现在真实标题里（如 `E=mc²`）比 `*`/`_` 更常见，裸删误伤面更大，故对这两种
+用成对正则精确匹配）。剥离顺序有讲究：先剥 HTML 标签（连标签属性里的 `=` 一起去掉），
+再处理 `==`/`~~`，避免属性字符干扰成对匹配；`<u>**附录**</u>` 这类「标签套 Markdown」剥完
+标签后剩下的 `**附录**` 仍会被最后一步的字符类删除命中，两层嵌套都能归一。
+
+**边界场景过一遍**（决定要不要处理、要处理到什么程度）：
+- HTML 标签：采用**通用**正则而非枚举标签名——`<mark>`（高亮的 HTML 写法）、`<sub>`/`<sup>`、
+  `<del>`/`<s>`/`<strike>`（删除线的 HTML 写法）、`<kbd>`、`<span style="...">`、
+  `<font color="...">` 全部覆盖，不需要每加一个新标签就改代码。
+- `<br>`/`<br/>` 这类无内容的空标签：剥掉后两侧文字直接相邻（如「附录<br>A」→「附录a」），
+  靠归一化后续的空白折叠步骤兜底，不強求补空格（原文两侧如无空格，用户很可能就是想连写）。
+- Wikilink `[[附录]]` / `[[note|附录]]`：**本次未处理**——现有 `[文字](url)` 只认 Markdown
+  链接语法，wikilink 是另一套语法糖；且用户报的具体案例（`<u>`/`==`/`<font>`）都不涉及
+  wikilink，未加是为了不引入未经用户场景验证的行为，留作后续按需再评估，不在本次范围内。
+- Obsidian 注释 `%%文字%%`：**本次未处理**——语义与高亮/删除线不同（内容本身不应显示/参与
+  比对，而非仅去掉标记保留文字），错误处理反而可能引入新歧义，同样留待有实际场景再评估。
+- HTML 实体（`&nbsp;` 等）：未处理，真实标题里出现的概率低于本次报告的三种格式，从简。
+- 裸 `=`/`~` 字符（非成对）：刻意保持原样不删（区别于 `*`/`_` 的逐字符裸删），见上文修复说明。
+
+**没做什么**：无法在真实 Obsidian 环境里渲染截图确认视觉效果（无头测试环境限制）；逻辑层
+`normalizeForWhitelist`/`computeWhitelistExemptionDetail` 单测已覆盖（见下）。
+
+**下一步**：如后续有用户反馈 wikilink 标题或 `%%注释%%` 场景，再单独评估是否需要归一化处理；
+当前无待办。
+
+**验证方式**：`whitelist.test.ts` 新增 D11 一组用例（HTML 标签/`==`/`~~` 单测 + 叠加嵌套 +
+端到端 `numberHeadings` 子树豁免）；`npm test` 342 passed（较上一周期 +4）/ `npm run test:fuzz`
+（5000×80 两个记分板全绿，核心逻辑改动按流程跑）/ `npx tsc -noEmit` / `npm run lint` /
+`npm run format:check` 全绿。`testplan.md` D11 行状态回填 ✅。
+
+---
+
 ## 2026-07-04 1.0.5 建议弹窗 z-index 修复：被「设置」模态框盖住（claude/path-suggest-zindex-fix）
 
 **做了什么**：1.0.4 上线后用户实测反馈：路径输入框打字 + 回车能选中建议（如输入 `✂️` 回车得
@@ -115,37 +157,6 @@
 **验证方式**：`npm test` 338 passed（含新增 10 条 `pathrules.test.ts` 用例）/ `npm run test:fuzz`
 （5000×80，两块记分板全绿，路径规则不在被测范围内但核心编号引擎无回归）/ `npx tsc -noEmit`
 / `npm run lint` / `npm run format:check` 全绿；`npm run build` 确认 `PathSuggest.ts` 编译无误。
-
----
-
-## 2026-07-04 1.0.3 修复「关于」TAB 仓库链接指向旧 monorepo（claude/auto-headings-compliance-wx7w37）
-
-**做了什么**：用户反馈插件商店 About 页指向的仓库不对；排查发现是本仓库（早年从私有
-monorepo 迁移而来）遗留的旧地址——`src/settings/tabs/AboutTab.ts` 的 `REPO_URL` 硬编码为
-`https://github.com/AArlert/Addon`（monorepo 内该 Addon 的旧路径），而不是当前对外发布仓库
-`AArlert/obsidian-auto-headings`。导致插件内「关于」TAB 的仓库链接与 Issues 链接都打到一个
-不存在 / 不相关的地址。**改为** `https://github.com/AArlert/obsidian-auto-headings`。全仓
-`grep` 复核，仅此一处硬编码引用（`manifest.json` 的 `authorUrl` 指向作者主页，非本问题）。
-Bump **1.0.3**（`npm run bump`），`npm run release` 重建 `release/` 三件套并核对 `release/main.js`
-内联字符串已更新。
-
-**关于社区插件商店重扫反馈（第三轮）的三条 Recommendation**（`display` / `setWarning` /
-`setDynamicTooltip` 已弃用）：**沿用 1.0.1/1.0.2 两轮已记录的结论，本轮未改动**——替代 API
-（`getSettingDefinitions` / `setDestructive`）均为 **Obsidian 1.13.0+** 才提供，本插件
-`minAppVersion` 现为 1.8.7，若现在迁移，重扫会把这三条「弃用提示」升级成「不支持 API」的
-**Error**（比现状更差）。License Warning 与 Vault Enumeration Recommendation 同样维持前两轮
-结论（前者是 GitHub licensee 缓存滞后，后者是全库清除功能的必需权限）。
-
-**没做什么**：未处理三条已弃用 API 迁移（版本下限不满足，见上）；未新增自动化测试覆盖
-「关于」TAB 的链接渲染——`REPO_URL` 是无分支逻辑的静态常量，为一行字符串常量新增 DOM 渲染
-测试基建收益过低，未做。
-
-**下一步**：确认无其他遗留 monorepo 引用后，按 §5.1 合并回 `master` 并推送；后续若
-`minAppVersion` 抬高到 1.13+，一并处理三条弃用 API 迁移。
-
-**验证方式**：`npm test` 328 passed / `npm run lint` / `npm run format:check` 全绿；
-`grep -rn "AArlert/Addon"` 全仓确认清零；`grep` 复核 `release/main.js` 内联字符串已替换为
-`AArlert/obsidian-auto-headings`。
 
 ---
 
