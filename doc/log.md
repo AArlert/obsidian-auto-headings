@@ -40,6 +40,39 @@
 
 ---
 
+## 2026-07-05 1.0.6 README 中英双语改版：按调研报告拆「基础层/进阶层」（claude/plugin-readme-localization-mh62xy）
+
+**做了什么**：按 `doc/README_UPDATE_REPORT.md`（0704 调研产出）§3 的结构提案，重写 `README.md` /
+`README.zh.md`，两份结构、示例一一对应：
+
+1. **重新分层**：原先「问题钩子 → 演示 → 功能清单（平铺）→ 原理 → quick start → 安装 → 命令 → notes」
+   的时间线堆叠，改成「开场钩子 → **开箱即用**（零配置/标题层级神圣/防抖不打扰/性能边界/两层开关+
+   frontmatter 覆盖/配置不入笔记/双语，收尾 Quick start）→ **深入定制**（rename+backlink 演示/模板系统/
+   路径规则/白名单/清除命令）→ 工作原理 → 安装/命令表/notes/license」两层组织。
+2. **融入报告 §1 列出的八处设计权衡**：标题层级神圣性从功能列表第 3 条提到「开箱即用」首位；
+   frontmatter 不存配置的「打开笔记看不到插件痕迹」补进同一层；`ancestorNumeral` 补了一句说清
+   它解决的是"中文书式 vs 提纲式"这一真实排版冲突，而非只列举两个选项名词；白名单子树重置补一句
+   「基于主流引用规范调研（约 85%）的默认行为」；backlink 同步补一句"站在 Header Enhancer 已有实现
+   之上做了几处改进"（不逐条列出四点，那是 spec 的活）；「按文件覆盖」与「清除命令」里的
+   "Renumber now 绕过一切开关"合并成「开箱即用」层一段统一的"两层开关+手动兜底"陈述，避免读者
+   在两节之间拼凑不出这是一套体系；性能边界补一句"模板/规则再多也不会有后台开销"；工作原理一节
+   补充双哨兵自愈（0.7.20）一句话说明，并保留对 gurjar1/auto-heading-obsidian 的鸣谢惯例（原写法只
+   讲了单哨兵）。
+3. **删除已落地的调研报告** `doc/README_UPDATE_REPORT.md`——按其自身开头注记与 `CLAUDE.md` 的
+   「单一事实源」纪律，结论落地到新版 README 后原件即删，不留副本。
+4. **未做的**：报告 §3 开放问题里的截图/GIF——沿用 M7 发布前已做的决定"文字说明已足够，截图/GIF
+   留作后续可选补充"，本轮未动手（做的话需要先确认录屏/截图生成方式，工作量独立评估，不与本次结构
+   调整捆绑）；`spec.md`/`testplan.md` 未改动——报告已确认这是纯文档重组，不涉及行为变更，故也
+   **未跑 `npm run bump`**（1.0.6 早已过 1.0.0，遵循"上架后策略：仅行为/产物变化才 bump"）。
+
+**验证方式**：`npx prettier --check README.md README.zh.md` 通过；手动核对中英两份标题层级、内部锚点
+（如 `#out-of-the-box`/`#开箱即用`、`#notes`/`#说明`）一一对应且未失效；`node scripts/docs.mjs --check`
+通过（目录结构约定与磁盘一致、周期块/概括行计数未超限）。未跑 `npm test`/`lint`/`release`（无源码改动）。
+
+**下一步**：等待用户确认是否需要补充截图/GIF；M8a/M8b 仍按上一周期结论排期。
+
+---
+
 ## 2026-07-04 1.0.6 M8 规格重整：修文档漂移 + 拆 M8a/M8b + 内容迁移（claude/spec-m8-feasibility-8f233f）
 
 **做了什么**：应用户要求审查 `spec.md` Milestone 8（侧栏大纲导航 + 结构编辑）的可行性，本周期是讨论
@@ -121,36 +154,6 @@
 端到端 `numberHeadings` 子树豁免）；`npm test` 342 passed（较上一周期 +4）/ `npm run test:fuzz`
 （5000×80 两个记分板全绿，核心逻辑改动按流程跑）/ `npx tsc -noEmit` / `npm run lint` /
 `npm run format:check` 全绿。`testplan.md` D11 行状态回填 ✅。
-
----
-
-## 2026-07-04 1.0.5 建议弹窗 z-index 修复：被「设置」模态框盖住（claude/path-suggest-zindex-fix）
-
-**做了什么**：1.0.4 上线后用户实测反馈：路径输入框打字 + 回车能选中建议（如输入 `✂️` 回车得
-`✂️ Clippings/`），但**单纯点击输入框不会像 numeroflip/obsidian-auto-template-trigger 那样弹出
-下拉框**——键盘流程正常但视觉上看不到弹窗，判定为 **z-index 层级问题**：`PathSuggestPopup` 挂在
-`activeDocument.body` 上，但样式给的是 `var(--layer-popover, 70)`；Obsidian 官方层级变量实际
-`--layer-popover`（约 30）**低于**「设置」自身所在的 `--layer-modal`（约 50），故弹窗虽然
-正确创建/定位，却被设置模态框整个盖在下面——**Enter 选中是纯逻辑（`items[selectedIndex]`），
-不依赖弹窗是否可见**，这正好解释了"键盘能选、肉眼看不到"这个矛盾现象。**修复**：
-`styles.css` 的 `.ah-path-suggest` z-index 改 `var(--layer-menu, 9999)`（高于 modal 的层级，
-且带极高兜底值，不依赖对 Obsidian 内部变量名的记忆是否精确）。
-
-**关于"加上对特有文件的支持"**：用户要求的「文件夹 + 文件都可选」在 1.0.4 就已经实现
-（`collectPathCandidates` 本就收集 vault 全部文件夹与文件，非纯文件夹；`filterPathCandidates`
-排序时文件夹优先文件仅在命中位置并列时生效，文件本身恒在候选列表内）——不需要新代码，
-这次只是可见性 bug 的修复让用户能实际看到这一效果。
-
-**没做什么**：无法在本环境（无头 vitest + 无真实 Obsidian）里截图验证弹窗现在确实出现在
-设置模态框之上——z-index 数值判断基于 Obsidian 官方 CSS 变量参考（`--layer-modal` ≈50 <
-`--layer-menu` ≈65），逻辑上应该解决，但仍需用户在真实环境里确认。
-
-**下一步**：用户确认弹窗现在点击/聚焦输入框即可见、层级正确后，testplan K13 的手验部分可
-转 ✅；若仍有遮挡（如与其它插件的浮层冲突），再按实际截图调整 z-index 或改挂载点。
-
-**验证方式**：`npm test` 338 passed（无新增用例——本次是纯 CSS 数值修复，无新增可测逻辑分支）
-/ `npx tsc -noEmit` / `npm run lint` / `npm run format:check` 全绿；`npm run build` 确认样式
-改动正确同步进 `release/styles.css`。
 
 ---
 
