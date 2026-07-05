@@ -4,6 +4,9 @@
  * 对外暴露 {@link clearNumberingContent}，用于：
  * - 「清除当前文件编号」命令（main.ts）：对 Editor 内容调用后以单一事务写回。
  * - 「清除全库编号」按钮（SettingsTab.ts）：对每个 .md 文件读取 → 清除 → 写回。
+ *
+ * 另暴露只读探测 {@link hasUnclaimedForeignNumbering}，供 main.ts 自动路径在写入前判断是否为
+ * 「插件从未接触过 + 疑似外来编号」的迁移场景（testplan J10）。
  */
 
 import { parseHeadings } from "./parser";
@@ -87,4 +90,29 @@ export function clearForeignNumberingContent(content: string): string {
 		lines[h.lineIndex] = `${hashes} ${text}`;
 	}
 	return lines.join("\n");
+}
+
+/**
+ * 只读探测：本文件是否「插件从未接触过」且含疑似外来编号（迁移守卫，testplan J10）。
+ *
+ * 用于自动路径（`scheduleRenumber`/`renumberOnOpen`/`renumberActiveFile`）写入前的门控——方案A下
+ * 自动路径只认 WJ，会把 `## 1 红米` 当纯正文、在前面再叠一层自己的编号，写成 `## 1 1 红米`，观感
+ * 上与 bug 无异。命中时调用方应跳过本次自动写入，引导用户先跑「清理非本插件的标题编号」
+ * （{@link clearForeignNumberingContent}）。**手动命令不查此函数**——用户显式触发的操作永远按既定
+ * 语义执行。
+ *
+ * 判定条件**两者都满足**才为 true：
+ * - 全文完全不含 {@link WORD_JOINER}（插件从未给这份内容写过编号，避免把「已被本插件接管、只是新增
+ *   了一个以数字起头的标题」误判为迁移场景，见 spec §3.10 相邻讨论）；
+ * - 至少一个标题被 {@link stripForeignNumbering} 判定为「像外来编号」（剥离结果与原文不同）。
+ *
+ * **已知风险**：与 {@link stripForeignNumbering} 共享同一误伤面（如 `## API 设计`）——但落在这里
+ * 代价是「跳过写入 + 提示」而非「内容被吃」，比清理命令本身更安全，故接受。
+ */
+export function hasUnclaimedForeignNumbering(content: string): boolean {
+	if (content.includes(WORD_JOINER)) {
+		return false;
+	}
+	const headings = parseHeadings(content);
+	return headings.some((h) => stripForeignNumbering(h.rawText) !== h.rawText);
 }

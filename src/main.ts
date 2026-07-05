@@ -19,7 +19,11 @@ import { AutoHeadingsSettingTab } from "./settings/SettingsTab";
 import { getMessages, type Messages, resolveLang } from "./i18n";
 import { readFileSwitch, SWITCH_KEY } from "./frontmatter";
 import { renumberContent, type Template } from "./numbering";
-import { clearForeignNumberingContent, clearNumberingContent } from "./cleanup";
+import {
+	clearForeignNumberingContent,
+	clearNumberingContent,
+	hasUnclaimedForeignNumbering,
+} from "./cleanup";
 import {
 	computeHeadingRenames,
 	computeSnapshotRenames,
@@ -83,6 +87,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 保证用户中途打开开关时基线已就绪。
 	 */
 	private readonly headingSnapshots = new Map<string, HeadingSnapshot[]>();
+
+	/**
+	 * 已提示过「疑似外来编号」的文件路径集合（迁移守卫，testplan J10）：仅内存标志，用于把
+	 * {@link guardForeignNumbering} 的 Notice 限制为每文件每会话一次——命中后仍持续跳过自动写入，
+	 * 但不重复打扰。随文件改名迁移键、随删除清除，插件卸载时整体清空。
+	 */
+	private readonly foreignNumberingWarned = new Set<string>();
 
 	/**
 	 * 当前界面语言的文案表（按 `settings.language` 解析，见 {@link resolveLang} / {@link getMessages}）。
@@ -207,11 +218,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 					this.headingSnapshots.delete(oldPath);
 					this.headingSnapshots.set(file.path, snap);
 				}
+				if (this.foreignNumberingWarned.has(oldPath)) {
+					this.foreignNumberingWarned.delete(oldPath);
+					this.foreignNumberingWarned.add(file.path);
+				}
 			}),
 		);
 		this.registerEvent(
 			this.app.vault.on("delete", (file) => {
 				this.headingSnapshots.delete(file.path);
+				this.foreignNumberingWarned.delete(file.path);
 			}),
 		);
 	}
@@ -223,6 +239,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		this.debounceTimers.clear();
 		this.headingSnapshots.clear();
+		this.foreignNumberingWarned.clear();
 	}
 
 	/**
@@ -365,6 +382,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 			if (!template) {
 				continue;
 			}
+			if (this.guardForeignNumbering(file.path, editor.getValue())) {
+				continue;
+			}
 			this.applyRenumber(editor, template, file);
 		}
 	}
@@ -390,7 +410,31 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (!template) {
 			return;
 		}
+		if (this.guardForeignNumbering(file.path, editor.getValue())) {
+			return;
+		}
 		this.applyRenumber(editor, template, view.file);
+	}
+
+	/**
+	 * 迁移守卫（**仅自动路径**，testplan J10，见 spec.md §3.10 相邻讨论）：若本文件疑似含外来编号
+	 * 且插件从未接触过它（{@link hasUnclaimedForeignNumbering}），跳过本次自动写入并提示用户先清理
+	 * ——否则会在外来编号前叠加本插件自己的编号（`## 1 红米` → `## 1 1 红米`），观感上与 bug 无异。
+	 * 同一文件本次会话只提示一次（{@link foreignNumberingWarned}），此后静默持续跳过直至用户清理
+	 * 或重载插件。**手动命令**（立即重新编号 / 清除编号 / 清理外来编号）不查此函数，绕过一切开关
+	 * 照常执行，与既有「Renumber now 绕过一切开关」原则一致。
+	 *
+	 * @returns 是否命中守卫（命中即调用方应跳过本次 {@link applyRenumber}）。
+	 */
+	private guardForeignNumbering(path: string, content: string): boolean {
+		if (!hasUnclaimedForeignNumbering(content)) {
+			return false;
+		}
+		if (!this.foreignNumberingWarned.has(path)) {
+			this.foreignNumberingWarned.add(path);
+			new Notice(this.messages().noticeForeignNumberingGuard);
+		}
+		return true;
 	}
 
 	/**
@@ -655,6 +699,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 			const template = this.getTemplateForFile(path);
 			if (!template) {
 				return; // 无可用模板：自动触发静默跳过（不打扰）。
+			}
+			if (this.guardForeignNumbering(path, editor.getValue())) {
+				return;
 			}
 			this.applyRenumber(editor, template, file);
 		}, this.settings.debounceDelay);

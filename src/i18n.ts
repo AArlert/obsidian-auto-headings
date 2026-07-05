@@ -237,6 +237,7 @@ export interface Messages {
 	noticeBacklinksUpdated: (count: number) => string;
 	noticeBacklinksIntro: string;
 	noticeNoActiveFile: string;
+	noticeForeignNumberingGuard: string;
 }
 
 /** 简体中文文案。 */
@@ -428,6 +429,8 @@ const zh: Messages = {
 	noticeBacklinksIntro:
 		"Auto Headings 已自动更新了其它文件里指向本文件标题的内部链接（避免断链）。这些改动不在被改文件的撤销历史内；不需要此功能可在 设置 → 全局设置 关闭「同步内部链接」。本提示只出现一次。",
 	noticeNoActiveFile: "没有打开的 Markdown 文件",
+	noticeForeignNumberingGuard:
+		"检测到疑似非本插件的标题编号，已跳过本次自动编号——请先执行「清理非本插件的标题编号」命令",
 };
 
 /** English copy. */
@@ -628,6 +631,8 @@ const en: Messages = {
 	noticeBacklinksIntro:
 		"Auto Headings just updated internal links in other files that point to headings in this file (so they don't break). Those edits are NOT in the modified files' undo history; you can turn off \"Sync internal links\" under Settings → General. This notice appears only once.",
 	noticeNoActiveFile: "No open Markdown file",
+	noticeForeignNumberingGuard:
+		'Detected headings that look like non-plugin numbering; skipped auto-numbering this time — run "Clear non-plugin heading numbering" first',
 };
 
 /** 取某语言的文案表。 */

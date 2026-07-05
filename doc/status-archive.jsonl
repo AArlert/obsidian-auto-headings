@@ -1,3 +1,4 @@
+{"type": "log", "date": "2026-07-03", "version": "0.7.26", "summary": "上架前审计：manifest id 改为 auto-headings（原含 obsidian 违规）；核实提交机制已变为 community.obsidian.md；CLAUDE.md 订正 monorepo 遗留描述；修两处断链；登记 testplan H8（backlog）；代码规范审计无违规。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.25", "summary": "main.ts 新增 foldSelfBacklinks：清除/重排编号时，指向本文件自己标题的 [[#锚点]] 内链不再经 vault.process 异步读盘处理（会与本文件未落盘的编辑器改动竞态、致清除被覆盖悄悄撤销），改为对内存 newContent 直接字符串重写、随同一个 editor.transaction 写回；修复用户报告的「清除编号提示已清除但文件不变」bug。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.24", "summary": "main.ts 新增 renumberOnOpen 挂 file-open 事件：改了路径规则所投模板 / 模板样式后，无需先编辑，打开该路径下文件即自动刷新为新格式；复用与实时编辑一致的门控（shouldAutoTrigger + getTemplateForFile），applyRenumber 内容未变时静默 no-op。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.23", "summary": "新增 findDuplicatePatternIndex 纯函数 + PathRules.ts commitPattern 接线：路径提交时若与其它规则归一化后重复，阻断保存、回退输入框、弹 Notice；resolvePathRule 的「并列靠后者胜出」降级为遗留数据兜底（不再是推荐用法）。"}
