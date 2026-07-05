@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { clearForeignNumberingContent, clearNumberingContent } from "../../src/cleanup";
+import {
+	clearForeignNumberingContent,
+	clearNumberingContent,
+	hasUnclaimedForeignNumbering,
+} from "../../src/cleanup";
 import { renumberContent, DEFAULT_TEMPLATE, WORD_JOINER } from "../../src/numbering";
 
 describe("clearNumberingContent（M6 H 类场景）", () => {
@@ -168,5 +172,31 @@ describe("clearForeignNumberingContent（0.6.6「清理非本插件的标题编�
 		expect(numbered).toBe(
 			`## ${WORD_JOINER}1 ${WORD_JOINER}旧概述\n### ${WORD_JOINER}1.1 ${WORD_JOINER}旧背景`,
 		);
+	});
+});
+
+describe("hasUnclaimedForeignNumbering（迁移守卫探测，testplan J10）", () => {
+	it("全无 WJ + 标题像外来编号 → 命中", () => {
+		expect(hasUnclaimedForeignNumbering("## 1 红米\n### 1.1 工艺")).toBe(true);
+		expect(hasUnclaimedForeignNumbering("## 第3章 引言")).toBe(true);
+		expect(hasUnclaimedForeignNumbering("## (1) 概述")).toBe(true);
+	});
+
+	it("裸标题（无任何疑似编号）→ 不命中", () => {
+		expect(hasUnclaimedForeignNumbering("## 概述\n### 背景与动机")).toBe(false);
+	});
+
+	it("无标题的纯文本 → 不命中", () => {
+		expect(hasUnclaimedForeignNumbering("正文一行\n另一行")).toBe(false);
+	});
+
+	it("已含插件自己的 WJ 编号（哪怕只有一个标题）→ 不命中，即便另一标题像外来编号", () => {
+		const input = `## ${WORD_JOINER}1 ${WORD_JOINER}已编号\n### 1.1 疑似外来`;
+		expect(hasUnclaimedForeignNumbering(input)).toBe(false);
+	});
+
+	it("已清理干净（无编号残留）→ 不命中，插件可正常接管编号", () => {
+		const cleaned = clearForeignNumberingContent("## 1 红米\n### 1.1 工艺");
+		expect(hasUnclaimedForeignNumbering(cleaned)).toBe(false);
 	});
 });

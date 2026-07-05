@@ -547,6 +547,84 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 	});
 });
 
+describe("迁移守卫：疑似外来编号且插件从未接触过的文件，自动路径跳过写入（J10）", () => {
+	it("scheduleRenumber 命中守卫：不写回、Notice 提示一次，重复触发不再重复提示", () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(ed.getValue()).toBe("## 1 红米\n### 1.1 工艺");
+		expect(ed.txnCount).toBe(0);
+		expect(Notice.messages).toHaveLength(1);
+		// 用户继续编辑，仍是同样的疑似外来编号内容：静默跳过、不再重复提示。
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(ed.txnCount).toBe(0);
+		expect(Notice.messages).toHaveLength(1);
+	});
+
+	it("renumberOnOpen 命中守卫：打开疑似迁移文件不写回，仅提示", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 第3章 引言");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.renumberOnOpen({ path: "a.md" });
+		expect(ed.getValue()).toBe("## 第3章 引言");
+		expect(ed.txnCount).toBe(0);
+		expect(Notice.messages).toHaveLength(1);
+	});
+
+	it("renumberActiveFile 命中守卫：只跳过疑似迁移的文件，其余正常编号", () => {
+		const { p, setLeaves } = makePlugin();
+		const edForeign = new FakeEditor("## 1 红米");
+		const edNormal = new FakeEditor("## 概述");
+		setLeaves([
+			{ editor: edForeign, file: { path: "old.md" } },
+			{ editor: edNormal, file: { path: "new.md" } },
+		]);
+		p.renumberActiveFile();
+		expect(edForeign.getValue()).toBe("## 1 红米");
+		expect(edNormal.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}概述`);
+	});
+
+	it("已含插件自己 WJ 编号的文件：守卫只在「插件从未接触过」时生效，故不拦截——新段落仍会按方案A叠加（已知边界，非本次修复范围）", () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}已编号\n### 1.1 新段落`);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		// 守卫未拦截（全文已含 WJ），常规 stripPrefix 只认 WJ 边界：`1.1 新段落` 当正文、叠加编号。
+		expect(ed.getValue()).toBe(
+			`## ${WORD_JOINER}1 ${WORD_JOINER}已编号\n### ${WORD_JOINER}1.1 ${WORD_JOINER}1.1 新段落`,
+		);
+		expect(Notice.messages).toHaveLength(0);
+	});
+
+	it("手动命令「立即重新编号」绕过守卫，照常执行（与既有开关豁免原则一致）", () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor("## 1 红米");
+		p.runImmediateRenumber(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}1 红米`);
+	});
+
+	it("典型迁移工作流：先手动「清理非本插件编号」，守卫随即解除，自动路径正常接管", () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(ed.txnCount).toBe(0); // 守卫先拦下。
+
+		(
+			p as unknown as { runClearForeignNumbering(e: unknown, c: unknown): void }
+		).runClearForeignNumbering(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toBe("## 红米\n### 工艺");
+
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(ed.getValue()).toBe(
+			`## ${WORD_JOINER}1 ${WORD_JOINER}红米\n### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`,
+		);
+	});
+});
+
 describe("strippableAffixes：把全模板前后缀并集接进重排（方案 A）", () => {
 	it("收集全部模板各级在用的前后缀并集，并恒含空串", () => {
 		const { p } = makePlugin({ allTemplates: [DEFAULT_TEMPLATE, prefixTemplate()] });
