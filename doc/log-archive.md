@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-04 1.0.5 建议弹窗 z-index 修复：被「设置」模态框盖住（claude/path-suggest-zindex-fix）
+
+**做了什么**：1.0.4 上线后用户实测反馈：路径输入框打字 + 回车能选中建议（如输入 `✂️` 回车得
+`✂️ Clippings/`），但**单纯点击输入框不会像 numeroflip/obsidian-auto-template-trigger 那样弹出
+下拉框**——键盘流程正常但视觉上看不到弹窗，判定为 **z-index 层级问题**：`PathSuggestPopup` 挂在
+`activeDocument.body` 上，但样式给的是 `var(--layer-popover, 70)`；Obsidian 官方层级变量实际
+`--layer-popover`（约 30）**低于**「设置」自身所在的 `--layer-modal`（约 50），故弹窗虽然
+正确创建/定位，却被设置模态框整个盖在下面——**Enter 选中是纯逻辑（`items[selectedIndex]`），
+不依赖弹窗是否可见**，这正好解释了"键盘能选、肉眼看不到"这个矛盾现象。**修复**：
+`styles.css` 的 `.ah-path-suggest` z-index 改 `var(--layer-menu, 9999)`（高于 modal 的层级，
+且带极高兜底值，不依赖对 Obsidian 内部变量名的记忆是否精确）。
+
+**关于"加上对特有文件的支持"**：用户要求的「文件夹 + 文件都可选」在 1.0.4 就已经实现
+（`collectPathCandidates` 本就收集 vault 全部文件夹与文件，非纯文件夹；`filterPathCandidates`
+排序时文件夹优先文件仅在命中位置并列时生效，文件本身恒在候选列表内）——不需要新代码，
+这次只是可见性 bug 的修复让用户能实际看到这一效果。
+
+**没做什么**：无法在本环境（无头 vitest + 无真实 Obsidian）里截图验证弹窗现在确实出现在
+设置模态框之上——z-index 数值判断基于 Obsidian 官方 CSS 变量参考（`--layer-modal` ≈50 <
+`--layer-menu` ≈65），逻辑上应该解决，但仍需用户在真实环境里确认。
+
+**下一步**：用户确认弹窗现在点击/聚焦输入框即可见、层级正确后，testplan K13 的手验部分可
+转 ✅；若仍有遮挡（如与其它插件的浮层冲突），再按实际截图调整 z-index 或改挂载点。
+
+**验证方式**：`npm test` 338 passed（无新增用例——本次是纯 CSS 数值修复，无新增可测逻辑分支）
+/ `npx tsc -noEmit` / `npm run lint` / `npm run format:check` 全绿；`npm run build` 确认样式
+改动正确同步进 `release/styles.css`。
+
+---
+
 ## 2026-07-04 1.0.4 路径规则建议弹窗重做 + 三处鸣谢（claude/path-suggest-upgrade）
 
 **做了什么**：用户报告 bug（testplan K13）：路径规则新增一行投新模板，路径填 `新路径`（漏打
