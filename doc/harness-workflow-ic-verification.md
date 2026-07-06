@@ -220,3 +220,125 @@ scoreboard**。
 4. CI 跑 `--check` + smoke 回归 + lint（不可跳过）；夜间跑全量约束随机回归。
 5. 约定："每个验证周期结束必须在 `log.md` 顶部追加一块，并跑归档脚本"——写进 Agent
    系统提示/CLAUDE.md 等价文件里，作为强制规则常青块。
+
+## 7. 追问：进入本仓库的 Agent，工作流是用哪些脚本串起来的？
+
+本仓库的 Agent 工作流由 4 类脚本/钩子串联，各自触发时机不同：
+
+```
+① 会话进入
+   .claude/hooks/session-start.sh（SessionStart 钩子，自动触发，非 Agent 调用）
+   ├─ git config core.hooksPath .githooks   ← 启用 pre-commit 文档守卫
+   └─ npm install                            ← 仅远程会话执行
+
+② 接手读盘（Agent 手动敲的第一条命令）
+   npm run docs -- --handover
+   → 打印 status.jsonl 首行 + log.md 最新块 + testplan 待办摘要
+   （只读，不改任何文件）
+
+③ 工作步骤（手写，无脚本）
+   改 doc/testplan.md 场景行 → 改源码 → 补 tests/
+
+④ 质量自检（本地跑，无脚本串联，各自独立）
+   npm test / npm run lint / npm run format:check
+   （改核心逻辑再加跑 npm run test:fuzz）
+
+⑤ 产物重建
+   npm run release  = npm run build（tsc + esbuild）+ node scripts/sync-release.mjs
+   → 刷新 release/main.js / manifest.json / styles.css（+ zip，zip 不入库）
+
+⑥ 回填 testplan.md 状态（手写）
+
+⑦ 版本号同步
+   npm run bump  = node scripts/bump.mjs
+   → 一键改 package.json / manifest.json / package-lock.json / versions.json / release/manifest.json
+
+⑧ 写交接记忆（手写）
+   doc/log.md 顶部追加新周期块 + doc/status.jsonl 首行/新行
+
+⑨ 文档机械整理
+   npm run docs  = node scripts/docs.mjs
+   → 归档 log.md 旧块 → log-archive.md / 滚动 status.jsonl → status-archive.jsonl
+   → 打印 testplan 摘要 / 校验目录结构约定与磁盘一致
+
+   （⑤⑦⑨其实常合并成一条：npm run preflight = docs + release + test + lint + format:check）
+
+⑩ 提交
+   git commit
+   → 触发 .githooks/pre-commit → node scripts/docs.mjs --check
+      （软门禁：只检查 log.md/status.jsonl 是否超限、目录树是否漂移；可 --no-verify 跳过）
+
+⑪ push / PR
+   → 触发 .github/workflows/ci.yml
+      node scripts/docs.mjs --check → npm test → npm run lint → npm run format:check → npm run build
+      （硬门禁：不可跳过）
+
+⑫ 合并回 master（用户长期授权，见 CLAUDE.md §5.1）
+```
+
+**脚本职责速查表**：
+
+| 脚本 | npm 命令 | 谁调用 | 做什么 |
+|------|---------|--------|--------|
+| `session-start.sh` | — | SessionStart 钩子自动 | 装依赖 + 设 `core.hooksPath` |
+| `scripts/docs.mjs` | `docs` / `docs -- --handover` / `docs -- --check` | Agent 手动 / pre-commit / CI | 归档、滚动、testplan 摘要、目录树守卫、接手摘要 |
+| `scripts/bump.mjs` | `bump` / `bump minor` / `bump <ver>` | Agent 手动 | 版本号跨 5 处文件一键同步 |
+| `scripts/sync-release.mjs` | `release`（内含 `build`） | Agent 手动 | 构建产物同步进 `release/` + 打 zip |
+| `scripts/sync-plugin-repo.mjs` | `publish:repo` | 极少用 | **历史遗留**：私有 monorepo → 本独立仓库的同步脚本，本仓库现在本身就是目标仓库，正常开发周期不会用到 |
+
+**一句话版**（CLAUDE.md 原文）：
+
+> 改代码 + 测试 → `npm run bump` → 写 `log.md` 新块 + `status.jsonl` → **`npm run preflight`**
+> （= docs + release + test + lint + format:check）→ 提交 → （pre-commit 软门禁）→
+> push（CI 硬门禁）→ 合并 master
+
+关键设计：⑤⑦⑨（release / bump / docs）都是**手动触发、非自动串联**的独立脚本，靠
+CLAUDE.md 的文字流程和 pre-commit/CI 的检查结果倒逼 Agent 按顺序跑；真正"自动串联"的
+只有 `preflight` 这一个组合命令，以及 pre-commit/CI 内部固定跑 `docs.mjs --check`。
+
+## 8. 追问：这套工作流省上下文、省 token 是用什么方式实现的？
+
+核心思路是：**把"需要 Agent 用推理去读、去数、去比对"的工作，转换成"脚本用确定性
+代码算好摘要，Agent 只读结论"**——本质是把上下文消耗从 O(项目历史/文件全文) 压到
+O(1)。具体拆成六种机制：
+
+### 8.1 分层摘要，入口只读"一行 + 一块"
+
+`status.jsonl` 首行是唯一的"当前总览"，`log.md` 只读最新一个周期块。接手不用翻遍
+整个项目历史，只读这两处——无论项目做了多少个周期，这个入口成本恒定不变，不随历史
+线性增长。
+
+### 8.2 归档而非删除，默认不进上下文
+
+旧周期块/旧概括行滚进 `log-archive.md`/`status-archive.jsonl`，信息零损失，但**默认
+不占用当前对话的上下文**——只有真的要溯源某次改动才主动去 grep 那些文件。这是"数据
+留着，但不主动加载"的思路。
+
+### 8.3 把"读全文再数状态"变成"脚本先数好，只给结论"
+
+`testplan.md` 有上百条场景行，Agent 不需要整读表格——`npm run docs` 会精确统计场景
+清单区间的状态标记，只打印**非 ✅ 的行号+ID**清单。这把"读几百行表格找出没做完的"
+变成"读十几行结论"，且计数是脚本用正则做的，不是靠 LLM 数出来的（还特意排除图例/
+已知 bug/覆盖表等说明区间避免误报，见 `docs.mjs` 的 `scenarioSlice`）。
+
+### 8.4 一条命令聚合"该看的三处"，省去分别打开文件的往返
+
+`npm run docs -- --handover` 把 status 首行 + log 最新块 + testplan 摘要一次打印完，
+避免 Agent 自己规划"先读 A 再读 B 再读 C"这种多轮工具调用本身的开销。
+
+### 8.5 用"定位菜谱"替代"整读"，把大文件变成可寻址的
+
+CLAUDE.md 直接给出 grep 命令模板（如 `grep -n '^## ' doc/spec.md` 先拿章节行号，再
+`sed -n 'A,Bp'` 截取），而不是让 Agent 自己摸索怎么找。源码也按职责拆到"单文件可整
+读"的规模，规则是**拆分文件**而不是维护一份额外的符号地图文档去止痛（地图会腐烂，
+拆分不会）。
+
+### 8.6 结构化数据 + 严格长度上限，逼出信息密度
+
+`status.jsonl` 每行是 JSON 而非散文，脚本能直接校验字段合法性；首行 summary 有字数
+软上限，超限会被 `docs.mjs` 警告——强制把"结论"和"细节"分离，结论留在高频读取的
+位置，细节下沉到低频读取的 `log.md`。
+
+**一句话本质**：能用脚本算的（计数、diff、摘要、校验）绝不让 Agent 读原文去推断；
+能不读的历史（archive）绝不主动加载；必须读的现状（status 首行 / log 最新块）严格
+限制篇幅——把"上下文消耗"从"随项目历史增长"改造成"随项目历史保持恒定"。

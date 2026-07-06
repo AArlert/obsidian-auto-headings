@@ -1,3 +1,4 @@
+{"type": "log", "date": "2026-07-03", "version": "1.0.0", "summary": "版本转正 1.0.0（用户指示直接上架，testplan 未验证项保持原状态如实反映）；新增 .github/workflows/release.yml（推 tag 自动 build + gh release create 三件套）；spec.md M7 清单收尾（发布物料/版本转正/发布自检 已完成，提交商店留待用户本人操作）。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.27", "summary": "README 中英双语重写为痛点先行 + 细节功能清单；补回 .claude/settings.json、session-start.sh、.githooks/pre-commit（修复原版单项目仓库路径匹配 bug）、.github/workflows/ci.yml，均按单项目结构简化；CLAUDE.md §7 同步。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.26", "summary": "上架前审计：manifest id 改为 auto-headings（原含 obsidian 违规）；核实提交机制已变为 community.obsidian.md；CLAUDE.md 订正 monorepo 遗留描述；修两处断链；登记 testplan H8（backlog）；代码规范审计无违规。"}
 {"type": "log", "date": "2026-07-03", "version": "0.7.25", "summary": "main.ts 新增 foldSelfBacklinks：清除/重排编号时，指向本文件自己标题的 [[#锚点]] 内链不再经 vault.process 异步读盘处理（会与本文件未落盘的编辑器改动竞态、致清除被覆盖悄悄撤销），改为对内存 newContent 直接字符串重写、随同一个 editor.transaction 写回；修复用户报告的「清除编号提示已清除但文件不变」bug。"}
