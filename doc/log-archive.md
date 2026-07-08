@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-06 1.0.7 新增知识沉淀文档：Harness 工作流思想提炼（面向 IC 验证 Agent）（claude/harness-workflow-architecture-4vyme3）
+
+**做了什么**：用户要求把本仓库自身的多 Agent 协作 Harness 机制（`CLAUDE.md` 交接协议、
+`log.md`/`status.jsonl` 分层记忆、`scripts/docs.mjs` 机械脚本化、pre-commit/CI 两级门禁、
+`testplan.md` §4 已借用的 UVM 约束随机测试思想）提炼成通用架构原则，用于其在 IC 设计验证
+领域的 Agent 工作。新增 `doc/harness-workflow-ic-verification.md`：
+
+1. 十条可迁移的核心原则表（单一事实源、分层记忆、机械/语义解耦、两级门禁、状态转移优先、
+   约束单向放松、多记分板互补、显式登记未覆盖项、已知边界钉回归测试、产物随源码入库）。
+2. 分层记忆架构图与 `scripts/docs.mjs` 五件事的抽象模式（归档/滚动/摘要/校验/目录树守卫）。
+3. §5 单独整理本仓库测试层已借用的 UVM 方法论内核（参考模型 scoreboard、多记分板互补、
+   约束随时放松的单向棘轮、覆盖率驱动缺口分析、显式"不入随机框架"清单）——这部分与
+   IC 验证同源，可直接对齐，不需要类比转译。
+4. §6 给出迁移到 IC 验证 Agent 工作的具体落地设计：`doc/` 文件角色映射表、`testplan.md`
+   验证维度模板、`scripts/vplan.mjs` 脚本职责、门禁分层（含 IC 验证比软件多出的"夜间全量
+   回归"一层）、Agent 交接协议模板、最小可行落地清单。
+
+**没做的**：本文档是纯知识沉淀/外部参考，不涉及插件自身行为或规格变化，故未跑 `npm run
+bump`（沿用 1.0.6 README 重组周期确立的"上架后策略：仅行为/产物变化才 bump"）；未改动
+`spec.md`/`testplan.md`——内容与本插件的编号引擎规格无关，不适合并入两者。
+
+**验证方式**：`npx prettier --check doc/harness-workflow-ic-verification.md` 通过；
+`node scripts/docs.mjs --check` 通过（周期块/概括行计数未超限，目录结构约定未受影响——
+本次未新增 `.ts`/`.mjs` 源文件）。未跑 `npm test`/`lint`/`release`（无源码改动）。
+
+**下一步**：待用户在 IC 验证项目一侧落地 `scripts/vplan.mjs` 与 `testplan.md` 等价物时，
+如需进一步定制脚本原型可另行支持；本仓库侧无遗留任务。
+
+---
+
 ## 2026-07-05 1.0.7 迁移守卫：自动路径检测疑似外来编号，跳过写入+提示（claude/plugin-numbering-cleanup-check-d83sxc）
 
 **做了什么**：用户提出的真实痛点——从其他编号插件 / 手写编号迁移过来的文件（如 `## 1 红米`），装上本插件
