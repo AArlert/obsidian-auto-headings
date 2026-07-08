@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-06 1.0.7 补充追问二则至 Harness 文档：脚本串联链路 + 省 token 机制（claude/harness-workflow-architecture-4vyme3）
+
+**做了什么**：用户在上一周期基础上追问两个问题——「进入本仓库的 Agent 工作流用哪些脚本
+串起来」「这套工作流省上下文/省 token 是靠什么实现的」，把两问两答追加进
+`doc/harness-workflow-ic-verification.md` 作为 §7/§8：
+
+1. **§7 脚本串联链路**：从 SessionStart 钩子（自动）→ `npm run docs -- --handover`（接手
+   读盘）→ 手写工作步骤 → 质量自检（test/lint/format）→ `npm run release` → `npm run bump`
+   → 写交接记忆 → `npm run docs`（或合并为 `preflight`）→ 提交（pre-commit 软门禁）→
+   push（CI 硬门禁）→ 合并 master 的完整时间线图 + 脚本职责速查表，并点明 `release`/
+   `bump`/`docs` 三者是**手动触发、非自动串联**，真正自动串联的只有 `preflight` 组合命令
+   与 pre-commit/CI 内部固定跑的 `docs.mjs --check`。
+2. **§8 省 token 六机制**：分层摘要（首行+最新块恒定入口成本）、归档不删除但默认不进
+   上下文、脚本算摘要代替整读计数（testplan 非 ✅ 清单）、`--handover` 单命令聚合三处、
+   grep 定位菜谱替代整读 + 源码按职责拆分、结构化数据+字数上限逼出信息密度；归纳为
+   "上下文消耗从随项目历史增长改造成随项目历史保持恒定"。
+
+**没做的**：本次仍是纯知识沉淀的追加，不涉及插件行为，未跑 `npm run bump`。
+
+**验证方式**：`npx prettier --check doc/harness-workflow-ic-verification.md` 通过；
+`node scripts/docs.mjs --check` 通过。未跑 `npm test`/`lint`/`release`（无源码改动）。
+
+**下一步**：本仓库侧无遗留任务；后续若用户在 IC 验证项目侧有新的迁移细节讨论，可继续
+追加进本文档对应章节。
+
+---
+
 ## 2026-07-06 1.0.7 新增知识沉淀文档：Harness 工作流思想提炼（面向 IC 验证 Agent）（claude/harness-workflow-architecture-4vyme3）
 
 **做了什么**：用户要求把本仓库自身的多 Agent 协作 Harness 机制（`CLAUDE.md` 交接协议、
