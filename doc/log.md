@@ -40,6 +40,33 @@
 
 ---
 
+## 2026-07-08 1.0.7 补齐 CR-18 Backlink 独立触发 + skipFill 预览缺口 + GUI「预览优先」原则（claude/obsidian-auto-headings-review-km307d）
+
+**做了什么**：接上一周期"下一步"遗留的两项，用户确认要补进 spec 并追加了一条通用 GUI 设计原则，本轮
+全部落进 `spec.md`，纯文档修订，不涉及 `src/`，未跑 `npm run bump`：
+
+1. **CR-18 + §3.12 新增「独立于编号模板的触发」**：把上一周期已用代码验证过的架构结论（`backlinks.ts`
+   核心纯函数不依赖模板，耦合点只在 `main.ts` 的 `applyRenumber` 触发入口，只被 `scheduleRenumber` /
+   `runImmediateRenumber` 调用、且都要求 `getTemplateForFile` 命中模板）写成正式设计段落：目标新增
+   一条不依赖模板解析的触发路径（复用 `headingSnapshots` 快照基线）+ 独立开关，Roadmap M9 挂一条
+   backlog 项。
+2. **§3.13 新增「预览优先于文字说明」设计原则**：能用渲染示例说清楚的地方不写说明文字，仅当预览无法
+   表达"为什么这样设计"时才留一句话说明；把已知的第一个缺口——`skipFill`（fill/drop/none）目前只有
+   文字描述、没有配对渲染示例——记为该原则的待补项，Roadmap M9 挂对应 backlog 项。
+3. 两处都保持"一句话 + 一个 backlog 勾选项"的精简体量，没有比照 M10 那样铺开 ASCII 图/多方案对比表——
+   前者是对既有已验证结论的正式落笔，后者是一个局部渲染缺口，体量本就不需要那么重。
+
+**没做的**：不涉及任何 `src/` 代码改动；未碰 `testplan.md`（两项仍是"规划中/待补"，未落地没有可断言
+的测试场景）；README 重排 + GIF、导出清 WJ 可行性调研仍未动手（上一周期已记录，本轮未新增进展）。
+
+**验证方式**：`node scripts/docs.mjs --check` 通过；`npx prettier --check doc/spec.md` 通过。未跑
+`npm test`/`lint`/`release`（无 `src/` 改动）。
+
+**下一步**：`skipFill` 预览与 Backlink 独立开关均已有明确设计方向，下一次动代码时可以直接按 §3.12/
+§3.13 的段落实现，不需要再补规格；「预览优先」原则后续新增面板控件时应默认遵循，不必每次都重新讨论。
+
+---
+
 ## 2026-07-08 1.0.7 用户产品讨论落规格：M10 TOC burn-in + M8b 交互面补充 + 生态兼容性风险（claude/obsidian-auto-headings-review-km307d）
 
 **做了什么**：多轮用户产品讨论（① 上架现状与宣传短板评估 → ② 插件命名/卖点、Backlink 能否脱离编号
@@ -144,33 +171,6 @@
 **下一步**：若采纳「Dataview 集成」候选，第一步应是找一个真实 vault 手动验证 WJ 字符在 DataviewJS
 里的实际表现（而非继续纯调研）；「路径规则不编号伪模板」与「注释块内标题跳过」是两个低成本、不依赖
 M8 的独立小任务，可随时排期；M8a/M8b 本身仍未开工。
-
----
-
-## 2026-07-06 1.0.7 补充追问二则至 Harness 文档：脚本串联链路 + 省 token 机制（claude/harness-workflow-architecture-4vyme3）
-
-**做了什么**：用户在上一周期基础上追问两个问题——「进入本仓库的 Agent 工作流用哪些脚本
-串起来」「这套工作流省上下文/省 token 是靠什么实现的」，把两问两答追加进
-`doc/harness-workflow-ic-verification.md` 作为 §7/§8：
-
-1. **§7 脚本串联链路**：从 SessionStart 钩子（自动）→ `npm run docs -- --handover`（接手
-   读盘）→ 手写工作步骤 → 质量自检（test/lint/format）→ `npm run release` → `npm run bump`
-   → 写交接记忆 → `npm run docs`（或合并为 `preflight`）→ 提交（pre-commit 软门禁）→
-   push（CI 硬门禁）→ 合并 master 的完整时间线图 + 脚本职责速查表，并点明 `release`/
-   `bump`/`docs` 三者是**手动触发、非自动串联**，真正自动串联的只有 `preflight` 组合命令
-   与 pre-commit/CI 内部固定跑的 `docs.mjs --check`。
-2. **§8 省 token 六机制**：分层摘要（首行+最新块恒定入口成本）、归档不删除但默认不进
-   上下文、脚本算摘要代替整读计数（testplan 非 ✅ 清单）、`--handover` 单命令聚合三处、
-   grep 定位菜谱替代整读 + 源码按职责拆分、结构化数据+字数上限逼出信息密度；归纳为
-   "上下文消耗从随项目历史增长改造成随项目历史保持恒定"。
-
-**没做的**：本次仍是纯知识沉淀的追加，不涉及插件行为，未跑 `npm run bump`。
-
-**验证方式**：`npx prettier --check doc/harness-workflow-ic-verification.md` 通过；
-`node scripts/docs.mjs --check` 通过。未跑 `npm test`/`lint`/`release`（无源码改动）。
-
-**下一步**：本仓库侧无遗留任务；后续若用户在 IC 验证项目侧有新的迁移细节讨论，可继续
-追加进本文档对应章节。
 
 ---
 
