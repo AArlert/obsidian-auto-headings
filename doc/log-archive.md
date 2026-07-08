@@ -5,6 +5,43 @@
 
 ---
 
+## 2026-07-05 1.0.7 迁移守卫：自动路径检测疑似外来编号，跳过写入+提示（claude/plugin-numbering-cleanup-check-d83sxc）
+
+**做了什么**：用户提出的真实痛点——从其他编号插件 / 手写编号迁移过来的文件（如 `## 1 红米`），装上本插件
+后全局自动编号一开，打开该文件就会被自动路径叠成 `## 1 1 红米`（方案A下无 WJ 一律当正文、直接叠加编号），
+观感上与 bug 无异，而这恰恰是新用户接触自动编号的第一个时刻。上一轮讨论了三个方案（自动接管 / 跳过+
+提示 / 全库常驻角标），采纳方案1（跳过写入 + 一次性提示，风险最低）：
+
+1. **`src/cleanup.ts` 新增只读探测 `hasUnclaimedForeignNumbering`**：全文完全不含 Word Joiner（插件
+   从未接触过这份内容）且至少一个标题被 `stripForeignNumbering` 判定为「像外来编号」时返回 true。
+2. **`src/main.ts` 三处自动写入前接入守卫**（`scheduleRenumber` 防抖到期回调 / `renumberOnOpen` /
+   `renumberActiveFile`）：命中即跳过本次 `applyRenumber`，改弹 Notice 引导执行「清理非本插件的标题
+   编号」；新增 `foreignNumberingWarned`（内存 Set）把提示限制为每文件每会话一次，此后静默持续跳过；
+   随文件 rename 迁移键、delete 移除、`onunload` 清空。**手动命令**（立即重新编号 / 清除编号 / 清理
+   外来编号）**不查守卫**，绕过一切开关照常执行——与既有「Renumber now 绕过一切开关」原则一致。
+3. **已知且接受的边界**：守卫的「从未接触过」判定是**整文件级**的——一旦文件已含任意 WJ（哪怕只有
+   一个标题被本插件编过号），之后再粘贴进一段带外来编号的新内容，守卫**不会**再次拦截，该段落仍按
+   方案A既有语义处理（当正文、叠加编号）。这是刻意的范围收窄（避免为「部分接管」引入按标题级的更
+   复杂判断），已在 `main.test.ts` 补一条回归测试固化这个边界，不是遗漏。
+4. `src/i18n.ts` 新增 Notice 文案 `noticeForeignNumberingGuard`（中英双语）。
+5. `doc/spec.md` §3.9「打开文件即重排」段后补一段规格说明（命中条件、行为、范围、已知风险）；
+   `doc/testplan.md` J 类新增 **J10** 场景行。
+
+**没做的**：方案2（vault 级一次性 onboarding 提示）、方案3（面板常驻角标计数）——本轮只落地风险最低
+的方案1；「部分接管文件里新增外来编号段落」这个已知边界（见上第3点）暂不处理，留待用户反馈是否值得
+再投入按标题级判断的复杂度。
+
+**验证方式**：`cleanup.test.ts` 补 5 条 `hasUnclaimedForeignNumbering` 纯函数单测；`main.test.ts` 补
+6 条集成测试（`scheduleRenumber`/`renumberOnOpen`/`renumberActiveFile` 命中守卫跳过写入+仅提示一次、
+已接管文件的边界行为、手动命令绕过、「先清理再自动接管」典型工作流往返）；`npm test`（353 全绿）、
+`npm run lint`、`npm run format:check`、`npm run test:fuzz`（5000×80 全绿，两条记分板不变式均未受影响）、
+`npm run release` 全过；`npm run bump` 同步至 1.0.7。
+
+**下一步**：等待合并回 master；若用户反馈仍在「部分接管文件」场景撞到双重编号，再评估方案2/3或按标题
+级判断的复杂度是否值得投入。M8a/M8b 仍未开工，按上一周期结论排期。
+
+---
+
 ## 2026-07-05 1.0.6 README 中英双语改版：按调研报告拆「基础层/进阶层」（claude/plugin-readme-localization-mh62xy）
 
 **做了什么**：按 `doc/README_UPDATE_REPORT.md`（0704 调研产出）§3 的结构提案，重写 `README.md` /
