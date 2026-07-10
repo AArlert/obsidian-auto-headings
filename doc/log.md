@@ -40,6 +40,52 @@
 
 ---
 
+## 2026-07-10 1.0.7 拷问式方向审查落盘：grill.md + 契约 + Roadmap 重排 M11/M12 + 实机环境规划（claude/plugin-review-infra-swtxdk）
+
+**做了什么**：用户发起对插件的拷问式全方位审查（定位/生态适配/导出/Milestone/infra 化路径），全部认可
+审查结论并全权委托落盘，本轮**纯文档大修**，不涉及 `src/`、不 bump（上架后策略）：
+
+1. **新增 `doc/grill.md`**（长期保留的方向审查记录，单一事实源纪律的用户指定例外——落点放结论、
+   本文件放推理与否决理由）：七方面拷问（定位倒转/WJ 义务/触发面盲区/Backlink 信任敞口/导出/
+   Milestone 倒挂/infra 差距）+ 本轮专题 **§8「WJ 能否被 CM6 原子区域替代」**。§8 结论：原子区域
+   答不了跨会话/设备的「身份」问题（纯模式匹配、位置 sidecar、会话内追踪三条去 WJ 路线逐一枪毙），
+   **不能替代、应当叠加**——防护栈三层变四层（原子区域→方案A→双哨兵→清除命令）；真正零 WJ 的
+   诚实路径是「虚拟编号模式」（opt-in 渲染层第二哲学，进 M9 候选）。
+2. **新增 `doc/marker-contract.md`**（英文，面向下游开发者/工具作者）：WJ 双哨兵字节格式、四条
+   稳定性承诺（格式/键名/永远可退出/互操作配方）、剥 WJ 与剥整前缀代码片段、Pandoc Lua filter、
+   与 gurjar1 插件共存不受支持声明。
+3. **`spec.md` 系列修订**：§2.2 虚拟编号翻案候选注记；§2.3「前缀可手改」修订预告；§2.5 CM 行升格
+   说明；§2.6 风险表 4→8 行（Canvas 引用方靠巧合、Publish 锚点、外部写入陈旧快照、WJ 无命名空间，
+   均已代码核对或标注待实测）+ 拷问追加注记；新增 §2.7 契约中文摘要；§3.12 CR-18 升格注记；
+   **§5 Roadmap 重排**——执行顺序总览表（M11→M12→M8a→M8b→M10，编号不再暗示顺序）+ 新增
+   **Milestone 11 信任包**（审阅模式/H8+清库撤销/复制净化/导出验证矩阵/大库性能/CM6 原子区域/
+   Canvas 拍板/陈旧快照评估/E8 拍板）与 **Milestone 12 独立价值包**（CR-18/批量重编号/伪模板/
+   注释块跳过/断链修复/description 重排/公开改名事件 API/Number Headings 迁移指南），M9 清池九项。
+4. **新增 `spec.md` §7.1 实机验证环境规划**（用户决定：后续在装有 Obsidian 实体的 Ubuntu 环境用
+   Claude Code 开发）：专用测试 vault 约定、CDP 自动化驱动（`--remote-debugging-port` + Playwright
+   attach 执行 `app.commands`）→ URI+xdotool → 纯手动三级降格、O 组/导出矩阵/性能/README 截图的
+   执行清单、`tests/machine_tests/` 目录纪律。
+5. **`testplan.md` 新增 O 组**（生态与外部写入，O1–O7 全 🔲）：Canvas/外部改写陈旧快照/WJ 插件
+   共存/剪贴板净化/导出矩阵/原子区域交互面/公开 API 事件。
+6. **README 双语三新节**：「导出与外发」（Pandoc 双重编号预警 + Lua filter 指引 + PDF/Publish 待实测
+   如实标注）、「从 Number Headings 迁移」（三步接管，吃停更竞品存量）、「如何干净地离开」（卸载
+   三步 + 字节级可退出性承诺）；「工作原理」补共存互斥与契约链接两条。
+7. CLAUDE.md §3.1 表与本文件目录结构块登记两个新文档。
+
+**没做的**：不涉及任何 `src/` 改动——M11/M12 全部是规划，一行代码未写；O 组场景全部 🔲 未执行
+（等实机环境）；manifest description 重排刻意不动（属产物，须随下一个行为版本 bump）；doc/
+harness-workflow* 两个知识沉淀文件核实为用户有意保留，未动。
+
+**验证方式**：`node scripts/docs.mjs --check` 通过；`npx prettier --check README.md README.zh.md`
+通过；`npm test` / `npm run lint` 通过（未动源码，例行核验）。
+
+**下一步**：用户将在装有 Obsidian 实体的 Ubuntu 环境用 Claude Code 继续开发——接手 agent 第一步按
+spec §7.1 搭实机环境（测试 vault + CDP 驱动），然后按新执行顺序开工 **M11 信任包**（建议首件：
+导出验证矩阵 O5 + 剪贴板 O4，纯验证零风险，实机环境一到位即可跑；随后审阅模式/H8 动代码）；
+M12 里《从 Number Headings 迁移》长文与论坛发布不依赖实机，可随时做。
+
+---
+
 ## 2026-07-10 1.0.7 README 补披露 WJ 生态风险 + 修正商店安装现状（claude/plugin-eval-promotion-3sy3v4）
 
 **做了什么**：用户带着实际反馈来源两处修正，本轮**纯文档修订**（README 双语 + `spec.md` §2.6/M7 核对状态），
@@ -96,57 +142,6 @@
 
 ---
 
-## 2026-07-08 1.0.7 用户产品讨论落规格：M10 TOC burn-in + M8b 交互面补充 + 生态兼容性风险（claude/obsidian-auto-headings-review-km307d）
-
-**做了什么**：多轮用户产品讨论（① 上架现状与宣传短板评估 → ② 插件命名/卖点、Backlink 能否脱离编号
-模板独立使用、四条 WJ 生态兼容性痛点、README 改版方向、GUI 预览缺口 → ③ 稳定性/兼容性想法批量输出
-（导出清 WJ、Dataview 检索适配、全库清除可撤销、扫描修复历史断链、批量重编 UX、TOC burn-in）→ ④ TOC
-监视机制细化 + 主编辑器 gutter 升降级按钮/拖放把手新想法），本轮把结论落进 `spec.md`，**纯文档修订，
-不涉及 `src/`、未跑 `npm run bump`**（沿用"上架后策略：仅行为/产物变化才 bump"）：
-
-1. **§2.2 非目标翻案**：「生成目录」不再是非目标——单文件内 burn-in 真实文本的目录，Dataview（渲染层、
-   依赖额外插件）与 Table of Contents（一次性插入、不持续同步）都做不到，与本插件"写入真文本"的核心
-   哲学一致；跨文件聚合视图仍非目标，继续走 M9 Dataview 集成路线，两者范围不同、互不替代。
-2. **新增 §2.6 已知生态兼容性风险（待验证）**：四条——外部全文检索/正则因 WJ 断词失效（已用
-   `render.ts` 代码核对成立）、跨平台剪贴板渲染 U+2060 异常（待真实客户端验证）、Dataview
-   `file.headers` 精确匹配受 WJ 影响（已在 M9 候选①，待验证+出文档）、Backlink 批量同步引发 Git diff
-   噪音（新发现，缓解方向并入 M9「Backlink 审阅模式」候选）。
-3. **新增 §3.16 + CR-17 + Roadmap M10「原生风格 TOC burn-in」**：专属 `toc` 围栏代码块，复用编号引擎
-   防抖触发路径；**关键约束**——TOC 块行数会随标题增删变化，打破"整文件重写永不增删行"的既有不变量
-   （`backlinks.ts` 改名配对逻辑依赖这条不变量），技术方向待验证（CM6 事务位置映射能否在增删行场景
-   下自动保持光标/滚动位置）；层级折叠复用 M8a 动态层级滑块的判定逻辑（同一纯函数，不重新实现）；
-   四个未决问题（围栏语法/链接形式复用 `backlinks.ts` displayAnchor/多块支持/白名单是否收录）留待
-   详细设计。M10 排期不早于 M8b 的"允许增删行整文件重写"基础设施到位。
-4. **§3.15（M8b）补充设计**：新增"交互面选址"——在原有侧栏树拖拽之外，追加主编辑器 gutter 内嵌控件
-   （∧/V 升降级按钮 + 拖放把手，与 Obsidian 原生标题折叠三角共存、不改变原有布局）；升降级按钮是否
-   级联调整子标题层级列为未决问题；拖放把手复用既有"纯函数层 `moveHeadingBlock` + DOM 手势层"拆分，
-   只是手势识别挂载点从侧栏树 DOM 换成 CM6 gutter widget。顺手修正 Roadmap 里一处过期表述（白名单子树
-   拖入边界，Roadmap checklist 仍写"待实现时二选一"，与 §3.15 正文早已定案的"直接禁止"不一致）。
-5. **M9 backlog 补充/细化**：多文件批量重新编号命令补 UX 定案（路径规则行右侧按钮+确认对话框）；新增
-   「清除全库编号支持撤销」（与 testplan H8 读盘竞态同一段代码，建议一并修，插件自建快照/还原、非
-   `Ctrl/Cmd+Z`）；新增「manifest description 卖点重排」（backlink 前置，低风险纯文案）。
-
-**没做的**：
-- **「Backlink 独立于编号模板单独可用」尚未落进 spec.md**——上一轮已用代码验证架构可行（`backlinks.ts`
-  核心纯函数本就不依赖模板，耦合点只在 `main.ts` 的 `applyRenumber` 触发入口），但结论目前只在对话
-  记录里，还没写成正式的 CR / Milestone 章节，需要用户确认是否也要本轮补上。
-- 「skipFill 跳级预览缺口」（GUI 各处加预览的一个具体案例，已用代码确认 `EditPanel.ts` 目前无此预览）
-  同样只在对话记录里，未写入 spec.md。
-- README 实际重排（Feature 列表 + 跳转 + 配图）与 GIF 制作均未动手——GIF 需要真实 Obsidian 实例操作
-  录屏，当前环境无法产出，需要用户自行录制或留待有桌面环境的会话。
-- 「导出时清除 WJ」的可行性未验证——Obsidian 核心导出流程是否开放公共钩子给社区插件介入未经查证，
-  spec.md 里未新增章节记录这条（仅在对话中给出"手动命令兜底"的降级方案建议，未落规格）。
-- M10/M8b 新增内容均为规划阶段的规格文字，不涉及 `testplan.md`（未落地就没有可断言的测试场景）。
-
-**验证方式**：`node scripts/docs.mjs --check` 通过（周期块/概括行计数未超限，目录结构约定未受影响）；
-`npx prettier --check doc/spec.md` 通过。未跑 `npm test`/`lint`/`release`（无 `src/` 改动）。
-
-**下一步**：向用户确认是否要把「Backlink 独立开关」与「skipFill 预览缺口」也补进 spec.md；若确认，
-比照本轮体例（CR 表 + 非目标/风险表 + §3.x 详细规格 + Roadmap checklist）补齐。M10 与 M8b gutter 交互
-的未决问题拍板后，才能拆解出可估工时的 checklist，目前仍停留在"规划中/构思阶段"。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -184,7 +179,7 @@ obsidian-auto-headings/
 │   ├── dev_tests/          自动化单元测试（Vitest，无需 Obsidian 运行时，npm test 跑它）+ uvm/ 压测框架
 │   └── user_tests/         可复制粘贴进 Obsidian 实测的 .md 样例（每个对应 testplan 某场景）
 ├── README.md             ← 面向读者的简介（核心功能 + Milestone 概览，入口文档）
-├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive，见 CLAUDE.md §3.1）
+├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + grill 方向审查 + marker-contract 下游契约，见 CLAUDE.md §3.1；harness-workflow* 为跨项目知识沉淀，不属插件规格）
 ├── release/              ← 可分发插件文件（main.js/manifest/styles/README；zip 本地生成不入库）★每周期必更新
 ├── publish/              ← 对外发布仓库的专属模板（双语 README、精简 package.json；npm run publish:repo 同步）
 ├── scripts/
