@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-07-10 1.0.7 README 补披露 WJ 生态风险 + 修正商店安装现状（claude/plugin-eval-promotion-3sy3v4）
+
+**做了什么**：用户带着实际反馈来源两处修正，本轮**纯文档修订**（README 双语 + `spec.md` §2.6/M7 核对状态），
+不涉及 `src/`，未跑 `npm run bump`（沿用"上架后策略：仅行为/产物变化才 bump"）：
+
+1. **「安装」节更新为商店真实现状**：此前 README 写的是"社区插件商店（一旦通过审核）"，用户核实后指出
+   插件**已通过自动化检查、在商店内可搜索可直接安装**，只是 Obsidian 官方的人工/编辑审核还在排队——
+   两语言版本均改为反映这个现状，不再用误导性的"一旦通过审核"措辞。同步更新 `spec.md` Milestone 7 该
+   checklist 项，记录这一核实结果。
+2. **README「工作原理」节补齐两处此前只记在 `spec.md` §2.6、未对用户披露的 WJ 生态风险**：
+   - **Dataview**：`page.file.headers` 精确字符串匹配会被 WJ 打穿，补充 DataviewJS `.replace(/⁠/g, "")`
+     清洗示例 + 改用 `.includes()` 匹配标题片段两种规避写法。
+   - **跨平台剪贴板**：复制粘贴到微信/知乎/Notion/邮件客户端等第三方应用时字符处理未逐一验证过，
+     按"已知风险、不承诺具体表现"的措辞披露，并给出目标应用内手动清理的兜底方式。
+   - `spec.md` §2.6 风险表三行状态同步勾更新（外部检索/Dataview 两行标 README 已披露完成日期；剪贴板
+     一行仍标注实测未做，只是披露措辞已补上）。
+3. 双语版本（`README.md` / `README.zh.md`）逐句对应修改，未产生内容漂移。
+
+**没做的**：不涉及任何 `src/` 代码改动；跨平台剪贴板风险的**真实客户端实测**仍未做（开发环境无法验证，
+仍是 spec.md 里挂着的待办）；Backlink 批量同步的 Git diff 噪音、审阅模式仍是 M9 backlog，未改动。
+
+**验证方式**：`node scripts/docs.mjs --check` 通过；`npx prettier --check README.md README.zh.md doc/spec.md`
+通过。未跑 `npm test`/`lint`/`release`（无 `src/` 改动）。
+
+**下一步**：跨平台剪贴板行为需要真实客户端（微信/Notion 等）实测后回填 spec.md §2.6；README 截图/GIF
+仍是占位，留待用户在有桌面环境处补充。
+
+---
+
 ## 2026-07-08 1.0.7 补齐 CR-18 Backlink 独立触发 + skipFill 预览缺口 + GUI「预览优先」原则（claude/obsidian-auto-headings-review-km307d）
 
 **做了什么**：接上一周期"下一步"遗留的两项，用户确认要补进 spec 并追加了一条通用 GUI 设计原则，本轮

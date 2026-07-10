@@ -1,3 +1,4 @@
+{"type": "log", "date": "2026-07-04", "version": "1.0.6", "summary": "修复白名单归一化不认 HTML 标签 / ==高亮== / ~~删除线~~，导致 <u>附录</u> 等带格式标题无法命中子树白名单；stripInlineMarkdown 新增通用 HTML 标签剥离 + 成对剥离 ==/~~。"}
 {"type": "log", "date": "2026-07-04", "version": "1.0.5", "summary": "修复建议弹窗 z-index 被设置模态框盖住（--layer-popover→--layer-menu）；用户实测反馈键盘选中正常但点击输入框不弹出可见下拉。"}
 {"type": "log", "date": "2026-07-04", "version": "1.0.4", "summary": "路径规则输入重做：PathSuggest.ts 自绘建议弹窗 + autocompleteFolderSlash 兜底补全尾斜杠（K13）；About TAB 新增鸣谢（numeroflip/auto-template-trigger、hobeedzc/header-enhancer、gurjar1/auto-heading-obsidian）。"}
 {"type": "log", "date": "2026-07-04", "version": "1.0.3", "summary": "修复「关于」TAB 仓库链接：AArlert/Addon（旧 monorepo 遗留）→ AArlert/obsidian-auto-headings。三条弃用 API Recommendation 沿用前两轮结论不迁（需 minAppVersion 1.13+）。"}
