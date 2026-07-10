@@ -3,10 +3,11 @@ import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { DEBOUNCE_DEFAULT, DEBOUNCE_MAX, DEBOUNCE_MIN, clampDebounceDelay } from "../model";
 
 /**
- * 「全局设置」TAB（M7 多 TAB 重构）：语言 / 全局自动编号 / Backlink 同步 / 防抖延迟。
+ * 「全局设置」TAB（M7 多 TAB 重构）：语言 / 全局自动编号 / Backlink 同步 / Backlink 独立触发 / 防抖延迟。
  *
  * Backlink 开关紧跟全局开关（0.7.11 曝光度决策：默认开 + 首次实际同步弹说明 Notice，
- * 面板上作为普通设置项自然呈现，见 spec.md §3.12）。
+ * 面板上作为普通设置项自然呈现，见 spec.md §3.12）。Backlink 独立触发开关（CR-18）再紧跟其后、
+ * 默认关（opt-in 扩展触发面，见 spec.md §3.12「独立于编号模板的触发」）。
  */
 export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLElement): void {
 	const t = tab.t;
@@ -44,6 +45,17 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 		.addToggle((toggle) =>
 			toggle.setValue(plugin.settings.updateBacklinks).onChange(async (value) => {
 				plugin.settings.updateBacklinks = value;
+				await plugin.saveSettings();
+			}),
+		);
+
+	// —— Backlink 独立于编号模板的触发（紧跟上一开关，默认关，CR-18，见 spec.md §3.12）——
+	new Setting(containerEl)
+		.setName(t.backlinkStandaloneTriggerName)
+		.setDesc(t.backlinkStandaloneTriggerDesc)
+		.addToggle((toggle) =>
+			toggle.setValue(plugin.settings.backlinkStandaloneTrigger).onChange(async (value) => {
+				plugin.settings.backlinkStandaloneTrigger = value;
 				await plugin.saveSettings();
 			}),
 		);

@@ -54,6 +54,12 @@ import { TemplateStore } from "./templates/TemplateStore";
  * - 「是否运行」两层化：`autoNumber`（全局自动编号面板开关）与文件级 frontmatter 强制。
  * - **自动触发**：`autoNumber` 开 或 `fm:true`，且 `fm≠false`（见 {@link shouldAutoTrigger}）。
  * - **手动命令**：绕过全局开关与 `fm:false`，仅受「能否命中模板」约束。
+ *
+ * M12（CR-18，见 spec.md §3.12「独立于编号模板的触发」）：Backlink 同步新增一条**不依赖**
+ * {@link getTemplateForFile} 命中的独立触发路径（{@link shouldBacklinkStandaloneTrigger} /
+ * {@link applyBacklinkStandaloneSync}），由独立开关 `backlinkStandaloneTrigger` 控制（默认关）——
+ * 常规编号路径本轮未处理（无模板 / 不够格自动触发）时，只要标题文本对照快照基线改写，仍同步引用
+ * 链接，该路径从不写入编号前缀。
  */
 export default class AutoHeadingsPlugin extends Plugin {
 	settings: AutoHeadingsSettings = { ...DEFAULT_SETTINGS, pathRules: defaultPathRules() };
@@ -468,20 +474,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const fold = this.foldSelfBacklinks(ctx.file, oldContent, newContent);
 		newContent = fold.content;
 
-		const oldLines = oldContent.split("\n");
-		const newLines = newContent.split("\n");
-		const changes: EditorChange[] = [];
-		for (let i = 0; i < newLines.length; i++) {
-			if (oldLines[i] !== newLines[i]) {
-				changes.push({
-					from: { line: i, ch: 0 },
-					to: { line: i, ch: oldLines[i].length },
-					text: newLines[i],
-				});
-			}
-		}
-		if (changes.length > 0) {
-			editor.transaction({ changes });
+		if (this.writeLineDiff(editor, oldContent, newContent)) {
 			// Backlink 同步：清除编号也改写了标题文本（去掉前缀），更新别处指向它的内部链接。
 			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
 		}
@@ -515,20 +508,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const fold = this.foldSelfBacklinks(ctx.file, oldContent, newContent);
 		newContent = fold.content;
 
-		const oldLines = oldContent.split("\n");
-		const newLines = newContent.split("\n");
-		const changes: EditorChange[] = [];
-		for (let i = 0; i < newLines.length; i++) {
-			if (oldLines[i] !== newLines[i]) {
-				changes.push({
-					from: { line: i, ch: 0 },
-					to: { line: i, ch: oldLines[i].length },
-					text: newLines[i],
-				});
-			}
-		}
-		if (changes.length > 0) {
-			editor.transaction({ changes });
+		if (this.writeLineDiff(editor, oldContent, newContent)) {
 			// Backlink 同步：清理外来编号也改写了标题文本，更新别处指向它的内部链接。
 			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
 		}
@@ -657,6 +637,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (typeof merged.backlinksIntroShown !== "boolean") {
 			merged.backlinksIntroShown = false;
 		}
+		// backlinkStandaloneTrigger 缺失 / 非布尔（含旧版本无此字段）时回退到默认 **false**（CR-18，
+		// 新扩展的触发面，opt-in 更保守；见 spec.md §3.12「独立于编号模板的触发」）。
+		if (typeof merged.backlinkStandaloneTrigger !== "boolean") {
+			merged.backlinkStandaloneTrigger = false;
+		}
 		this.settings = merged as unknown as AutoHeadingsSettings;
 		this.settings.debounceDelay = clampDebounceDelay(this.settings.debounceDelay);
 	}
@@ -666,17 +651,20 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
-	 * 实时编辑触发（**自动路径**）：达到自动触发资格才重置该文件的防抖计时器；到期后再次
-	 * 校验资格与模板命中，命中则整文件重排。计时器以文件路径为单位互相独立。
+	 * 实时编辑触发（**自动路径**）：常规编号路径（{@link shouldAutoTrigger} + 模板命中）或
+	 * Backlink 独立触发路径（{@link shouldBacklinkStandaloneTrigger}，CR-18）**至少一条**够格
+	 * 才安排该文件的防抖计时器；到期后再次校验资格，优先走常规编号路径（含其内置的 backlink
+	 * 同步），本轮未处理（无模板命中 / 不够格自动触发编号）时才尝试独立触发——避免同一次改动被
+	 * 处理两遍。计时器以文件路径为单位互相独立。
 	 */
 	private scheduleRenumber(editor: Editor, info: MarkdownView | MarkdownFileInfo): void {
 		const file = info.file;
 		if (!file) {
 			return;
 		}
-		// 不够格自动触发（全局开关关且非 fm:true，或 fm:false）时不安排任何更新。
-		if (!this.shouldAutoTrigger(editor.getValue())) {
-			return;
+		const content = editor.getValue();
+		if (!this.shouldAutoTrigger(content) && !this.shouldBacklinkStandaloneTrigger(content)) {
+			return; // 两条路径都不够格：不安排任何更新。
 		}
 
 		const path = file.path;
@@ -693,20 +681,61 @@ export default class AutoHeadingsPlugin extends Plugin {
 				return;
 			}
 			// 计时器到期时再次校验（其间用户可能改了开关或 frontmatter）。
-			if (!this.shouldAutoTrigger(editor.getValue())) {
-				return;
+			const value = editor.getValue();
+			if (this.shouldAutoTrigger(value)) {
+				const template = this.getTemplateForFile(path);
+				if (template) {
+					if (!this.guardForeignNumbering(path, value)) {
+						this.applyRenumber(editor, template, file);
+					}
+					return; // 常规路径本轮已处理（或命中外来编号守卫暂缓）：不再尝试独立触发。
+				}
 			}
-			const template = this.getTemplateForFile(path);
-			if (!template) {
-				return; // 无可用模板：自动触发静默跳过（不打扰）。
+			// 常规编号路径本轮未处理（无可用模板 / 不够格自动触发编号）：尝试 Backlink 独立触发
+			// （CR-18，见 spec.md §3.12）——只同步链接，从不写入编号前缀。
+			if (this.shouldBacklinkStandaloneTrigger(value)) {
+				this.applyBacklinkStandaloneSync(editor, file);
 			}
-			if (this.guardForeignNumbering(path, editor.getValue())) {
-				return;
-			}
-			this.applyRenumber(editor, template, file);
 		}, this.settings.debounceDelay);
 
 		this.debounceTimers.set(path, timer);
+	}
+
+	/**
+	 * Backlink 独立触发是否应进行（CR-18，见 spec.md §3.12「独立于编号模板的触发」）：**不**要求
+	 * {@link getTemplateForFile} 命中——即便文件无可用模板、或全局自动编号关闭且该文件未 frontmatter
+	 * 强制开启，只要用户开着这条独立开关，仍应检测标题文本改写并同步引用链接。仍尊重两条优先级更高
+	 * 的保护：
+	 * - `updateBacklinks` 总开关——独立触发只是换一条触发入口，不是绕开 Backlink 同步本身的开关；
+	 * - frontmatter 显式 `false`——用户对该文件的明确「别碰」表态，覆盖一切自动路径（与
+	 *   {@link shouldAutoTrigger} 对 `fm:false` 的处理口径一致）。
+	 *
+	 * 清除全库进行中同样压制（`vaultClearInProgress`）：批量写回会触发已打开文件的 `editor-change`，
+	 * 不压制的话每个文件都会被独立触发放大处理一遍。
+	 */
+	private shouldBacklinkStandaloneTrigger(content: string): boolean {
+		if (!this.settings.backlinkStandaloneTrigger || !this.settings.updateBacklinks) {
+			return false;
+		}
+		if (this.vaultClearInProgress) {
+			return false;
+		}
+		return readFileSwitch(content) !== false;
+	}
+
+	/**
+	 * Backlink 独立触发路径的实际执行（CR-18）：**跳过 `renumberContent`**，只复用既有
+	 * `headingSnapshots` 快照基线判断"标题文本是否改写"（{@link foldSelfBacklinks} 内部对照基线，
+	 * 传入的 `oldContent`/`newContent` 相同不影响改名判定），命中即走同文件内链折叠写回；无论本轮
+	 * 是否检出改名，末尾都无条件调用 {@link syncAndSnapshot}——与 {@link applyRenumber} 对称，既
+	 * 播种/刷新快照基线（首次触发时该文件可能还没有基线，见文件打开事件），也同步别的引用文件。
+	 * 本方法从不写入任何编号前缀。
+	 */
+	private applyBacklinkStandaloneSync(editor: Editor, target: LinkTarget): void {
+		const content = editor.getValue();
+		const fold = this.foldSelfBacklinks(target, content, content);
+		this.writeLineDiff(editor, content, fold.content); // 仅同文件内链折叠需要写回，编号本身不变。
+		this.syncAndSnapshot(target, fold.content, fold.renames, fold.selfCount);
 	}
 
 	/**
@@ -736,13 +765,41 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
+	 * 按行比较 `oldContent`/`newContent`，把有变化的行合并进**单一** `editor.transaction` 写回。
+	 * 抽出复用点：清除编号 / 清理外来编号 / 编号写入 / Backlink 独立触发（{@link applyBacklinkStandaloneSync}）
+	 * 四处都要「整文件按行 diff 后单一事务写回」，逻辑完全一致，只是触发源不同——整文件重写永不
+	 * 增删行，故按行索引逐行比较即可定位变化，多处行替换合并为一条撤销记录。
+	 *
+	 * @returns 是否实际发生了写入（内容相同或行级 diff 为空时为 `false`，不发起空事务）。
+	 */
+	private writeLineDiff(editor: Editor, oldContent: string, newContent: string): boolean {
+		if (newContent === oldContent) {
+			return false;
+		}
+		const oldLines = oldContent.split("\n");
+		const newLines = newContent.split("\n");
+		const changes: EditorChange[] = [];
+		for (let i = 0; i < newLines.length; i++) {
+			if (oldLines[i] !== newLines[i]) {
+				changes.push({
+					from: { line: i, ch: 0 },
+					to: { line: i, ch: oldLines[i].length },
+					text: newLines[i],
+				});
+			}
+		}
+		if (changes.length === 0) {
+			return false;
+		}
+		editor.transaction({ changes });
+		return true;
+	}
+
+	/**
 	 * 用给定模板对编辑器执行一次重新编号，并以**单一事务**写回变化的行。
 	 *
 	 * 本方法只做「剥旧前缀 + 按模板写新前缀」的机械动作，**不**再判定开关 / frontmatter / 模板命中
 	 * （这些由调用方按自动 / 手动路径分别判定，见 {@link scheduleRenumber} / {@link runImmediateRenumber}）。
-	 *
-	 * - 仅当内容确有变化时才发起事务，避免无谓的撤销记录与光标抖动。
-	 * - 整文件重写永不增删行，故按行索引逐行比较即可定位变化。
 	 *
 	 * @param target 当前文件（用于 Backlink 同步取反向链接 / basename）；缺省则不同步链接。
 	 * @returns 是否实际写入了改动。
@@ -756,29 +813,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 			strippableSuffixes: suffixes,
 		});
 		// 同文件内链先折进 newContent，随本次事务一并写回（见 foldSelfBacklinks）；即便编号本身
-		// 未变（M14 纯文本改名）也要折，本函数内的行级 diff 会自然识别出这一变化并写回。
+		// 未变（M14 纯文本改名）也要折，写回时的行级 diff 会自然识别出这一变化并写回。
 		const fold = this.foldSelfBacklinks(target, oldContent, newContent);
 		newContent = fold.content;
-		let changed = false;
-		if (newContent !== oldContent) {
-			const oldLines = oldContent.split("\n");
-			const newLines = newContent.split("\n");
-			const changes: EditorChange[] = [];
-			for (let i = 0; i < newLines.length; i++) {
-				if (oldLines[i] !== newLines[i]) {
-					changes.push({
-						from: { line: i, ch: 0 },
-						to: { line: i, ch: oldLines[i].length },
-						text: newLines[i],
-					});
-				}
-			}
-			if (changes.length > 0) {
-				// 单一事务：多处行替换合并为一条撤销记录。
-				editor.transaction({ changes });
-				changed = true;
-			}
-		}
+		const changed = this.writeLineDiff(editor, oldContent, newContent);
 		// Backlink 同步 + 快照刷新：**即便本轮编号没改动任何行也要做**（M14）——用户可能在上个
 		// 同步点之后改了标题正文（编号不变），只有对照快照基线才看得见这类改名。
 		this.syncAndSnapshot(target, newContent, fold.renames, fold.selfCount);

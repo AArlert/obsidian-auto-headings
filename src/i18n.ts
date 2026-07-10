@@ -71,6 +71,9 @@ export interface Messages {
 	// —— Backlink 同步 ——
 	updateBacklinksName: string;
 	updateBacklinksDesc: string;
+	/** Backlink 独立于编号模板的触发（CR-18，见 spec.md §3.12），紧跟 `updateBacklinks` 开关。 */
+	backlinkStandaloneTriggerName: string;
+	backlinkStandaloneTriggerDesc: string;
 
 	// —— 路径规则 ——
 	pathRulesHeading: string;
@@ -267,6 +270,10 @@ const zh: Messages = {
 	updateBacklinksDesc:
 		"标题被编号 / 清除改写后，自动更新其它文件里指向它的内部链接（如 [[文件#标题]]），避免断链；注意会修改引用文件、改动不在其撤销历史内。",
 
+	backlinkStandaloneTriggerName: "无模板/未编号时也同步链接",
+	backlinkStandaloneTriggerDesc:
+		"开启后，即使某笔记未命中任何编号模板、或全局自动编号关闭（且未用 frontmatter 强制开启），只要手动改了标题文字仍会同步链接——不会写入编号（例：把「## 计划」改成「## 项目计划」，[[笔记#计划]] 自动跟着变成 [[笔记#项目计划]]）；需上方「同步内部链接」保持开启才生效，默认关。",
+
 	pathRulesHeading: "路径规则",
 	pathRulesDesc:
 		"把路径映射到模板：文件夹规则以「/」结尾、「/」根规则即全局默认，最具体的规则优先。",
@@ -460,6 +467,10 @@ const en: Messages = {
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc:
 		"When numbering rewrites a heading, automatically update internal links in other files that point to it (e.g. [[file#heading]]) so they don't break; note this modifies the referencing files outside their undo history.",
+
+	backlinkStandaloneTriggerName: "Sync links even without a template/numbering",
+	backlinkStandaloneTriggerDesc:
+		'When on, links stay in sync even if a note matches no numbering template, or global auto-numbering is off (and the file isn\'t forced on via frontmatter) — as long as you edit the heading text; no numbering is ever written (e.g. "## Plan" → "## Project plan" updates [[Note#Plan]] to [[Note#Project plan]]). Requires "Sync internal links (backlinks)" above to stay on; off by default.',
 
 	pathRulesHeading: "Path rules",
 	pathRulesDesc:

@@ -43,6 +43,15 @@ export interface AutoHeadingsSettings {
 	 * 弹一条较长的说明（改了什么、在哪里关），只弹一次。持久化以免每次启动重复打扰。
 	 */
 	backlinksIntroShown: boolean;
+	/**
+	 * Backlink 独立于编号模板的触发（CR-18，见 spec.md §3.12「独立于编号模板的触发」）：开启后，
+	 * 即便文件无可用模板、或全局自动编号关闭且未被 frontmatter 强制开启，只要标题文本对照快照基线
+	 * 发生改写，仍会走 `foldSelfBacklinks`/`syncBacklinks` 同步引用链接（跳过 `renumberContent`，
+	 * 本路径永不写入编号前缀）。**默认关**——这是对既有触发面的扩展，opt-in 更保守；仍受
+	 * `updateBacklinks` 总开关与文件级 frontmatter `false` 约束（详见 main.ts
+	 * `shouldBacklinkStandaloneTrigger`）。
+	 */
+	backlinkStandaloneTrigger: boolean;
 }
 
 /** 防抖延迟的边界与默认值（见 spec.md §3.9）。 */
@@ -55,7 +64,8 @@ export function defaultPathRules(): PathRule[] {
 	return [{ pattern: "/", template: "默认" }];
 }
 
-/** 默认设置：全局自动编号开启、防抖延迟 300 ms、预置 `/`→「默认」根规则、语言自动、Backlink 同步开。 */
+/** 默认设置：全局自动编号开启、防抖延迟 300 ms、预置 `/`→「默认」根规则、语言自动、Backlink 同步开、
+ * Backlink 独立触发关（opt-in）。 */
 export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	autoNumber: true,
 	debounceDelay: DEBOUNCE_DEFAULT,
@@ -63,6 +73,7 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	language: DEFAULT_LANG_SETTING,
 	updateBacklinks: true,
 	backlinksIntroShown: false,
+	backlinkStandaloneTrigger: false,
 };
 
 /** 将防抖延迟夹到合法范围 [50, 2000]，非数字回退到默认值。 */
