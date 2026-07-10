@@ -10,13 +10,25 @@
 > 动手前：先读本文件，再读 [`doc/`](./doc/) 下的规格与日志。
 > 详细规格：[`doc/spec.md`](./doc/spec.md)。
 
-## 0. Agent / SubAgent 调用准则
+## 0. SubAgent 派发（省 token 核心纪律）
 
-积极按任务难度调用 SubAgent 节省 token：
+**能派就派**：跑测试、查定位、机械改动一律派 SubAgent（定义在 [`.claude/agents/`](./.claude/agents/)），
+长输出隔离在子上下文，主上下文只收结构化摘要。
 
--   快速机械工作使用 Haiku（跑测试脚本返回结果、重命名、日志行、正则表达式解释、样板代码）
--   大多数编码使用 Sonnet（功能、测试、已知错误、重构）
--   真正卡住或更改范围很广时使用 Opus（困难调试、跨领域重构、架构决策）
+| 任务类型                             | 派给                      | 期望返回                            |
+| ------------------------------------ | ------------------------- | ----------------------------------- |
+| 跑 test / lint / preflight / fuzz    | `quality-gate`（haiku）   | 每项 PASS/FAIL + 失败要点，≤25 行   |
+| 查 spec / testplan / 归档 / 源码定位 | `repo-scout`（haiku）     | 结论 + file:line + 最小摘录，≤20 行 |
+| 重命名 / 样板 / i18n 对 / 格式修复   | `mech-editor`（haiku）    | 改动文件清单 + 自检结果，≤15 行     |
+| 边界清晰的功能 / 已定位 bug          | `feature-coder`（sonnet） | 摘要 + 触碰文件 + 门槛结果，≤25 行  |
+
+**输出契约（通用）**：结论先行；引用一律 `file:line`；禁止整段粘贴命令输出或文件内容；超长即返工。
+
+**升级路径**：haiku 两次失败 → 换 sonnet（feature-coder 或加细任务描述重派）→ 仍不行主模型接管，
+根因记入当期 log 块。
+
+**主模型保留**：需求澄清、架构决策、testplan 语义设计、log.md / status.jsonl 周期块、bump、
+commit、合并。每周期 log 块记一句「本周期派发 N 次（agent 名 × 次数）」，供回顾各 agent 去留。
 
 ## 1. 仓库结构
 
