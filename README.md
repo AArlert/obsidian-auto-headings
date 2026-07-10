@@ -127,12 +127,33 @@ What this means for you:
 -   **Dataview**: `page.file.headers` reads the raw heading text including this character, so an exact-match query like `WHERE file.headers = "1 My heading"` will silently return nothing. Strip it before comparing — in DataviewJS: `dv.current().file.headers.map(h => h.replace(/⁠/g, ""))` — or match with `.includes()` against just the title fragment instead of the full numbered string.
 -   **Pasting into other apps** (WeChat, Zhihu, Notion, email clients, etc.): most modern renderers should silently ignore the character, but this hasn't been verified across every platform/font combination. If a numbered heading shows a stray blank glyph or extra spacing after you paste it elsewhere, that's this marker — the plugin's cleanup commands only reach files inside your vault, so strip it manually (`.replace(/⁠/g, "")`) in the destination app if it happens.
 -   If you remove numbering by hand and leave stray characters behind, the commands **Clear numbering in current file** / **Clean foreign numbering** will tidy things up.
+-   **Coexistence with similar plugins**: gurjar1/auto-heading-obsidian also tags its numbering with U+2060. Running it alongside this plugin is **not supported** — each would claim the other's prefixes as its own.
+-   **For downstream developers**: the marker's exact byte format, stability guarantees, and interop snippets live in the [marker character contract](doc/marker-contract.md).
+
+## Exporting & sharing
+
+The numbering is real text, so it travels with your documents. Where each egress path stands:
+
+-   **Copying into other apps**: see the clipboard note above. A "sanitize invisible characters on copy" switch is on the roadmap (trust pack); once it lands, this risk goes from "known" to "eliminated".
+-   **Pandoc**: the numbers are already baked into the text, so don't let Pandoc number them again — exporting with `--number-sections` yields double numbering like `1 1 Introduction`. Either run the clear command before exporting, or drop the ready-made Lua filter from the [marker character contract](doc/marker-contract.md) into your pipeline to strip whole prefixes in one pass.
+-   **Obsidian's built-in "Export to PDF" / Obsidian Publish**: how the invisible marker behaves on these paths (font rendering, anchor URLs) is being verified item by item; results will be backfilled here.
+-   Want numbers visible only inside Obsidian, with zero file changes? A **virtual numbering mode** (render-layer numbering, never written to disk) is a roadmap candidate.
 
 ## Install
 
 **From the community plugin store**: already listed and searchable — Settings → Community plugins → Browse → search "Auto Headings", then install and enable directly. It has passed the store's automated checks; Obsidian's manual/editorial review is still pending (this doesn't affect installing or using the plugin).
 
 **Manually**: download `main.js`, `manifest.json`, `styles.css` from the [latest release](../../releases/latest) into `<vault>/.obsidian/plugins/auto-headings/`, then reload Obsidian and enable the plugin.
+
+## Migrating from Number Headings
+
+Number Headings has been unmaintained for roughly 2.5 years. Migrating takes three steps:
+
+1. Disable Number Headings;
+2. Enable this plugin and pick a template (the out-of-the-box default `1.1.1` is close to its style; path rules can assign different templates per folder);
+3. Run **Clean foreign numbering** on your old files — it strips only numbering _not_ written by this plugin (Number Headings' prefixes, hand-written ones, and imported documents all qualify), after which normal editing renumbers everything with your template.
+
+Its two longest-standing open requests — excluding folders from numbering, and skipping headings inside comment blocks — are both on this plugin's roadmap.
 
 ## Commands
 
@@ -148,6 +169,16 @@ What this means for you:
 -   **Backlink sync limits**: to avoid ambiguous edits, sync skips duplicate heading names (same title in multiple places), block references (`^id`), and multi-level anchors (`#A#B`). Turning the sync on doesn't retroactively fix links that were already broken before it was enabled. It can also be turned off in **Settings → General**.
 -   **Undo**: single-file rewrites are one editor transaction — a single `Ctrl/Cmd+Z` undoes them. Backlink updates to _other_ files are not part of that transaction. The vault-wide clear is **not** in the undo history; back up first.
 -   **Mobile**: supported (`isDesktopOnly: false`).
+
+## Uninstalling cleanly
+
+The only things this plugin ever writes into your files are numbering prefixes and two invisible marker characters — all fully removable:
+
+1. Settings → sensitive operations → **Clear numbering in entire vault** (it first switches global auto-numbering off, so nothing gets renumbered mid-clear);
+2. Disable / uninstall the plugin;
+3. (Optional) remove `obsidian-auto-headings` keys from frontmatter — they're inert without the plugin.
+
+Because the marker lives in the file bytes themselves, even years after uninstalling you can reinstall the plugin and run the vault-wide clear to strip its old numbering precisely; for external batch cleanup without reinstalling (a one-liner), see the [marker character contract](doc/marker-contract.md).
 
 ## License
 
