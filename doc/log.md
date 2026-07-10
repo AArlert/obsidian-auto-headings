@@ -40,6 +40,35 @@
 
 ---
 
+## 2026-07-10 1.0.8 SubAgent 派发体系落地 + 清理 sync-plugin-repo 迁移遗留（claude/subagent-harness-dispatch）
+
+**做了什么**（纯 harness/文档周期，无插件行为变化，按上架后策略不 bump）：
+
+1. **CLAUDE.md §0 从三行准则改写为可执行派发协议**：派发表（任务类型 → agent → 返回上限）、
+   输出契约（结论先行 / file:line / 禁整段粘贴 / 超长返工）、升级路径（haiku 两败 → sonnet → 主模型）、
+   主模型保留事项清单。
+2. **新建 `.claude/agents/` 四个仓库级定义**（随 git 入库）：`quality-gate`（haiku，跑质量门槛压缩返回，
+   分验证档/收尾档）、`repo-scout`（haiku，内置 §3 定位菜谱的检索员）、`mech-editor`（haiku，机械改动，
+   带禁区清单 + 歧义即停）、`feature-coder`（sonnet，边界清晰的编码，testplan-first，收尾归主模型）。
+3. **删除已失效的 `scripts/sync-plugin-repo.mjs`**（引用不存在的 `publish/` 目录跑必崩，职能已被
+   `release.yml` tag 发布工作流取代）+ 删 `package.json` 的 `publish:repo` + 修缮本文件目录树块
+   （删 publish/ 与 sync-plugin-repo 两行、补 `.claude/agents/` 行）。此项由 mech-editor 试点执行。
+
+**没做什么**：feature-coder 定位存疑（价值是上下文隔离而非省钱）——按约定观察 2~3 个周期，
+使用率为零则删；新 agent 定义**本会话不生效**（注册表会话启动时固定），`/agents` 加载确认留待下个新会话。
+
+**验证方式（A/B 实测）**：全绿时 `npm test` 完整输出 89 行 vs quality-gate 契约 ≤25 行（失败时全量
+输出会膨胀数百行，收益更大）；repo-scout 试点查 spec §3.11 走了 grep+sed 菜谱而非整读 178KB 文件，
+~2.8 万 token 检索开销隔离在子上下文；mech-editor 试点三处改动 diff 抽查干净、`docs.mjs --check` + lint 绿。
+quality-gate 试点跑收尾档 preflight：4 项通过，唯一 test 失败为既有 ICU 环境差异（`whitelist.test.ts`
+filterSortWhitelist，前两周期已登记非回归）；release/ 无变化，佐证不 bump 正确。
+
+**本周期派发 3 次**（mech-editor ×1、repo-scout ×1、quality-gate ×1 收尾档 preflight）。
+
+**下一步**：不变，M11 信任包（见 status 首行）；顺带在下个编码周期实测 4 个 agent 的会话内加载与派发表执行率。
+
+---
+
 ## 2026-07-10 1.0.8 文档体系重整：grill 收编 spec 附录 A + 叙事倒转 + M0–M7 压缩 + 移除跨项目沉淀（claude/doc-consolidation-grill）
 
 **做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
@@ -121,52 +150,6 @@ ICU/locale 差异导致，非回归）；`npm run lint` 全绿；`npm run format
 
 ---
 
-## 2026-07-10 1.0.7 拷问式方向审查落盘：grill.md + 契约 + Roadmap 重排 M11/M12 + 实机环境规划（claude/plugin-review-infra-swtxdk）
-
-**做了什么**：用户发起对插件的拷问式全方位审查（定位/生态适配/导出/Milestone/infra 化路径），全部认可
-审查结论并全权委托落盘，本轮**纯文档大修**，不涉及 `src/`、不 bump（上架后策略）：
-
-1. **新增 `doc/grill.md`**（长期保留的方向审查记录，单一事实源纪律的用户指定例外——落点放结论、
-   本文件放推理与否决理由）：七方面拷问（定位倒转/WJ 义务/触发面盲区/Backlink 信任敞口/导出/
-   Milestone 倒挂/infra 差距）+ 本轮专题 **§8「WJ 能否被 CM6 原子区域替代」**。§8 结论：原子区域
-   答不了跨会话/设备的「身份」问题（纯模式匹配、位置 sidecar、会话内追踪三条去 WJ 路线逐一枪毙），
-   **不能替代、应当叠加**——防护栈三层变四层（原子区域→方案A→双哨兵→清除命令）；真正零 WJ 的
-   诚实路径是「虚拟编号模式」（opt-in 渲染层第二哲学，进 M9 候选）。
-2. **新增 `doc/marker-contract.md`**（英文，面向下游开发者/工具作者）：WJ 双哨兵字节格式、四条
-   稳定性承诺（格式/键名/永远可退出/互操作配方）、剥 WJ 与剥整前缀代码片段、Pandoc Lua filter、
-   与 gurjar1 插件共存不受支持声明。
-3. **`spec.md` 系列修订**：§2.2 虚拟编号翻案候选注记；§2.3「前缀可手改」修订预告；§2.5 CM 行升格
-   说明；§2.6 风险表 4→8 行（Canvas 引用方靠巧合、Publish 锚点、外部写入陈旧快照、WJ 无命名空间，
-   均已代码核对或标注待实测）+ 拷问追加注记；新增 §2.7 契约中文摘要；§3.12 CR-18 升格注记；
-   **§5 Roadmap 重排**——执行顺序总览表（M11→M12→M8a→M8b→M10，编号不再暗示顺序）+ 新增
-   **Milestone 11 信任包**（审阅模式/H8+清库撤销/复制净化/导出验证矩阵/大库性能/CM6 原子区域/
-   Canvas 拍板/陈旧快照评估/E8 拍板）与 **Milestone 12 独立价值包**（CR-18/批量重编号/伪模板/
-   注释块跳过/断链修复/description 重排/公开改名事件 API/Number Headings 迁移指南），M9 清池九项。
-4. **新增 `spec.md` §7.1 实机验证环境规划**（用户决定：后续在装有 Obsidian 实体的 Ubuntu 环境用
-   Claude Code 开发）：专用测试 vault 约定、CDP 自动化驱动（`--remote-debugging-port` + Playwright
-   attach 执行 `app.commands`）→ URI+xdotool → 纯手动三级降格、O 组/导出矩阵/性能/README 截图的
-   执行清单、`tests/machine_tests/` 目录纪律。
-5. **`testplan.md` 新增 O 组**（生态与外部写入，O1–O7 全 🔲）：Canvas/外部改写陈旧快照/WJ 插件
-   共存/剪贴板净化/导出矩阵/原子区域交互面/公开 API 事件。
-6. **README 双语三新节**：「导出与外发」（Pandoc 双重编号预警 + Lua filter 指引 + PDF/Publish 待实测
-   如实标注）、「从 Number Headings 迁移」（三步接管，吃停更竞品存量）、「如何干净地离开」（卸载
-   三步 + 字节级可退出性承诺）；「工作原理」补共存互斥与契约链接两条。
-7. CLAUDE.md §3.1 表与本文件目录结构块登记两个新文档。
-
-**没做的**：不涉及任何 `src/` 改动——M11/M12 全部是规划，一行代码未写；O 组场景全部 🔲 未执行
-（等实机环境）；manifest description 重排刻意不动（属产物，须随下一个行为版本 bump）；doc/
-harness-workflow* 两个知识沉淀文件核实为用户有意保留，未动。
-
-**验证方式**：`node scripts/docs.mjs --check` 通过；`npx prettier --check README.md README.zh.md`
-通过；`npm test` / `npm run lint` 通过（未动源码，例行核验）。
-
-**下一步**：用户将在装有 Obsidian 实体的 Ubuntu 环境用 Claude Code 继续开发——接手 agent 第一步按
-spec §7.1 搭实机环境（测试 vault + CDP 驱动），然后按新执行顺序开工 **M11 信任包**（建议首件：
-导出验证矩阵 O5 + 剪贴板 O4，纯验证零风险，实机环境一到位即可跑；随后审阅模式/H8 动代码）；
-M12 里《从 Number Headings 迁移》长文与论坛发布不依赖实机，可随时做。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -206,12 +189,11 @@ obsidian-auto-headings/
 ├── README.md             ← 面向读者的简介（核心功能 + Milestone 概览，入口文档）
 ├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + marker-contract 下游契约，见 CLAUDE.md §3.1；grill 方向审查已收编为 spec 附录 A）
 ├── release/              ← 可分发插件文件（main.js/manifest/styles/README；zip 本地生成不入库）★每周期必更新
-├── publish/              ← 对外发布仓库的专属模板（双语 README、精简 package.json；npm run publish:repo 同步）
 ├── scripts/
 │   ├── sync-release.mjs    把构建产物同步到 release/（被 npm run release 调用）
-│   ├── sync-plugin-repo.mjs 同步到独立的对外发布仓库（npm run publish:repo，开发/发布分离）
 │   ├── bump.mjs            一键版本号同步（npm run bump）
 │   └── docs.mjs            文档维护：归档/滚动/摘要/守卫/交接（npm run docs [-- --handover|--check]）
+├── .claude/agents/       ← SubAgent 定义（quality-gate / repo-scout / mech-editor / feature-coder）
 ├── manifest.json         ← 插件清单（Obsidian 约定须在插件根目录）
 ├── versions.json         ← 版本 → 最低 Obsidian 版本映射
 ├── styles.css            ← 面板样式源（构建时随插件加载，并复制入 release/）

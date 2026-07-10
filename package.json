@@ -8,7 +8,6 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"release": "npm run build && node scripts/sync-release.mjs",
-		"publish:repo": "node scripts/sync-plugin-repo.mjs",
 		"bump": "node scripts/bump.mjs",
 		"docs": "node scripts/docs.mjs",
 		"preflight": "npm run docs && npm run release && npm test && npm run lint && npm run format:check",

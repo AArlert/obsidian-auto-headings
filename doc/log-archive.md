@@ -5,6 +5,52 @@
 
 ---
 
+## 2026-07-10 1.0.7 拷问式方向审查落盘：grill.md + 契约 + Roadmap 重排 M11/M12 + 实机环境规划（claude/plugin-review-infra-swtxdk）
+
+**做了什么**：用户发起对插件的拷问式全方位审查（定位/生态适配/导出/Milestone/infra 化路径），全部认可
+审查结论并全权委托落盘，本轮**纯文档大修**，不涉及 `src/`、不 bump（上架后策略）：
+
+1. **新增 `doc/grill.md`**（长期保留的方向审查记录，单一事实源纪律的用户指定例外——落点放结论、
+   本文件放推理与否决理由）：七方面拷问（定位倒转/WJ 义务/触发面盲区/Backlink 信任敞口/导出/
+   Milestone 倒挂/infra 差距）+ 本轮专题 **§8「WJ 能否被 CM6 原子区域替代」**。§8 结论：原子区域
+   答不了跨会话/设备的「身份」问题（纯模式匹配、位置 sidecar、会话内追踪三条去 WJ 路线逐一枪毙），
+   **不能替代、应当叠加**——防护栈三层变四层（原子区域→方案A→双哨兵→清除命令）；真正零 WJ 的
+   诚实路径是「虚拟编号模式」（opt-in 渲染层第二哲学，进 M9 候选）。
+2. **新增 `doc/marker-contract.md`**（英文，面向下游开发者/工具作者）：WJ 双哨兵字节格式、四条
+   稳定性承诺（格式/键名/永远可退出/互操作配方）、剥 WJ 与剥整前缀代码片段、Pandoc Lua filter、
+   与 gurjar1 插件共存不受支持声明。
+3. **`spec.md` 系列修订**：§2.2 虚拟编号翻案候选注记；§2.3「前缀可手改」修订预告；§2.5 CM 行升格
+   说明；§2.6 风险表 4→8 行（Canvas 引用方靠巧合、Publish 锚点、外部写入陈旧快照、WJ 无命名空间，
+   均已代码核对或标注待实测）+ 拷问追加注记；新增 §2.7 契约中文摘要；§3.12 CR-18 升格注记；
+   **§5 Roadmap 重排**——执行顺序总览表（M11→M12→M8a→M8b→M10，编号不再暗示顺序）+ 新增
+   **Milestone 11 信任包**（审阅模式/H8+清库撤销/复制净化/导出验证矩阵/大库性能/CM6 原子区域/
+   Canvas 拍板/陈旧快照评估/E8 拍板）与 **Milestone 12 独立价值包**（CR-18/批量重编号/伪模板/
+   注释块跳过/断链修复/description 重排/公开改名事件 API/Number Headings 迁移指南），M9 清池九项。
+4. **新增 `spec.md` §7.1 实机验证环境规划**（用户决定：后续在装有 Obsidian 实体的 Ubuntu 环境用
+   Claude Code 开发）：专用测试 vault 约定、CDP 自动化驱动（`--remote-debugging-port` + Playwright
+   attach 执行 `app.commands`）→ URI+xdotool → 纯手动三级降格、O 组/导出矩阵/性能/README 截图的
+   执行清单、`tests/machine_tests/` 目录纪律。
+5. **`testplan.md` 新增 O 组**（生态与外部写入，O1–O7 全 🔲）：Canvas/外部改写陈旧快照/WJ 插件
+   共存/剪贴板净化/导出矩阵/原子区域交互面/公开 API 事件。
+6. **README 双语三新节**：「导出与外发」（Pandoc 双重编号预警 + Lua filter 指引 + PDF/Publish 待实测
+   如实标注）、「从 Number Headings 迁移」（三步接管，吃停更竞品存量）、「如何干净地离开」（卸载
+   三步 + 字节级可退出性承诺）；「工作原理」补共存互斥与契约链接两条。
+7. CLAUDE.md §3.1 表与本文件目录结构块登记两个新文档。
+
+**没做的**：不涉及任何 `src/` 改动——M11/M12 全部是规划，一行代码未写；O 组场景全部 🔲 未执行
+（等实机环境）；manifest description 重排刻意不动（属产物，须随下一个行为版本 bump）；doc/
+harness-workflow* 两个知识沉淀文件核实为用户有意保留，未动。
+
+**验证方式**：`node scripts/docs.mjs --check` 通过；`npx prettier --check README.md README.zh.md`
+通过；`npm test` / `npm run lint` 通过（未动源码，例行核验）。
+
+**下一步**：用户将在装有 Obsidian 实体的 Ubuntu 环境用 Claude Code 继续开发——接手 agent 第一步按
+spec §7.1 搭实机环境（测试 vault + CDP 驱动），然后按新执行顺序开工 **M11 信任包**（建议首件：
+导出验证矩阵 O5 + 剪贴板 O4，纯验证零风险，实机环境一到位即可跑；随后审阅模式/H8 动代码）；
+M12 里《从 Number Headings 迁移》长文与论坛发布不依赖实机，可随时做。
+
+---
+
 ## 2026-07-10 1.0.7 README 补披露 WJ 生态风险 + 修正商店安装现状（claude/plugin-eval-promotion-3sy3v4）
 
 **做了什么**：用户带着实际反馈来源两处修正，本轮**纯文档修订**（README 双语 + `spec.md` §2.6/M7 核对状态），
