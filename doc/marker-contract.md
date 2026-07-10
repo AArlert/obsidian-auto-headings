@@ -8,7 +8,7 @@
 > This document is a **stability contract**: the byte-level format described here will not
 > change without a major-version migration path. It is written in English because its audience
 > is downstream tooling, not this repository's (Chinese-language) internal docs. The Chinese
-> summary lives in `doc/spec.md` §2.7; the design rationale lives in `doc/grill.md` §8.
+> summary lives in `doc/spec.md` §2.7; the design rationale lives in `doc/spec.md` Appendix A §A.8.
 
 ## 1. What the plugin writes
 

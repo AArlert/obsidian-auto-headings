@@ -69,7 +69,6 @@
 | `doc/status.jsonl`         | 状态索引（首行总览 + 最新 N 条周期概括，倒序）                  | 每周期更新，收尾脚本滚动        |
 | `doc/status-archive.jsonl` | 由 `status.jsonl` 滚动出去的历史概括行（倒序）                  | 归档脚本自动维护，**平时不读**  |
 | `doc/testplan.md`          | 场景真值表：操作序列 + 预期结果 + 状态（✅/❌/⚠️/🔲）+ 已知 bug | 加功能 / 修 bug 时先改这里      |
-| `doc/grill.md`             | 拷问式方向审查记录（推理过程与否决理由，长期保留）              | 大方向重审时追加                |
 | `doc/marker-contract.md`   | 标记字符契约（英文，面向下游的字节格式与稳定性承诺）            | 格式/承诺变化时（须主版本迁移） |
 
 `testplan.md` 与 `tests/dev_tests/`（自动化单测）、`tests/user_tests/`（实测样例）一一对应。
