@@ -5,6 +5,51 @@
 
 ---
 
+## 2026-07-10 1.0.8 Backlink 同步独立于编号模板触发（CR-18，M12 首项，claude/m9-backlink-standalone-trigger）
+
+**做了什么**：实现 spec.md §3.12「独立于编号模板的触发」既定设计（CR-18，M12 首项，规格早已定案，
+本轮只落地代码），修复「当前 `applyRenumber` 唯一入口只被 `scheduleRenumber`/`runImmediateRenumber`
+调用、且都要求 `getTemplateForFile` 命中模板」导致的盲区——无模板文件 / 全局自动编号关闭场景下，
+标题改名不触发 Backlink 同步：
+
+1. **新增独立开关 `backlinkStandaloneTrigger`**（`settings/model.ts`，默认**关**，opt-in——这是对既有
+   触发面的扩展，比默认开的 `updateBacklinks` 更保守）：`loadSettings` 补迁移回退（缺失字段→false）。
+2. **`main.ts` 新增两个方法**（不新增编号逻辑，纯复用既有 `headingSnapshots`/`foldSelfBacklinks`/
+   `syncAndSnapshot`）：`shouldBacklinkStandaloneTrigger`（门控：独立开关 + `updateBacklinks` 总开关 +
+   非 `vaultClearInProgress` + `frontmatter !== false`——**显式 `fm:false` 优先于独立触发**，覆盖一切
+   自动路径，与 `shouldAutoTrigger` 对 `fm:false` 的处理口径一致）与 `applyBacklinkStandaloneSync`
+   （跳过 `renumberContent`，只走 `foldSelfBacklinks` + 无条件 `syncAndSnapshot`——与 `applyRenumber`
+   对称，即便本轮无改名也要刷新/播种快照基线，否则首次触发因无基线永远检测不到改名）。
+   `scheduleRenumber` 改为「常规编号路径本轮未处理（无模板命中 / 不够格自动触发编号）时才尝试独立
+   触发」，避免同一次改动被处理两遍（M25 回归覆盖）。
+3. **顺手抽出 `writeLineDiff` 辅助方法**：`runClearNumbering`/`runClearForeignNumbering`/
+   `applyRenumber`/新增的 `applyBacklinkStandaloneSync` 四处原先重复的「整文件按行 diff 后单一事务
+   写回」逻辑合一，减少重复而非新增第四份拷贝。
+4. **GUI**：`GeneralTab.ts` 新增开关，紧跟既有「同步内部链接（Backlink）」开关（面板位置符合规格
+   要求）；`i18n.ts` 补中英文案，描述里用具体改名示例（`## 计划`→`## 项目计划`）说明生效条件，遵循
+   §3.13「预览优先」原则（无法用纯渲染示例表达的复合生效条件保留一句话说明，属该原则明确的例外）。
+5. **`testplan.md` M 类新增 M19–M26** 共 8 条场景（默认关无回归 / 无模板同步 / 全局关且非
+   `fm:true` 仍同步 / `fm:false` 优先 / 依赖总开关 / 清库压制 / 不重复同步 / GUI 位置），全部落地为
+   `main.test.ts` 新 describe 块（7 个自动化用例）+ GUI 一条标注需 Obsidian 手验 DOM。
+
+**没做的**：`runImmediateRenumber`（手动「立即重新编号」命令）与 `renumberOnOpen`（打开文件自动重排）
+未接入独立触发——前者是显式编号命令，无模板时弹 Notice 提示用户是既有预期行为；后者只在活动视图打开
+时触发，标题改名场景本就靠实时编辑（`scheduleRenumber`）覆盖，范围收在 CR-18 描述的「标题文本被
+改写」这一真正的盲区（编辑触发），未扩大到这两条路径——如后续需要可另开场景单独评估。M12 其余六项
+（多文件批量重编号 / 不编号伪模板 / 注释块跳过 / 断链修复命令 / description 重排 / 公开改名事件 API /
+迁移指南）未动。
+
+**验证方式**：`npm test`（359/360 通过，唯一失败 `whitelist.test.ts` 的
+`filterSortWhitelist`localeCompare 排序断言与本轮改动无关——`git stash` 到改动前同样失败，环境
+ICU/locale 差异导致，非回归）；`npm run lint` 全绿；`npm run format:check` 全绿；`npm run test:fuzz`
+（5000×80）全绿；`npm run bump` 1.0.7→1.0.8。
+
+**下一步**：M12 其余六项已有明确定案或待细化设计，可按 spec.md §5 Milestone 12 顺序继续；`main.ts`
+已增长到 ~970 行，若后续再扩几个触发路径建议评估按职责拆分（如把 `schedule*`/`apply*`/`should*`
+一类触发判定函数拆到独立模块），暂未到非拆不可的程度。
+
+---
+
 ## 2026-07-10 1.0.7 拷问式方向审查落盘：grill.md + 契约 + Roadmap 重排 M11/M12 + 实机环境规划（claude/plugin-review-infra-swtxdk）
 
 **做了什么**：用户发起对插件的拷问式全方位审查（定位/生态适配/导出/Milestone/infra 化路径），全部认可

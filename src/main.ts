@@ -55,11 +55,11 @@ import { TemplateStore } from "./templates/TemplateStore";
  * - **自动触发**：`autoNumber` 开 或 `fm:true`，且 `fm≠false`（见 {@link shouldAutoTrigger}）。
  * - **手动命令**：绕过全局开关与 `fm:false`，仅受「能否命中模板」约束。
  *
- * M12（CR-18，见 spec.md §3.12「独立于编号模板的触发」）：Backlink 同步新增一条**不依赖**
- * {@link getTemplateForFile} 命中的独立触发路径（{@link shouldBacklinkStandaloneTrigger} /
- * {@link applyBacklinkStandaloneSync}），由独立开关 `backlinkStandaloneTrigger` 控制（默认关）——
- * 常规编号路径本轮未处理（无模板 / 不够格自动触发）时，只要标题文本对照快照基线改写，仍同步引用
- * 链接，该路径从不写入编号前缀。
+ * M12（CR-18，见 spec.md §3.12「独立于编号模板的触发」）：Backlink 同步有一条**不依赖**
+ * {@link getTemplateForFile} 命中的触发路径（{@link shouldBacklinkStandaloneTrigger} /
+ * {@link applyBacklinkStandaloneSync}），由 `updateBacklinks` 总开关统一控制（1.0.9 起与原「独立
+ * 触发」开关合一，开启即全局生效）——常规编号路径本轮未处理（无模板 / 不够格自动触发）时，只要
+ * 标题文本对照快照基线改写，仍同步引用链接，该路径从不写入编号前缀。
  */
 export default class AutoHeadingsPlugin extends Plugin {
 	settings: AutoHeadingsSettings = { ...DEFAULT_SETTINGS, pathRules: defaultPathRules() };
@@ -637,11 +637,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (typeof merged.backlinksIntroShown !== "boolean") {
 			merged.backlinksIntroShown = false;
 		}
-		// backlinkStandaloneTrigger 缺失 / 非布尔（含旧版本无此字段）时回退到默认 **false**（CR-18，
-		// 新扩展的触发面，opt-in 更保守；见 spec.md §3.12「独立于编号模板的触发」）。
-		if (typeof merged.backlinkStandaloneTrigger !== "boolean") {
-			merged.backlinkStandaloneTrigger = false;
-		}
+		// 迁移：历史独立开关 `backlinkStandaloneTrigger`（0.7.8–1.0.8，CR-18）已并入 `updateBacklinks`
+		// （1.0.9 起单开关全局生效，与是否命中编号模板无关）；旧字段不再读取，随迁移一并清理。
+		delete merged.backlinkStandaloneTrigger;
 		this.settings = merged as unknown as AutoHeadingsSettings;
 		this.settings.debounceDelay = clampDebounceDelay(this.settings.debounceDelay);
 	}
@@ -704,17 +702,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/**
 	 * Backlink 独立触发是否应进行（CR-18，见 spec.md §3.12「独立于编号模板的触发」）：**不**要求
 	 * {@link getTemplateForFile} 命中——即便文件无可用模板、或全局自动编号关闭且该文件未 frontmatter
-	 * 强制开启，只要用户开着这条独立开关，仍应检测标题文本改写并同步引用链接。仍尊重两条优先级更高
-	 * 的保护：
-	 * - `updateBacklinks` 总开关——独立触发只是换一条触发入口，不是绕开 Backlink 同步本身的开关；
-	 * - frontmatter 显式 `false`——用户对该文件的明确「别碰」表态，覆盖一切自动路径（与
-	 *   {@link shouldAutoTrigger} 对 `fm:false` 的处理口径一致）。
+	 * 强制开启，只要 `updateBacklinks` 开着，仍应检测标题文本改写并同步引用链接（1.0.9 起单开关
+	 * 全局生效，不再需要额外的独立触发 opt-in）。仍尊重一条优先级更高的保护：frontmatter 显式
+	 * `false`——用户对该文件的明确「别碰」表态，覆盖一切自动路径（与 {@link shouldAutoTrigger} 对
+	 * `fm:false` 的处理口径一致）。
 	 *
 	 * 清除全库进行中同样压制（`vaultClearInProgress`）：批量写回会触发已打开文件的 `editor-change`，
 	 * 不压制的话每个文件都会被独立触发放大处理一遍。
 	 */
 	private shouldBacklinkStandaloneTrigger(content: string): boolean {
-		if (!this.settings.backlinkStandaloneTrigger || !this.settings.updateBacklinks) {
+		if (!this.settings.updateBacklinks) {
 			return false;
 		}
 		if (this.vaultClearInProgress) {
