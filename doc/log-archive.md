@@ -5,6 +5,42 @@
 
 ---
 
+## 2026-07-10 1.0.8 文档体系重整：grill 收编 spec 附录 A + 叙事倒转 + M0–M7 压缩 + 移除跨项目沉淀（claude/doc-consolidation-grill）
+
+**做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
+
+1. **删除跨项目知识沉淀**：`doc/harness-workflow-ic-verification.md` 与 `doc/workflow.html`（用户
+   指示，内容与插件规格无关）；log.md 目录结构约定块同步。
+2. **grill.md 收编为 spec 附录 A**（用户指示，替代此前「长期独立保留」决定）：全文标题降级
+   （§N → §A.N）、内部自指补 `A.` 前缀、对 spec 的指称改「本文」；spec 内 11 处
+   `[grill.md](./grill.md)` 引用改附录锚点；CLAUDE.md §3.1 表删行；testplan §O 来源注与
+   marker-contract.md 定位注改指附录；原文件删除。
+3. **spec 叙事倒转落到门面**：顶部简介与 §1 背景改为「① 改标题不断链（第一价值，全社区最可靠的
+   改名检测引擎）② 最强编号（第二层价值，burn-in 哲学）」两层结构，链接附录 A §A.1 论证；如实
+   标注 CR-18 开关默认关、「装上即不断链」零配置目标待稳定后翻默认兑现。
+4. **Roadmap M0–M7 压缩**：八个已完成里程碑 93 行 checklist 压为 16 行单表（细节指向本文各功能节
+   与 log-archive，不留双份），Community Hub 提交机制保留一行；执行顺序表状态更新为
+   「已通过官方审核，商店正式上架」（用户 2026-07-10 确认）。
+5. **CR-18 全文状态回填**：§2.1 需求表、§3.12 设计段、M12 首项三处标注 1.0.8 落地（开关
+   `backlinkStandaloneTrigger` 默认关、常规路径已处理本轮时不重复跑、testplan M19–M26）。
+6. **锚点全量修复**：修 14 处含 `.` 的既有死锚点（GitHub slug 删点号：`m71.0`→`m710`、
+   `0.7.20`→`0720`、`burn-in-m10`→`burn-inm10`）；目录补 §2.4–2.7 与附录 A 条目；§3.12 一处
+   已失效的「M8 backlog」死链改指 M12。
+
+**没做什么**：README 未按叙事倒转改版（与截图/GIF 一起做，需用户桌面环境）；manifest description
+卖点重排仍按 M12 计划随下一个行为版本 bump；marker-contract.md 维持独立英文文件（用户拍板：下游
+可见性本身是信任叙事的一部分）。
+
+**验证方式**：自写脚本校验 spec 全文内部锚点 0 死链（58 个标题）；`node scripts/docs.mjs --check`
+通过；`npx prettier --check` 改动的五个文档全绿；`npm run preflight` 全绿（test 359/360，唯一失败
+为既有 ICU 环境差异，与本轮无关，见上一周期记录）。
+
+**下一步**：M11 信任包为当前重点（用户指示，事关插件信任度）——八项中建议先动纯验证/拍板项
+（导出验证矩阵、Canvas O1 拍板、E8 拍板），代码项（审阅模式、H8+清库撤销、复制净化、CM6 原子
+区域）按 spec §5 顺序排期；README 改版 + GIF 待用户桌面环境。
+
+---
+
 ## 2026-07-10 1.0.8 Backlink 同步独立于编号模板触发（CR-18，M12 首项，claude/m9-backlink-standalone-trigger）
 
 **做了什么**：实现 spec.md §3.12「独立于编号模板的触发」既定设计（CR-18，M12 首项，规格早已定案，
