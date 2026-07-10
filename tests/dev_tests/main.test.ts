@@ -54,6 +54,7 @@ interface PluginInternals {
 		language: "auto" | "zh" | "en";
 		updateBacklinks: boolean;
 		backlinksIntroShown?: boolean;
+		backlinkStandaloneTrigger: boolean;
 	};
 	templateStore: {
 		getDefault(): Template;
@@ -62,6 +63,8 @@ interface PluginInternals {
 		has(name: string): boolean;
 	};
 	getTemplateForFile(path: string | undefined | null): Template | null;
+	/** 「清除全库编号」进行中标志（见 spec.md §3.10），M24 直接置位模拟并发场景，绕开真实异步时序。 */
+	vaultClearInProgress: boolean;
 	scheduleRenumber(editor: unknown, info: unknown): void;
 	runImmediateRenumber(editor: unknown, ctx: unknown): void;
 	strippableAffixes(): { prefixes: string[]; suffixes: string[] };
@@ -114,6 +117,8 @@ function makePlugin(
 		allTemplates?: Template[];
 		pathRules?: PathRule[];
 		updateBacklinks?: boolean;
+		/** Backlink 独立于编号模板的触发（CR-18），默认关，与生产环境默认一致。 */
+		backlinkStandaloneTrigger?: boolean;
 		/** 假「其它文件」库：path → 内容，供 Backlink 同步反查 / 写回。 */
 		vaultFiles?: Record<string, string>;
 		/**
@@ -184,6 +189,7 @@ function makePlugin(
 		// 锁定中文，使 Notice 断言（本测试用中文文案）稳定，不受运行环境 Obsidian 语言探测影响。
 		language: "zh",
 		updateBacklinks: opts.updateBacklinks ?? false,
+		backlinkStandaloneTrigger: opts.backlinkStandaloneTrigger ?? false,
 	};
 	p.templateStore = {
 		getDefault: () => tplBox.current,
@@ -904,6 +910,153 @@ describe("Backlink 曝光度（0.7.11：默认开 + 首次说明 Notice，见 sp
 		await flushPromises();
 		expect(Notice.messages).toContain("已更新 1 处内部链接");
 		expect(Notice.messages.filter((m) => m.includes("本提示只出现一次")).length).toBe(0);
+	});
+});
+
+describe("Backlink 独立于编号模板的触发（CR-18，M19–M25，见 spec.md §3.12）", () => {
+	it("M19：独立触发关（默认）+ 无模板文件标题改名 → 不触发编号也不同步链接", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			backlinkStandaloneTrigger: false,
+			pathRules: [], // 无任何路径规则命中 → getTemplateForFile 恒返回 null。
+			vaultFiles: { "b.md": "见 [[a#甲]]。" },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md")); // 播种快照基线（无模板不影响快照维护）。
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+
+		ed.setValue("## 甲改");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(ed.txnCount).toBe(0); // 未写入任何编号。
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲]]。"); // 链接未同步。
+	});
+
+	it("M20：独立触发开 + 无模板文件标题改名 → 同步链接，且从不写入编号前缀", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			backlinkStandaloneTrigger: true,
+			pathRules: [], // 无模板可用。
+			vaultFiles: { "b.md": "见 [[a#甲]]。" },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md")); // 播种快照基线。
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+
+		ed.setValue("## 甲改");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(ed.getValue()).toBe("## 甲改"); // 编辑器内容不含任何编号前缀 / WJ。
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲改]]。");
+		expect(Notice.messages).toContain("已更新 1 处内部链接");
+	});
+
+	it("M21：独立触发开 + 全局自动编号关且未 fm:true（文件命中模板） → 不写编号，链接仍同步", async () => {
+		const { p, vaultFiles } = makePlugin({
+			autoNumber: false, // 全局自动编号关，文件也未 fm:true 强制。
+			updateBacklinks: true,
+			backlinkStandaloneTrigger: true,
+			vaultFiles: { "b.md": "见 [[a#甲]]。" },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md")); // 播种快照基线。
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+
+		ed.setValue("## 甲改");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(ed.getValue()).toBe("## 甲改"); // 全局开关关：不写编号。
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲改]]。"); // 独立路径仍同步链接。
+	});
+
+	it("M22：frontmatter false 优先——即便独立触发开，显式关闭也不触发", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			backlinkStandaloneTrigger: true,
+			pathRules: [],
+			vaultFiles: { "b.md": "见 [[a#甲]]。" },
+		});
+		const fm = "---\nobsidian-auto-headings: false\n---\n## 甲";
+		const ed = new FakeEditor(fm);
+		p.scheduleRenumber(ed, fileInfo("a.md")); // fm:false → 两条路径都不够格，连计时器都不安排。
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+
+		ed.setValue(fm.replace("## 甲", "## 甲改"));
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲]]。"); // 未同步。
+	});
+
+	it("M23：依赖总开关——updateBacklinks 关时，独立触发开也不生效", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: false,
+			backlinkStandaloneTrigger: true,
+			pathRules: [],
+			vaultFiles: { "b.md": "见 [[a#甲]]。" },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+
+		ed.setValue("## 甲改");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲]]。"); // 未同步。
+	});
+
+	it("M24：清库进行中（vaultClearInProgress）压制独立触发", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			backlinkStandaloneTrigger: true,
+			pathRules: [],
+			vaultFiles: { "b.md": "见 [[a#甲]]。" },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md")); // 播种快照基线。
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+
+		// 直接置位「清库进行中」标志，模拟批量写回期间恰好触发了别的已打开文件的 editor-change
+		// （与 `clearAllVaultNumbering` 内部时序解耦，聚焦断言 `shouldBacklinkStandaloneTrigger` 的压制）。
+		p.vaultClearInProgress = true;
+		ed.setValue("## 甲改");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲]]。"); // 清库期间未被独立触发同步。
+
+		// 清库结束后恢复：同一次改动继续能被独立触发看见（不是永久卡死）。
+		p.vaultClearInProgress = false;
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲改]]。");
+	});
+
+	it("M25：常规路径优先，命中模板时不重复同步（只走 applyRenumber 一次）", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			backlinkStandaloneTrigger: true, // 独立开关也开着，但本轮应被常规路径接管。
+			vaultFiles: { "b.md": "见 [[a#甲]]。" },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}甲`); // 常规编号正常写入。
+		expect(vaultFiles.get("b.md")).toBe(`见 [[a#${WORD_JOINER}1 ${WORD_JOINER}甲]]。`);
+		// 只弹一次计数 Notice（未被独立触发重复处理导致计数翻倍或二次 Notice）。
+		expect(Notice.messages.filter((m) => m.includes("已更新")).length).toBe(1);
 	});
 });
 

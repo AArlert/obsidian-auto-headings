@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-08 1.0.7 补齐 CR-18 Backlink 独立触发 + skipFill 预览缺口 + GUI「预览优先」原则（claude/obsidian-auto-headings-review-km307d）
+
+**做了什么**：接上一周期"下一步"遗留的两项，用户确认要补进 spec 并追加了一条通用 GUI 设计原则，本轮
+全部落进 `spec.md`，纯文档修订，不涉及 `src/`，未跑 `npm run bump`：
+
+1. **CR-18 + §3.12 新增「独立于编号模板的触发」**：把上一周期已用代码验证过的架构结论（`backlinks.ts`
+   核心纯函数不依赖模板，耦合点只在 `main.ts` 的 `applyRenumber` 触发入口，只被 `scheduleRenumber` /
+   `runImmediateRenumber` 调用、且都要求 `getTemplateForFile` 命中模板）写成正式设计段落：目标新增
+   一条不依赖模板解析的触发路径（复用 `headingSnapshots` 快照基线）+ 独立开关，Roadmap M9 挂一条
+   backlog 项。
+2. **§3.13 新增「预览优先于文字说明」设计原则**：能用渲染示例说清楚的地方不写说明文字，仅当预览无法
+   表达"为什么这样设计"时才留一句话说明；把已知的第一个缺口——`skipFill`（fill/drop/none）目前只有
+   文字描述、没有配对渲染示例——记为该原则的待补项，Roadmap M9 挂对应 backlog 项。
+3. 两处都保持"一句话 + 一个 backlog 勾选项"的精简体量，没有比照 M10 那样铺开 ASCII 图/多方案对比表——
+   前者是对既有已验证结论的正式落笔，后者是一个局部渲染缺口，体量本就不需要那么重。
+
+**没做的**：不涉及任何 `src/` 代码改动；未碰 `testplan.md`（两项仍是"规划中/待补"，未落地没有可断言
+的测试场景）；README 重排 + GIF、导出清 WJ 可行性调研仍未动手（上一周期已记录，本轮未新增进展）。
+
+**验证方式**：`node scripts/docs.mjs --check` 通过；`npx prettier --check doc/spec.md` 通过。未跑
+`npm test`/`lint`/`release`（无 `src/` 改动）。
+
+**下一步**：`skipFill` 预览与 Backlink 独立开关均已有明确设计方向，下一次动代码时可以直接按 §3.12/
+§3.13 的段落实现，不需要再补规格；「预览优先」原则后续新增面板控件时应默认遵循，不必每次都重新讨论。
+
+---
+
 ## 2026-07-08 1.0.7 用户产品讨论落规格：M10 TOC burn-in + M8b 交互面补充 + 生态兼容性风险（claude/obsidian-auto-headings-review-km307d）
 
 **做了什么**：多轮用户产品讨论（① 上架现状与宣传短板评估 → ② 插件命名/卖点、Backlink 能否脱离编号
