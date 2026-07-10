@@ -290,13 +290,14 @@
 > 开关 `updateBacklinks` **0.7.11 起默认开**（曝光度决策，见 spec §3.12；内测期曾默认关）。编号 / 清除改写标题文本后，更新别处指向旧标题锚点的内部链接。
 > 见 spec.md §3.12。纯函数核心在 `backlinks.test.ts`，触发接线在 `main.test.ts`，往返不变量纳入 UVM（见 §4）。
 >
-> **独立开关 `backlinkStandaloneTrigger`（M19–M26，2026-07-10 落地，CR-18，见 spec §3.12「独立于编号
-> 模板的触发」）**：默认**关**（新扩展的行为面，opt-in）。开启后新增一条不依赖 `getTemplateForFile`
-> 命中的触发路径——文件无可用模板、或全局自动编号关且未 `fm:true` 强制时，`applyRenumber` 本轮不会
-> 跑，但只要标题文本对照 `headingSnapshots` 快照基线发生了改写，仍复用 `foldSelfBacklinks` /
-> `syncBacklinks` 同步引用链接，**跳过 `renumberContent`**（本路径永不写入编号前缀）。仍尊重
-> `updateBacklinks` 总开关与文件级 frontmatter 显式 `false`（用户对该文件的「别碰」表态优先级最高，
-> 覆盖独立触发）；清除全库进行中同样压制，避免批量写回期间被放大。
+> **不依赖编号模板的触发路径（M19–M25，2026-07-10 落地，CR-18，见 spec §3.12「独立于编号模板的触发」，
+> 1.0.9 并入 `updateBacklinks` 单开关全局生效）**：`updateBacklinks` 开启后，文件无可用模板、或全局
+> 自动编号关且未 `fm:true` 强制时，即便 `applyRenumber` 本轮不会跑，只要标题文本对照
+> `headingSnapshots` 快照基线发生了改写，仍复用 `foldSelfBacklinks`/`syncBacklinks` 同步引用链接，
+> **跳过 `renumberContent`**（本路径永不写入编号前缀）。仍尊重文件级 frontmatter 显式 `false`（用户
+> 对该文件的「别碰」表态优先级最高）；清除全库进行中同样压制，避免批量写回期间被放大。1.0.8 曾以
+> 独立开关 `backlinkStandaloneTrigger`（默认关）opt-in 该行为，1.0.9 起随 `updateBacklinks` 默认全局
+> 生效，字段已删除。
 
 | ID | 操作 | 预期 | 状态 |
 |----|------|------|------|
@@ -319,14 +320,12 @@
 | **M17** | **默认开**（0.7.11 曝光度决策）：新装 / 旧 data.json 缺失字段 | `DEFAULT_SETTINGS.updateBacklinks === true`；缺失字段迁移为开；显式设过 `false` 保留 | ✅（`settings.test.ts`；迁移逻辑 `main.loadSettings`）|
 | **M18** | **用户实测报告的 bug**：文件已格式化，关全局自动 + `fm:false`（编号冻结符合预期），文件正文里有指向自己标题的 `[[#锚点]]`；跑「清除编号」 | 旧版：Notice 提示「已清除编号」但文件实际未变（`vault.process` 读到本文件未落盘的旧内容、写回覆盖掉刚做的清除）——切到别的文件再切回、给足时间落盘后重跑才会成功 | ✅（0.7.25 实修：`foldSelfBacklinks` 把「引用方=本文件自身」直接对内存 `newContent` 重写、随原编号/清除同一个 `editor.transaction` 写回，不再经 `vault.process` 读盘，无竞态；`main.test.ts` 两条回归：自链接原子写回 + 竞态哨兵值不被覆盖）|
 | **M18** | **首次说明 Notice**：首次实际改写引用文件 | 弹一次较长说明（改了什么 / 不在 undo 内 / 在哪关），`backlinksIntroShown` 持久化，此后只弹常规计数 Notice | ✅（0.7.11，`main.test.ts`）|
-| **M19** | **独立触发关（默认）**：`backlinkStandaloneTrigger` 关，文件无可用模板（`getTemplateForFile` 返回 `null`），标题文本改名 | 现状不变：不触发编号，也不同步链接（无回归） | ✅（`main.test.ts`） |
-| **M20** | **独立触发开 + 无模板**：`backlinkStandaloneTrigger` 开、`updateBacklinks` 开，文件无可用模板，`## 甲` 改为 `## 甲改`，别处有 `[[a#甲]]` | 不写入任何编号前缀（`renumberContent` 全程未被调用，`ed.txnCount` 反映的仅是自链接折叠）；引用链接同步为 `[[a#甲改]]` | ✅（`main.test.ts`） |
-| **M21** | **独立触发开 + 全局自动编号关且未 `fm:true`**：文件命中模板但 `autoNumber` 关、无 `fm:true` 强制，标题改名 | 不写编号（仍受全局开关约束）；链接仍同步（走独立路径） | ✅（`main.test.ts`） |
-| **M22** | **frontmatter `false` 优先**：独立触发开，文件 `fm:false`，标题改名 | 不触发（显式关闭覆盖独立触发，与 `shouldAutoTrigger` 对 `fm:false` 的处理口径一致） | ✅（`main.test.ts`） |
-| **M23** | **依赖总开关**：独立触发开但 `updateBacklinks` 关，无模板文件标题改名 | 不触发（独立触发只是换一条入口，不绕开 Backlink 同步总开关） | ✅（`main.test.ts`） |
-| **M24** | **清库压制**：`vaultClearInProgress` 置位期间，独立触发开，编辑器 `editor-change` 触发 | 独立触发同样被压制，避免批量写回期间被放大 | ✅（`main.test.ts`） |
-| **M25** | **常规路径优先、不重复同步**：文件命中模板且够格自动触发，独立触发开关也开着，标题改名 | 只走常规 `applyRenumber` 一次（含其内置的 backlink 同步），不叠加独立触发的第二次同步（无重复 Notice / 计数翻倍） | ✅（`main.test.ts`） |
-| **M26** | GUI 面板：新开关紧跟「同步内部链接」开关 | 双语文案存在（zh/en 均非空）、面板渲染顺序位置正确 | ✅ 逻辑（`i18n.test.ts` 完整性 + `GeneralTab.ts` 渲染顺序）/ 🔲 Obsidian 手验 DOM |
+| **M20** | **`updateBacklinks` 开 + 无模板**：文件无可用模板，`## 甲` 改为 `## 甲改`，别处有 `[[a#甲]]` | 不写入任何编号前缀（`renumberContent` 全程未被调用，`ed.txnCount` 反映的仅是自链接折叠）；引用链接同步为 `[[a#甲改]]` | ✅（`main.test.ts`） |
+| **M21** | **全局自动编号关且未 `fm:true`**：文件命中模板但 `autoNumber` 关、无 `fm:true` 强制，标题改名 | 不写编号（仍受全局开关约束）；链接仍同步 | ✅（`main.test.ts`） |
+| **M22** | **frontmatter `false` 优先**：`updateBacklinks` 开，文件 `fm:false`，标题改名 | 不触发（显式关闭覆盖一切自动路径，与 `shouldAutoTrigger` 对 `fm:false` 的处理口径一致） | ✅（`main.test.ts`） |
+| **M23** | **依赖总开关**：`updateBacklinks` 关，无模板文件标题改名 | 不触发编号，也不同步链接（总开关关闭时该路径完全不生效） | ✅（`main.test.ts`） |
+| **M24** | **清库压制**：`vaultClearInProgress` 置位期间，`updateBacklinks` 开，编辑器 `editor-change` 触发 | 该路径同样被压制，避免批量写回期间被放大 | ✅（`main.test.ts`） |
+| **M25** | **常规路径优先、不重复同步**：文件命中模板且够格自动触发，标题改名 | 只走常规 `applyRenumber` 一次（含其内置的 backlink 同步），不叠加该路径的第二次同步（无重复 Notice / 计数翻倍） | ✅（`main.test.ts`） |
 
 ### N. 起始编号数字 startIndex（M8 批次 1） — dev + user
 
