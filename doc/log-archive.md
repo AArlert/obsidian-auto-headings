@@ -5,6 +5,62 @@
 
 ---
 
+## 2026-07-08 1.0.7 竞品调研驱动的 M8/M9 Roadmap 修订（claude/obsidian-plugin-integrations-hcky0m）
+
+**做了什么**：三轮讨论（① 本插件可与哪些 Obsidian 插件联动 → ② grep M8/M8a/M8b 评审 Roadmap →
+③ 用户点出 M8 是对 Quiet Outline 的模仿改良、要求调研其用户痛点并发散看其他插件），本轮把结论落进
+`spec.md`，纯文档修订，不涉及 `src/`：
+
+1. **调研证据链**（结论已写入 spec.md 对应位置，此处存证据来源）：
+   - **Quiet Outline**（guopenghui/obsidian-quiet-outline）：README + issues 调研，确认「彩虹配色」
+     是真实痛点——社区专门有 CSS 片段仓库（replete/obsidian-minimal-theme-css-snippets）把它的彩虹
+     色改成主题色，作者原话"用它替代官方 Outline 面板"；"不支持跨级标题 h1→h3→h4"是结构性 bug（本
+     插件 `parser.ts` + 模板 `skipFill` 已经正确处理同类跳级场景）；另有焦点滞留侧栏、状态持久化
+     文件与 iCloud 同步冲突（#308）等交互细节问题。
+   - **Modern Outline**：minimap-on-edge 范式的大纲插件，作为 QO 的替代形态调研后**不采用**——与
+     本插件已定的侧栏树形态是两个不同产品方向，不同时做（用户本轮明确"不考虑做 minimap"）。
+   - **Table of Contents**（hipstersmoothie，21.5 万次下载）：验证了"生成式目录"需求盘子很大，但
+     用户决定改走"支持 Dataview"而非自建生成器命令，与 §2.2 非目标"生成目录是独立关注点"保持一致
+     （用户本轮明确"先只考虑支持 dv"）。
+   - **Number Headings**（onlyafly，8.5 万次下载）：issues 里"排除文件夹编号"（#81）、"跳过注释块内
+     标题"（#72）两条现状缺口，转成 M9 候选项。
+   - **Obsidian 核心 Outline / Outliner 插件**的拖拽历史（含 Obsidian v1.4.5"带 frontmatter 时拖放
+     失效"回归）：转成 M8b 的一条显式测试场景要求。
+   - **带编号导出**（PDF/Pandoc）：用户本轮明确"作为调研项"，即只记录待验证问题、不承诺实现范围。
+   - 主要来源：<https://github.com/guopenghui/obsidian-quiet-outline>、
+     <https://github.com/replete/obsidian-minimal-theme-css-snippets>、
+     <https://community.obsidian.md/plugins/modern-outline>、
+     <https://github.com/hipstersmoothie/obsidian-plugin-toc>、
+     <https://github.com/onlyafly/number-headings-obsidian/issues>
+
+2. **`spec.md` 修订清单**：
+   - §2.2 非目标：「生成目录」补跨引用到 M9「Dataview 集成」。
+   - §3.14（M8a）：呈现形态锁定侧栏树形（非 minimap，附否决记录指回本条）；标题树解析改为**直接
+     复用 `parser.ts`**（不重新实现，避免 QO 同款跳级 bug）；搜索框需**复用 `main.ts` 现有
+     `imeComposing` 模式**；「高亮」补非目标"不做按级别彩虹配色"；「其余交互」补"跳转后焦点还给
+     编辑器"；「层级滑块」补状态持久化约束——只进单一 Settings，不做逐文件 side-car（避免 QO #308
+     同款云同步冲突）。
+   - §3.15（M8b）：白名单子树拖入边界从"实现时二选一"改为**锁定决策"直接禁止"**；移动端触摸拖拽
+     明确列为"可独立延后、不阻塞 M8b 桌面端验收"；测试策略补一条"带 frontmatter 文件做拖放"的显式
+     场景。
+   - M9 候选清单：新增「Dataview 集成」（替换原「侧栏生成目录块」表述，定位"验证 + 写文档"而非新增
+     插件代码）；「带编号导出」降级为"调研项，非承诺功能"；新增「路径规则不编号伪模板」「注释块内
+     标题跳过」两条候选。
+
+**没做的**：不涉及任何 `src/` 代码改动；未碰 `testplan.md`（M8a/M8b/M9 候选项仍是"规划中/候选"，未
+落地就没有可断言的测试场景）；未跑 `npm run bump`（沿用"上架后纯文档改动不 bump"策略，见 0.7.26
+之后历次纯文档周期）。Dataview 是否有开箱即用的标题字段、导出链路里 WJ 字符的实际表现，均未动手
+验证，spec.md 里已显式标注"待验证"，不是调研结论。
+
+**验证方式**：`node scripts/docs.mjs --check` 通过。未跑 `npm test`/`lint`/`release`（无源码改动，
+`doc/` 本就在 `.prettierignore` 里，不受 `format:check` 管辖）。
+
+**下一步**：若采纳「Dataview 集成」候选，第一步应是找一个真实 vault 手动验证 WJ 字符在 DataviewJS
+里的实际表现（而非继续纯调研）；「路径规则不编号伪模板」与「注释块内标题跳过」是两个低成本、不依赖
+M8 的独立小任务，可随时排期；M8a/M8b 本身仍未开工。
+
+---
+
 ## 2026-07-06 1.0.7 补充追问二则至 Harness 文档：脚本串联链路 + 省 token 机制（claude/harness-workflow-architecture-4vyme3）
 
 **做了什么**：用户在上一周期基础上追问两个问题——「进入本仓库的 Agent 工作流用哪些脚本

@@ -40,6 +40,35 @@
 
 ---
 
+## 2026-07-10 1.0.7 README 补披露 WJ 生态风险 + 修正商店安装现状（claude/plugin-eval-promotion-3sy3v4）
+
+**做了什么**：用户带着实际反馈来源两处修正，本轮**纯文档修订**（README 双语 + `spec.md` §2.6/M7 核对状态），
+不涉及 `src/`，未跑 `npm run bump`（沿用"上架后策略：仅行为/产物变化才 bump"）：
+
+1. **「安装」节更新为商店真实现状**：此前 README 写的是"社区插件商店（一旦通过审核）"，用户核实后指出
+   插件**已通过自动化检查、在商店内可搜索可直接安装**，只是 Obsidian 官方的人工/编辑审核还在排队——
+   两语言版本均改为反映这个现状，不再用误导性的"一旦通过审核"措辞。同步更新 `spec.md` Milestone 7 该
+   checklist 项，记录这一核实结果。
+2. **README「工作原理」节补齐两处此前只记在 `spec.md` §2.6、未对用户披露的 WJ 生态风险**：
+   - **Dataview**：`page.file.headers` 精确字符串匹配会被 WJ 打穿，补充 DataviewJS `.replace(/⁠/g, "")`
+     清洗示例 + 改用 `.includes()` 匹配标题片段两种规避写法。
+   - **跨平台剪贴板**：复制粘贴到微信/知乎/Notion/邮件客户端等第三方应用时字符处理未逐一验证过，
+     按"已知风险、不承诺具体表现"的措辞披露，并给出目标应用内手动清理的兜底方式。
+   - `spec.md` §2.6 风险表三行状态同步勾更新（外部检索/Dataview 两行标 README 已披露完成日期；剪贴板
+     一行仍标注实测未做，只是披露措辞已补上）。
+3. 双语版本（`README.md` / `README.zh.md`）逐句对应修改，未产生内容漂移。
+
+**没做的**：不涉及任何 `src/` 代码改动；跨平台剪贴板风险的**真实客户端实测**仍未做（开发环境无法验证，
+仍是 spec.md 里挂着的待办）；Backlink 批量同步的 Git diff 噪音、审阅模式仍是 M9 backlog，未改动。
+
+**验证方式**：`node scripts/docs.mjs --check` 通过；`npx prettier --check README.md README.zh.md doc/spec.md`
+通过。未跑 `npm test`/`lint`/`release`（无 `src/` 改动）。
+
+**下一步**：跨平台剪贴板行为需要真实客户端（微信/Notion 等）实测后回填 spec.md §2.6；README 截图/GIF
+仍是占位，留待用户在有桌面环境处补充。
+
+---
+
 ## 2026-07-08 1.0.7 补齐 CR-18 Backlink 独立触发 + skipFill 预览缺口 + GUI「预览优先」原则（claude/obsidian-auto-headings-review-km307d）
 
 **做了什么**：接上一周期"下一步"遗留的两项，用户确认要补进 spec 并追加了一条通用 GUI 设计原则，本轮
@@ -115,62 +144,6 @@
 **下一步**：向用户确认是否要把「Backlink 独立开关」与「skipFill 预览缺口」也补进 spec.md；若确认，
 比照本轮体例（CR 表 + 非目标/风险表 + §3.x 详细规格 + Roadmap checklist）补齐。M10 与 M8b gutter 交互
 的未决问题拍板后，才能拆解出可估工时的 checklist，目前仍停留在"规划中/构思阶段"。
-
----
-
-## 2026-07-08 1.0.7 竞品调研驱动的 M8/M9 Roadmap 修订（claude/obsidian-plugin-integrations-hcky0m）
-
-**做了什么**：三轮讨论（① 本插件可与哪些 Obsidian 插件联动 → ② grep M8/M8a/M8b 评审 Roadmap →
-③ 用户点出 M8 是对 Quiet Outline 的模仿改良、要求调研其用户痛点并发散看其他插件），本轮把结论落进
-`spec.md`，纯文档修订，不涉及 `src/`：
-
-1. **调研证据链**（结论已写入 spec.md 对应位置，此处存证据来源）：
-   - **Quiet Outline**（guopenghui/obsidian-quiet-outline）：README + issues 调研，确认「彩虹配色」
-     是真实痛点——社区专门有 CSS 片段仓库（replete/obsidian-minimal-theme-css-snippets）把它的彩虹
-     色改成主题色，作者原话"用它替代官方 Outline 面板"；"不支持跨级标题 h1→h3→h4"是结构性 bug（本
-     插件 `parser.ts` + 模板 `skipFill` 已经正确处理同类跳级场景）；另有焦点滞留侧栏、状态持久化
-     文件与 iCloud 同步冲突（#308）等交互细节问题。
-   - **Modern Outline**：minimap-on-edge 范式的大纲插件，作为 QO 的替代形态调研后**不采用**——与
-     本插件已定的侧栏树形态是两个不同产品方向，不同时做（用户本轮明确"不考虑做 minimap"）。
-   - **Table of Contents**（hipstersmoothie，21.5 万次下载）：验证了"生成式目录"需求盘子很大，但
-     用户决定改走"支持 Dataview"而非自建生成器命令，与 §2.2 非目标"生成目录是独立关注点"保持一致
-     （用户本轮明确"先只考虑支持 dv"）。
-   - **Number Headings**（onlyafly，8.5 万次下载）：issues 里"排除文件夹编号"（#81）、"跳过注释块内
-     标题"（#72）两条现状缺口，转成 M9 候选项。
-   - **Obsidian 核心 Outline / Outliner 插件**的拖拽历史（含 Obsidian v1.4.5"带 frontmatter 时拖放
-     失效"回归）：转成 M8b 的一条显式测试场景要求。
-   - **带编号导出**（PDF/Pandoc）：用户本轮明确"作为调研项"，即只记录待验证问题、不承诺实现范围。
-   - 主要来源：<https://github.com/guopenghui/obsidian-quiet-outline>、
-     <https://github.com/replete/obsidian-minimal-theme-css-snippets>、
-     <https://community.obsidian.md/plugins/modern-outline>、
-     <https://github.com/hipstersmoothie/obsidian-plugin-toc>、
-     <https://github.com/onlyafly/number-headings-obsidian/issues>
-
-2. **`spec.md` 修订清单**：
-   - §2.2 非目标：「生成目录」补跨引用到 M9「Dataview 集成」。
-   - §3.14（M8a）：呈现形态锁定侧栏树形（非 minimap，附否决记录指回本条）；标题树解析改为**直接
-     复用 `parser.ts`**（不重新实现，避免 QO 同款跳级 bug）；搜索框需**复用 `main.ts` 现有
-     `imeComposing` 模式**；「高亮」补非目标"不做按级别彩虹配色"；「其余交互」补"跳转后焦点还给
-     编辑器"；「层级滑块」补状态持久化约束——只进单一 Settings，不做逐文件 side-car（避免 QO #308
-     同款云同步冲突）。
-   - §3.15（M8b）：白名单子树拖入边界从"实现时二选一"改为**锁定决策"直接禁止"**；移动端触摸拖拽
-     明确列为"可独立延后、不阻塞 M8b 桌面端验收"；测试策略补一条"带 frontmatter 文件做拖放"的显式
-     场景。
-   - M9 候选清单：新增「Dataview 集成」（替换原「侧栏生成目录块」表述，定位"验证 + 写文档"而非新增
-     插件代码）；「带编号导出」降级为"调研项，非承诺功能"；新增「路径规则不编号伪模板」「注释块内
-     标题跳过」两条候选。
-
-**没做的**：不涉及任何 `src/` 代码改动；未碰 `testplan.md`（M8a/M8b/M9 候选项仍是"规划中/候选"，未
-落地就没有可断言的测试场景）；未跑 `npm run bump`（沿用"上架后纯文档改动不 bump"策略，见 0.7.26
-之后历次纯文档周期）。Dataview 是否有开箱即用的标题字段、导出链路里 WJ 字符的实际表现，均未动手
-验证，spec.md 里已显式标注"待验证"，不是调研结论。
-
-**验证方式**：`node scripts/docs.mjs --check` 通过。未跑 `npm test`/`lint`/`release`（无源码改动，
-`doc/` 本就在 `.prettierignore` 里，不受 `format:check` 管辖）。
-
-**下一步**：若采纳「Dataview 集成」候选，第一步应是找一个真实 vault 手动验证 WJ 字符在 DataviewJS
-里的实际表现（而非继续纯调研）；「路径规则不编号伪模板」与「注释块内标题跳过」是两个低成本、不依赖
-M8 的独立小任务，可随时排期；M8a/M8b 本身仍未开工。
 
 ---
 

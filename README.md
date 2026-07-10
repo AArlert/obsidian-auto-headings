@@ -123,12 +123,14 @@ The idea of marking prefixes with an invisible Unicode character traces back to 
 What this means for you:
 
 -   The character is invisible and does not affect layout, export, or reading.
--   It travels with copied/exported text; if you `grep` your files for exact heading text, be aware it sits between the number and the title.
+-   It travels with copied/exported text; if you `grep` your files for exact heading text, be aware it sits between the number and the title — searching for `"1 My heading"` as one contiguous string will not match.
+-   **Dataview**: `page.file.headers` reads the raw heading text including this character, so an exact-match query like `WHERE file.headers = "1 My heading"` will silently return nothing. Strip it before comparing — in DataviewJS: `dv.current().file.headers.map(h => h.replace(/⁠/g, ""))` — or match with `.includes()` against just the title fragment instead of the full numbered string.
+-   **Pasting into other apps** (WeChat, Zhihu, Notion, email clients, etc.): most modern renderers should silently ignore the character, but this hasn't been verified across every platform/font combination. If a numbered heading shows a stray blank glyph or extra spacing after you paste it elsewhere, that's this marker — the plugin's cleanup commands only reach files inside your vault, so strip it manually (`.replace(/⁠/g, "")`) in the destination app if it happens.
 -   If you remove numbering by hand and leave stray characters behind, the commands **Clear numbering in current file** / **Clean foreign numbering** will tidy things up.
 
 ## Install
 
-**From the community plugin store** (once accepted): Settings → Community plugins → Browse → search "Auto Headings".
+**From the community plugin store**: already listed and searchable — Settings → Community plugins → Browse → search "Auto Headings", then install and enable directly. It has passed the store's automated checks; Obsidian's manual/editorial review is still pending (this doesn't affect installing or using the plugin).
 
 **Manually**: download `main.js`, `manifest.json`, `styles.css` from the [latest release](../../releases/latest) into `<vault>/.obsidian/plugins/auto-headings/`, then reload Obsidian and enable the plugin.
 
