@@ -5,6 +5,71 @@
 
 ---
 
+## 2026-07-10 1.0.8 SubAgent 派发体系落地 + 清理 sync-plugin-repo 迁移遗留（claude/subagent-harness-dispatch）
+
+**做了什么**（纯 harness/文档周期，无插件行为变化，按上架后策略不 bump）：
+
+1. **CLAUDE.md §0 从三行准则改写为可执行派发协议**：派发表（任务类型 → agent → 返回上限）、
+   输出契约（结论先行 / file:line / 禁整段粘贴 / 超长返工）、升级路径（haiku 两败 → sonnet → 主模型）、
+   主模型保留事项清单。
+2. **新建 `.claude/agents/` 四个仓库级定义**（随 git 入库）：`quality-gate`（haiku，跑质量门槛压缩返回，
+   分验证档/收尾档）、`repo-scout`（haiku，内置 §3 定位菜谱的检索员）、`mech-editor`（haiku，机械改动，
+   带禁区清单 + 歧义即停）、`feature-coder`（sonnet，边界清晰的编码，testplan-first，收尾归主模型）。
+3. **删除已失效的 `scripts/sync-plugin-repo.mjs`**（引用不存在的 `publish/` 目录跑必崩，职能已被
+   `release.yml` tag 发布工作流取代）+ 删 `package.json` 的 `publish:repo` + 修缮本文件目录树块
+   （删 publish/ 与 sync-plugin-repo 两行、补 `.claude/agents/` 行）。此项由 mech-editor 试点执行。
+
+**没做什么**：feature-coder 定位存疑（价值是上下文隔离而非省钱）——按约定观察 2~3 个周期，
+使用率为零则删；新 agent 定义**本会话不生效**（注册表会话启动时固定），`/agents` 加载确认留待下个新会话。
+
+**验证方式（A/B 实测）**：全绿时 `npm test` 完整输出 89 行 vs quality-gate 契约 ≤25 行（失败时全量
+输出会膨胀数百行，收益更大）；repo-scout 试点查 spec §3.11 走了 grep+sed 菜谱而非整读 178KB 文件，
+~2.8 万 token 检索开销隔离在子上下文；mech-editor 试点三处改动 diff 抽查干净、`docs.mjs --check` + lint 绿。
+quality-gate 试点跑收尾档 preflight：4 项通过，唯一 test 失败为既有 ICU 环境差异（`whitelist.test.ts`
+filterSortWhitelist，前两周期已登记非回归）；release/ 无变化，佐证不 bump 正确。
+
+**本周期派发 3 次**（mech-editor ×1、repo-scout ×1、quality-gate ×1 收尾档 preflight）。
+
+**下一步**：不变，M11 信任包（见 status 首行）；顺带在下个编码周期实测 4 个 agent 的会话内加载与派发表执行率。
+
+---
+
+## 2026-07-10 1.0.8 文档体系重整：grill 收编 spec 附录 A + 叙事倒转 + M0–M7 压缩 + 移除跨项目沉淀（claude/doc-consolidation-grill）
+
+**做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
+
+1. **删除跨项目知识沉淀**：`doc/harness-workflow-ic-verification.md` 与 `doc/workflow.html`（用户
+   指示，内容与插件规格无关）；log.md 目录结构约定块同步。
+2. **grill.md 收编为 spec 附录 A**（用户指示，替代此前「长期独立保留」决定）：全文标题降级
+   （§N → §A.N）、内部自指补 `A.` 前缀、对 spec 的指称改「本文」；spec 内 11 处
+   `[grill.md](./grill.md)` 引用改附录锚点；CLAUDE.md §3.1 表删行；testplan §O 来源注与
+   marker-contract.md 定位注改指附录；原文件删除。
+3. **spec 叙事倒转落到门面**：顶部简介与 §1 背景改为「① 改标题不断链（第一价值，全社区最可靠的
+   改名检测引擎）② 最强编号（第二层价值，burn-in 哲学）」两层结构，链接附录 A §A.1 论证；如实
+   标注 CR-18 开关默认关、「装上即不断链」零配置目标待稳定后翻默认兑现。
+4. **Roadmap M0–M7 压缩**：八个已完成里程碑 93 行 checklist 压为 16 行单表（细节指向本文各功能节
+   与 log-archive，不留双份），Community Hub 提交机制保留一行；执行顺序表状态更新为
+   「已通过官方审核，商店正式上架」（用户 2026-07-10 确认）。
+5. **CR-18 全文状态回填**：§2.1 需求表、§3.12 设计段、M12 首项三处标注 1.0.8 落地（开关
+   `backlinkStandaloneTrigger` 默认关、常规路径已处理本轮时不重复跑、testplan M19–M26）。
+6. **锚点全量修复**：修 14 处含 `.` 的既有死锚点（GitHub slug 删点号：`m71.0`→`m710`、
+   `0.7.20`→`0720`、`burn-in-m10`→`burn-inm10`）；目录补 §2.4–2.7 与附录 A 条目；§3.12 一处
+   已失效的「M8 backlog」死链改指 M12。
+
+**没做什么**：README 未按叙事倒转改版（与截图/GIF 一起做，需用户桌面环境）；manifest description
+卖点重排仍按 M12 计划随下一个行为版本 bump；marker-contract.md 维持独立英文文件（用户拍板：下游
+可见性本身是信任叙事的一部分）。
+
+**验证方式**：自写脚本校验 spec 全文内部锚点 0 死链（58 个标题）；`node scripts/docs.mjs --check`
+通过；`npx prettier --check` 改动的五个文档全绿；`npm run preflight` 全绿（test 359/360，唯一失败
+为既有 ICU 环境差异，与本轮无关，见上一周期记录）。
+
+**下一步**：M11 信任包为当前重点（用户指示，事关插件信任度）——八项中建议先动纯验证/拍板项
+（导出验证矩阵、Canvas O1 拍板、E8 拍板），代码项（审阅模式、H8+清库撤销、复制净化、CM6 原子
+区域）按 spec §5 顺序排期；README 改版 + GIF 待用户桌面环境。
+
+---
+
 ## 2026-07-10 1.0.8 Backlink 同步独立于编号模板触发（CR-18，M12 首项，claude/m9-backlink-standalone-trigger）
 
 **做了什么**：实现 spec.md §3.12「独立于编号模板的触发」既定设计（CR-18，M12 首项，规格早已定案，
