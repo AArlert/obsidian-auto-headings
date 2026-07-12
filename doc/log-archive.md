@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-07-10 1.0.8 SubAgent 派发体系落地 + 清理 sync-plugin-repo 迁移遗留（claude/subagent-harness-dispatch）
+
+**做了什么**（纯 harness/文档周期，无插件行为变化，按上架后策略不 bump）：
+
+1. **CLAUDE.md §0 从三行准则改写为可执行派发协议**：派发表（任务类型 → agent → 返回上限）、
+   输出契约（结论先行 / file:line / 禁整段粘贴 / 超长返工）、升级路径（haiku 两败 → sonnet → 主模型）、
+   主模型保留事项清单。
+2. **新建 `.claude/agents/` 四个仓库级定义**（随 git 入库）：`quality-gate`（haiku，跑质量门槛压缩返回，
+   分验证档/收尾档）、`repo-scout`（haiku，内置 §3 定位菜谱的检索员）、`mech-editor`（haiku，机械改动，
+   带禁区清单 + 歧义即停）、`feature-coder`（sonnet，边界清晰的编码，testplan-first，收尾归主模型）。
+3. **删除已失效的 `scripts/sync-plugin-repo.mjs`**（引用不存在的 `publish/` 目录跑必崩，职能已被
+   `release.yml` tag 发布工作流取代）+ 删 `package.json` 的 `publish:repo` + 修缮本文件目录树块
+   （删 publish/ 与 sync-plugin-repo 两行、补 `.claude/agents/` 行）。此项由 mech-editor 试点执行。
+
+**没做什么**：feature-coder 定位存疑（价值是上下文隔离而非省钱）——按约定观察 2~3 个周期，
+使用率为零则删；新 agent 定义**本会话不生效**（注册表会话启动时固定），`/agents` 加载确认留待下个新会话。
+
+**验证方式（A/B 实测）**：全绿时 `npm test` 完整输出 89 行 vs quality-gate 契约 ≤25 行（失败时全量
+输出会膨胀数百行，收益更大）；repo-scout 试点查 spec §3.11 走了 grep+sed 菜谱而非整读 178KB 文件，
+~2.8 万 token 检索开销隔离在子上下文；mech-editor 试点三处改动 diff 抽查干净、`docs.mjs --check` + lint 绿。
+quality-gate 试点跑收尾档 preflight：4 项通过，唯一 test 失败为既有 ICU 环境差异（`whitelist.test.ts`
+filterSortWhitelist，前两周期已登记非回归）；release/ 无变化，佐证不 bump 正确。
+
+**本周期派发 3 次**（mech-editor ×1、repo-scout ×1、quality-gate ×1 收尾档 preflight）。
+
+**下一步**：不变，M11 信任包（见 status 首行）；顺带在下个编码周期实测 4 个 agent 的会话内加载与派发表执行率。
+
+---
+
 ## 2026-07-10 1.0.8 文档体系重整：grill 收编 spec 附录 A + 叙事倒转 + M0–M7 压缩 + 移除跨项目沉淀（claude/doc-consolidation-grill）
 
 **做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：

@@ -40,6 +40,39 @@
 
 ---
 
+## 2026-07-10 1.0.9 剪贴板 WJ 净化：3 个留白问题拍板 2 个（用户指示，claude/clipboard-wj-pollution-mecppf）
+
+**做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
+
+1. **PR #5 已建并订阅**（上一周期，`claude/clipboard-wj-pollution-mecppf` → `master`，草稿）：
+   CI 绿、无 review 评论，承接本周期继续讨论。
+2. **对 spec §2.8 留白的 3 个问题逐一讨论，定案 2 个、1 个转为「实现周期第一步 spike」**：
+   - **copy/cut 端触发判断（定案）**：监听器只能全局挂载（无从预知选区内容），内部第一步做同步
+     廉价判断——选区文本 `.includes(WORD_JOINER)` 为假即完全放行、为真才 `preventDefault()` 接管；
+     不做「是否完整标题行」的结构解析，净化对任意字符串都成立。
+   - **隐藏通道 payload（定案）**：存完整原始选区文本，不用「净化文本+WJ 位置索引」差异编码——
+     省空间在此没有真实约束，索引方案想兜底的「外部改过再粘贴回来」场景本该走「找不到隐藏通道
+     即当新内容处理」的降级路径，不需要索引介入。
+   - **paste 端触发判断 + `clipboard.read()` 权限提示（合并为一个未定案问题）**：
+     `preventDefault()` 必须同步调用、但「有没有隐藏通道」的判断要么靠 `clipboardData.types`
+     同步可见性、要么靠异步 `read()`——这两条路都没有查到 Obsidian/Electron 环境下的确切行为，
+     必须在真实 Obsidian 渲染进程里跑最小 spike 实测，结果直接决定 paste 端最终方案（或降级到
+     「只做 copy 端净化、不接管 paste」，但那样会带回「粘贴回已编号 vault 双重编号」的已知回归）。
+3. **`doc/spec.md` §2.8 回填三段讨论结论**，把「留给实现周期拍板的问题」从 3 项收窄为 1 项（paste
+   端 spike），copy/cut 端与隐藏通道两项已可直接按定案实现，不需要在下个编码周期重新讨论。
+
+**没做什么**：仍未写代码——spike 本身也是下个周期的第一步工作，不在本轮纯讨论周期做。
+
+**验证方式**：纯文档改动，无代码变更；`npm run docs` 归档 + 内部锚点校验。
+
+**本周期派发 0 次**（用户全程直接对话讨论）。
+
+**下一步**：合并本 PR 到 master（用户本轮已指示）；下一个编码周期开工第一步是 paste 端 spike
+（验证 `clipboardData.types` 同步可见性 + `clipboard.read()` 权限提示行为），根据结果实现桌面端
+双通道 copy/paste 钩子并补单测（重点 O9 双重编号回归），移动端能力探测降级路径同期实现。
+
+---
+
 ## 2026-07-10 1.0.9 剪贴板 WJ 净化：技术选型定案（用户指示，claude/clipboard-wj-pollution-mecppf）
 
 **做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
@@ -124,35 +157,6 @@ Roadmap/testplan 三处引用手动核对一致）。
 **下一步**：M11 信任包内「复制净化」讨论——需要先探明「插件能否从被清除 WJ 的编号标题正确识别/恢复
 编号状态」这一前提是否成立，成立的话方案可以简化（无需区分粘贴目的地，插件自适应识别即可）；不成立
 再回到「复制到 Ob 内保留 WJ / 复制到 Ob 外清除 WJ」的双路径设计。
-
----
-
-## 2026-07-10 1.0.8 SubAgent 派发体系落地 + 清理 sync-plugin-repo 迁移遗留（claude/subagent-harness-dispatch）
-
-**做了什么**（纯 harness/文档周期，无插件行为变化，按上架后策略不 bump）：
-
-1. **CLAUDE.md §0 从三行准则改写为可执行派发协议**：派发表（任务类型 → agent → 返回上限）、
-   输出契约（结论先行 / file:line / 禁整段粘贴 / 超长返工）、升级路径（haiku 两败 → sonnet → 主模型）、
-   主模型保留事项清单。
-2. **新建 `.claude/agents/` 四个仓库级定义**（随 git 入库）：`quality-gate`（haiku，跑质量门槛压缩返回，
-   分验证档/收尾档）、`repo-scout`（haiku，内置 §3 定位菜谱的检索员）、`mech-editor`（haiku，机械改动，
-   带禁区清单 + 歧义即停）、`feature-coder`（sonnet，边界清晰的编码，testplan-first，收尾归主模型）。
-3. **删除已失效的 `scripts/sync-plugin-repo.mjs`**（引用不存在的 `publish/` 目录跑必崩，职能已被
-   `release.yml` tag 发布工作流取代）+ 删 `package.json` 的 `publish:repo` + 修缮本文件目录树块
-   （删 publish/ 与 sync-plugin-repo 两行、补 `.claude/agents/` 行）。此项由 mech-editor 试点执行。
-
-**没做什么**：feature-coder 定位存疑（价值是上下文隔离而非省钱）——按约定观察 2~3 个周期，
-使用率为零则删；新 agent 定义**本会话不生效**（注册表会话启动时固定），`/agents` 加载确认留待下个新会话。
-
-**验证方式（A/B 实测）**：全绿时 `npm test` 完整输出 89 行 vs quality-gate 契约 ≤25 行（失败时全量
-输出会膨胀数百行，收益更大）；repo-scout 试点查 spec §3.11 走了 grep+sed 菜谱而非整读 178KB 文件，
-~2.8 万 token 检索开销隔离在子上下文；mech-editor 试点三处改动 diff 抽查干净、`docs.mjs --check` + lint 绿。
-quality-gate 试点跑收尾档 preflight：4 项通过，唯一 test 失败为既有 ICU 环境差异（`whitelist.test.ts`
-filterSortWhitelist，前两周期已登记非回归）；release/ 无变化，佐证不 bump 正确。
-
-**本周期派发 3 次**（mech-editor ×1、repo-scout ×1、quality-gate ×1 收尾档 preflight）。
-
-**下一步**：不变，M11 信任包（见 status 首行）；顺带在下个编码周期实测 4 个 agent 的会话内加载与派发表执行率。
 
 ---
 

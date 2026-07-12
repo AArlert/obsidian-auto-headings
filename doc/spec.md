@@ -264,13 +264,36 @@ Obsidian 社区呼声第一的痛点是**改标题断链**：`[[file#heading]]` 
   Electron 内核基于 Chromium，原生支持。自定义格式走 **`"web "` 前缀**（如
   `web text/x-obsidian-auto-headings`，Chrome 104+ 支持），该格式对其他应用默认不可见/不可读，
   只有显式请求该格式名的代码才能读到——天然满足「外部应用只看到净化版、自己人才认得隐藏通道」。
-- **copy/cut 端**：`preventDefault()` 后原子写入
-  `{ "text/plain": <净化版，剥净全部 WJ>, "web text/x-obsidian-auto-headings": <原始全文，含 WJ> }`。
-- **paste 端**：`preventDefault()` **之前**先用 `navigator.clipboard.read()`（异步）探测剪贴板里
-  有没有这个自定义格式——**没有就完全放行**、把控制权交还 Obsidian 默认粘贴管线（不接管，避免
-  踩到 Obsidian 自身或其他插件如图片粘贴 / 链接规则的 paste 处理链）；有则读取隐藏通道内容自行
-  插入，还原含 WJ 的原文。同步的旧版 `event.clipboardData.getData()` 读不到 `"web "` 自定义格式，
-  必须走异步 `read()`。
+- **copy/cut 端触发判断（已定案，2026-07-10）**：监听器只能全局挂载（`this.registerDomEvent(
+  activeDocument, "copy"/"cut", ...)`，与既有 `compositionstart`/`compositionend` 同一模式，见
+  `main.ts:187-190`）——没有别的挂载点，事件触发前无法预知选区内容。监听器内部第一步做**同步、
+  廉价**的判断：取当前选区文本（`window.getSelection().toString()` 或 Editor API），
+  `.includes(WORD_JOINER)` 为假就完全不 `preventDefault()`、直接放行，等于本功能不存在；为真才
+  接管走双通道写入。**不做「是否为完整标题行」的结构解析**——净化（剥净所有 WJ）对任意字符串都
+  成立，选区横跨多个标题 + 正文时同样按此规则整体处理，没必要引入解析复杂度。原子写入
+  `{ "text/plain": <净化版，剥净全部 WJ>, "web text/x-obsidian-auto-headings": <原始选区全文，
+  含 WJ，不做任何改动或差异编码——理由见下> }`。
+- **隐藏通道 payload（已定案，2026-07-10）**：存**完整原始选区文本**，不用「净化文本 + WJ 位置
+  索引」一类差异编码。索引方案唯一的优势是省空间，但剪贴板存几 KB 字符串没有性能顾虑，省这个是
+  过度设计；索引方案还有个更根本的问题——它试图兜底「用户在外部编辑器改过文本再粘贴回来」这种
+  索引早已失效的场景，但那种场景本该走「隐藏通道不匹配 / 找不到 → 当全新内容处理，交给
+  `stripPrefix` 正常判断」的降级路径，不需要索引方案介入。存完整原文让 paste 端逻辑最简单：
+  命中隐藏通道即整段替换插入，零重建计算。
+- **paste 端触发判断（未定案，阻塞实现，需先做实机 spike）**：`preventDefault()` 必须在**同步**
+  阶段调用才能拦下默认粘贴，但「剪贴板里有没有我们的自定义格式」这个判断要么靠同步的
+  `event.clipboardData.types`（若浏览器把 `"web "` 自定义格式的类型名同步暴露在这个「目录」里，
+  就能同步决定要不要 `preventDefault()`），要么只能靠异步 `navigator.clipboard.read()`——但异步
+  判断和「必须同步 preventDefault」互相矛盾（拦下默认粘贴后若异步判断结果是「没有隐藏通道」，
+  没有安全的办法把控制权还给 Obsidian 默认粘贴管线）。这条路径**能不能走通，完全取决于**
+  `clipboardData.types` 是否同步可见自定义格式、以及 `navigator.clipboard.read()` 在
+  Obsidian 打包的 Electron 渲染进程里、在 `paste` 事件处理内调用是否会被要求权限提示或被 Electron
+  主进程的 permission handler 拦截——这两点文档都没有明确答案，Chromium 标准行为对 user-gesture
+  触发的读取通常免提示放行，但 Obsidian/Electron 是否遵循这个标准行为**未知**，必须在真实 Obsidian
+  桌面客户端里跑一段十几行的最小 spike 代码实测（同步的旧版 `event.clipboardData.getData()` 已确认
+  读不到 `"web "` 自定义格式，这条路走不通，不需要再验证）。**实现周期开工的第一步就是这个
+  spike**，其结果直接决定 paste 端能不能做、怎么做；若被 Obsidian/Electron 挡掉，需回来重新权衡
+  「只做 copy 端净化、paste 端不接管」这一降级方案是否可接受（会带回「粘贴回已编号 vault 产生
+  双重编号」的已知回归风险，见下方降级默认值）。
 
 **移动端现实**：Obsidian 官方论坛已确认插件在 Android/iOS 的 WebView 沙箱里写自定义剪贴板数据
 默认被拦截（需要原生 Swift/Kotlin 桥接，超出社区插件能力范围）。因此本方案**只在桌面端生效**，
@@ -285,12 +308,10 @@ vault 内已有其他编号标题的文件」这条路径上引入新 bug——`
 `## 2 1 模块设计` 这类观感上像 bug 的双重编号（与 U1/U2/J10 系列历史 bug 同构）。双重编号的
 破坏性比「外部污染」更直接可见，宁可保持现状已知风险，不能在没有双通道兜底的情况下单独上净化。
 
-**留给实现周期拍板的问题**：
-
-- 触发范围：只在选区命中「含 WJ 标题行」时接管 copy/paste，还是编辑器全局包一层。
-- 隐藏通道 payload：整段选区原文，还是只放「净化前/后」差异用于还原。
-- `navigator.clipboard.read()` 在 `paste` 事件处理内是否会触发浏览器权限提示——文档未明确、
-  需在真实 Obsidian 渲染进程里实测（附录 A 未验证项）。
+**留给实现周期的唯一未定案问题**：paste 端触发判断的可行性 spike（见上，`clipboardData.types`
+同步可见性 + `clipboard.read()` 权限提示行为），实现周期开工第一步先做，其结果决定 paste 端
+最终方案（附录 A 未验证项）。copy/cut 端触发判断与隐藏通道 payload 格式已在上面定案，可直接
+按此实现，不需要在实现周期重新讨论。
 
 ---
 
