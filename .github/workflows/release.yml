@@ -37,9 +37,19 @@ jobs:
             - name: 创建 Release
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              # 说明文本优先取仓库内 doc/release-notes/<tag>.md（人写的双语说明，随代码入库可追溯）；
+              # 没有该文件时回退到 --generate-notes 自动生成。
               run: |
                   tag="${GITHUB_REF#refs/tags/}"
-                  gh release create "$tag" \
-                    --title "$tag" \
-                    --generate-notes \
-                    main.js manifest.json styles.css
+                  notes="doc/release-notes/$tag.md"
+                  if [ -f "$notes" ]; then
+                    gh release create "$tag" \
+                      --title "$tag" \
+                      --notes-file "$notes" \
+                      main.js manifest.json styles.css
+                  else
+                    gh release create "$tag" \
+                      --title "$tag" \
+                      --generate-notes \
+                      main.js manifest.json styles.css
+                  fi

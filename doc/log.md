@@ -73,7 +73,12 @@
 **验证方式**：`clipboard.test.ts` 28/28、`npm run lint`、`test:fuzz` 5000×80、触碰文件
 prettier 全绿；`npm test` 除上述预存红灯外全过；合并后以 master CI 结果为最终门槛。
 
-**本周期派发 2 次（quality-gate × 2）**。
+**追记（同周期第二笔提交）**：Release 工作流升级——`gh release create` 的说明优先取仓库内
+`doc/release-notes/<tag>.md`（人写双语说明、随代码入库可追溯），缺文件回退 `--generate-notes`；
+新增 `doc/release-notes/1.0.10.md`（本版复制净化的用户向双语说明）。动机：本机无 gh CLI，
+发布说明走「入库 + CI 发布」通道，顺带沉淀为常设机制。
+
+**本周期派发 3 次（quality-gate × 3）**。
 
 **下一步**：M11 其余项（导出验证矩阵、Canvas O1、E8 拍板、Backlink 审阅模式、H8+清库撤销、
 CM6 原子区域）；§7.1 实机环境就绪后回填 O4/O8/O9/O10 实测结论。
@@ -178,7 +183,7 @@ obsidian-auto-headings/
 │   ├── dev_tests/          自动化单元测试（Vitest，无需 Obsidian 运行时，npm test 跑它）+ uvm/ 压测框架
 │   └── user_tests/         可复制粘贴进 Obsidian 实测的 .md 样例（每个对应 testplan 某场景）
 ├── README.md             ← 面向读者的简介（核心功能 + Milestone 概览，入口文档）
-├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + marker-contract 下游契约，见 CLAUDE.md §3.1；grill 方向审查已收编为 spec 附录 A）
+├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + marker-contract 下游契约 + release-notes/ 各版本发布说明（Release 工作流按 tag 取用），见 CLAUDE.md §3.1；grill 方向审查已收编为 spec 附录 A）
 ├── release/              ← 可分发插件文件（main.js/manifest/styles/README；zip 本地生成不入库）★每周期必更新
 ├── scripts/
 │   ├── sync-release.mjs    把构建产物同步到 release/（被 npm run release 调用）
