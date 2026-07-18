@@ -72,6 +72,10 @@ export interface Messages {
 	updateBacklinksName: string;
 	updateBacklinksDesc: string;
 
+	// —— 复制净化（M11，spec §2.8）——
+	sanitizeClipboardName: string;
+	sanitizeClipboardDesc: string;
+
 	// —— 路径规则 ——
 	pathRulesHeading: string;
 	pathRulesDesc: string;
@@ -267,6 +271,10 @@ const zh: Messages = {
 	updateBacklinksDesc:
 		"标题文字一旦改动，自动更新其它文件里指向它的内部链接（如 [[文件#标题]]），避免断链——全局生效，与是否编号无关（改标题不加编号、或笔记未命中任何模板，链接照样同步）；注意会修改引用文件、改动不在其撤销历史内。",
 
+	sanitizeClipboardName: "复制净化（剥离隐形标记）",
+	sanitizeClipboardDesc:
+		"复制 / 剪切含编号标题的内容时，把插件写入的隐形标记字符（Word Joiner）从剪贴板剥净，粘贴到外部应用不再携带不可见字符；同一会话内原样粘贴回本库时自动还原原文，编号照常重排、不会出现双重编号。笔记文件本身不受影响；净化失败时静默维持原样。",
+
 	pathRulesHeading: "路径规则",
 	pathRulesDesc:
 		"把路径映射到模板：文件夹规则以「/」结尾、「/」根规则即全局默认，最具体的规则优先。",
@@ -460,6 +468,10 @@ const en: Messages = {
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc:
 		"Whenever a heading's text changes, automatically update internal links in other files that point to it (e.g. [[file#heading]]) so they don't break — this works globally, regardless of numbering (edits with no numbering added, or notes matching no template, still sync); note this modifies the referencing files outside their undo history.",
+
+	sanitizeClipboardName: "Sanitize copied text (strip hidden markers)",
+	sanitizeClipboardDesc:
+		"When copying or cutting numbered headings, strip the plugin's invisible marker characters (Word Joiner) from the clipboard so external apps never receive hidden characters; pasting the same text back into this vault within the same session restores the original, so numbering re-flows without double numbers. Your note files are unaffected; on any failure the clipboard is left untouched.",
 
 	pathRulesHeading: "Path rules",
 	pathRulesDesc:

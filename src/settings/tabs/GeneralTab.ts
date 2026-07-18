@@ -3,7 +3,7 @@ import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { DEBOUNCE_DEFAULT, DEBOUNCE_MAX, DEBOUNCE_MIN, clampDebounceDelay } from "../model";
 
 /**
- * 「全局设置」TAB（M7 多 TAB 重构）：语言 / 全局自动编号 / Backlink 同步 / 防抖延迟。
+ * 「全局设置」TAB（M7 多 TAB 重构）：语言 / 全局自动编号 / Backlink 同步 / 复制净化 / 防抖延迟。
  *
  * Backlink 开关紧跟全局开关（0.7.11 曝光度决策：默认开 + 首次实际同步弹说明 Notice，面板上作为
  * 普通设置项自然呈现，见 spec.md §3.12）。1.0.9 起原「独立触发」开关并入本开关：开启后全局生效，
@@ -45,6 +45,17 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 		.addToggle((toggle) =>
 			toggle.setValue(plugin.settings.updateBacklinks).onChange(async (value) => {
 				plugin.settings.updateBacklinks = value;
+				await plugin.saveSettings();
+			}),
+		);
+
+	// —— 复制净化开关（M11，默认开：copy/cut 出口剥 WJ + 同会话粘贴回还原，见 spec.md §2.8）——
+	new Setting(containerEl)
+		.setName(t.sanitizeClipboardName)
+		.setDesc(t.sanitizeClipboardDesc)
+		.addToggle((toggle) =>
+			toggle.setValue(plugin.settings.sanitizeClipboard).onChange(async (value) => {
+				plugin.settings.sanitizeClipboard = value;
 				await plugin.saveSettings();
 			}),
 		);

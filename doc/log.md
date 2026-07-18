@@ -40,6 +40,46 @@
 
 ---
 
+## 2026-07-18 1.0.10 复制净化落地：同步净化 + 内存映射双通道（用户拍板新方案，claude/clipboard-paste-spike-impl）
+
+**做了什么**：
+
+1. **方案翻案（用户认可后定案）**：spike 判死的只是「从 OS 剪贴板读自定义格式」；「是不是我们
+   净化过的内容」这一判断改问插件自己——copy/cut 净化时把 `规范化(净化文本) → 原文` 记入**插件
+   内存 LRU**，paste 时同步读 `text/plain`（标准格式在 paste 事件语境同步可读，spike 已证）查表，
+   命中才 `preventDefault()` + 还原原文。双通道复活，隐藏通道从 OS 剪贴板搬进内存；原「不接管
+   paste、O9 降已知限制」的 2026-07-15 裁定被本方案取代。`spec.md` §2.8 整节改写（spike 实测
+   保留为历史依据），§2.6「剪贴板投毒」行改记「主动消解已实现」，Roadmap M11 该项勾选。
+2. **实现（1.0.10，行为变化已 bump）**：
+   - 新增 `src/clipboard.ts`（纯逻辑：`stripWordJoiners`/`stripWordJoinersFromHtml`/
+     `normalizeClipboardText`/`ClipboardOriginalCache` LRU，条数 50 + 总字符 2M 上限，仅内存
+     不持久化——隐私考量见 spec §2.8）；
+   - `main.ts` 接线：`registerClipboardSanitizer`（copy/cut 冒泡监听，主窗口 + window-open
+     弹窗；`defaultPrevented` 区分 CM6 编辑器路径=覆写 text/plain+text/html 并记 LRU、阅读模式
+     路径=DOM 选区自构造净化 payload 不记 LRU）与 `restoreSanitizedPaste`（editor-paste 五道
+     同步守卫：他人已处理 / 未命中 / 目标编号未生效 / 多光标 / 开关关，全过才整段还原原文）；
+   - 设置开关 `sanitizeClipboard`（默认开，GeneralTab + i18n 中英 + loadSettings 迁移兜底）；
+   - README 双语：「粘贴到其他应用」改为已消解 + 开关位置，「导出与外发」复制行改「已消除」。
+3. **测试**：`tests/dev_tests/clipboard.test.ts` 28 例——纯函数 / LRU（含 CRLF 规范化命中、
+   逐出与刷新序、超限不驻留）/ O9 内容级回归（还原→重排等价裸文本追加、反例出现 `3 1` 双重
+   编号证明还原必要）/ 插件级 copy/paste 守卫矩阵（经 obsidian-mock 直调私有方法）。
+   `testplan.md` O8/O9 改写为新方案并升 ⚠️（逻辑已单测、实机待 §7.1），O10 改写降级语义。
+
+**没做什么 / 环境注记**：O4/O8 实机字节检查、O10 移动端实机仍待 §7.1 环境。本机（Windows）有
+两处**预存**环境性红灯，与本次改动无关、CI（Ubuntu）为准：① `whitelist.test.ts:406` 排序断言
+随本地 ICU collation 失败（stash 干净基线复现）；② `format:check` 对未跟踪 `.codex/`、`.claude/`
+配置与部分历史文件报换行符差异。本次触碰的全部文件已单独 `prettier --check` 全绿。
+
+**验证方式**：`clipboard.test.ts` 28/28、`npm run lint`、`test:fuzz` 5000×80、触碰文件
+prettier 全绿；`npm test` 除上述预存红灯外全过；合并后以 master CI 结果为最终门槛。
+
+**本周期派发 2 次（quality-gate × 2）**。
+
+**下一步**：M11 其余项（导出验证矩阵、Canvas O1、E8 拍板、Backlink 审阅模式、H8+清库撤销、
+CM6 原子区域）；§7.1 实机环境就绪后回填 O4/O8/O9/O10 实测结论。
+
+---
+
 ## 2026-07-15 1.0.9 剪贴板 WJ 净化：paste 端 spike 完成，OS 剪贴板隐藏通道判死（Codex 会话，claude/clipboard-paste-spike-impl；收尾由 2026-07-18 会话补记）
 
 **做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
@@ -100,48 +140,6 @@
 
 ---
 
-## 2026-07-10 1.0.9 剪贴板 WJ 净化：技术选型定案（用户指示，claude/clipboard-wj-pollution-mecppf）
-
-**做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
-
-1. **承接上一周期的遗留讨论**（剪贴板 WJ 污染净化，见 status 首行 `next`）：本周期继续只讨论
-   方向，验证了「插件能否识别被清除 WJ 的内容」这一悬而未决的前提——答案是**不能安全识别**：
-   `hasUnclaimedForeignNumbering`（`src/cleanup.ts:112-118`）的外来编号探测是**全文件级**的，
-   只要目标文件别处还有一个 WJ 就不生效；净化后的无 WJ 内容粘贴进已编号 vault 会被 `stripPrefix`
-   当纯正文、叠加新前缀，产生 `## 2 1 标题` 式双重编号（与 U1/U2/J10 系列历史 bug 同构）。据此
-   否决了「单通道净化」（复制时无条件清 WJ），转向「双通道」方向。
-2. **摸清双通道的技术选型**（WebSearch 调研 + 用户拍板）：
-   - Electron 原生 `clipboard.writeBuffer` 一次只挂一个自定义格式、与 `writeText` 无法原子共存
-     （Electron issue #41462 未解决），**不适用**。
-   - 改用标准 Async Clipboard API（`navigator.clipboard.write` + `ClipboardItem`），自定义格式走
-     `"web "` 前缀（Chrome 104+，Obsidian Electron 内核远超此版本），对外部应用默认不可见。
-   - Obsidian 官方论坛确认插件在 Android/iOS WebView 沙箱内写自定义剪贴板数据默认被拦截——
-     **移动端只能靠运行时能力探测 + 静默完全跳过**，不能退化成单通道（会重现①的双重编号 bug）。
-3. **设计落盘 `doc/spec.md` §2.8「剪贴板净化设计」**（新增小节，2.6/2.7/目录/Roadmap M11「复制
-   净化开关」条目同步链接）：范围边界（只覆盖交互式 `copy`/`cut`，不含 Pandoc/静态站点生成器/
-   Publish 等文件级导出——那类工具直接读磁盘、不经过剪贴板事件，已由 M11「导出验证矩阵」与附录
-   A §A.5 单独覆盖）、copy/paste 两端设计、移动端能力探测降级、降级默认值（任何一步失败一律不
-   介入、维持现状，不做单通道半吊子方案）、三个留给实现周期拍板的未决问题。
-4. **`doc/testplan.md` §O 补场景**：O8（桌面端外部粘贴净化）/ O9（粘贴回已编号 vault 验证双通道
-   避免双重编号）/ O10（能力探测失败静默跳过），O4 改写为指向三者的入口行。
-
-**没做什么**：仍未写任何代码——用户本轮要求「先规划如何开工、文档写好」，不是实现。三个「留给
-实现周期拍板」的问题（触发范围、隐藏通道 payload 内容、`clipboard.read()` 是否弹权限提示）故意
-留白，等下一个编码周期在真实 Obsidian 渲染进程里边做边定，不在纯设计阶段瞎猜。
-
-**验证方式**：纯文档改动，无代码变更，不适用 `npm test`/`lint`；`npm run docs` 归档 + 内部锚点
-校验（新增 §2.8 锚点 `#28-剪贴板净化设计m11复制净化开关技术选型2026-07-10-定案未实现` 与
-Roadmap/testplan 三处引用手动核对一致）。
-
-**本周期派发 0 次**（用户全程直接对话讨论 + 主模型自己读代码验证 `hasUnclaimedForeignNumbering`
-判据范围，未派 SubAgent）。
-
-**下一步**：进入实现周期——按 spec §2.8 设计实现桌面端双通道 copy/paste 钩子，拍板三个留白问题，
-补 `tests/dev_tests/` 单测（重点覆盖 O9 的双重编号回归）与 O8/O10 的实机验证方式；testplan O8–O10
-状态回填。其后回到 M11 其余项（导出矩阵、Canvas O1、E8、审阅模式、H8+清库撤销、CM6 原子区域）。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -157,6 +155,7 @@ obsidian-auto-headings/
 │   ├── whitelist.ts        白名单归一化/命中判定/面板预览分析
 │   ├── backlinks.ts        Backlink 同步纯函数核心（改名表/锚点归一/链接重写）
 │   ├── cleanup.ts          清除编号命令的内容级封装
+│   ├── clipboard.ts        剪贴板净化纯逻辑（WJ 剥离/换行规范化/净化→原文 LRU，spec §2.8）
 │   ├── pathrules.ts        路径规则 → 模板解析（纯函数）
 │   ├── frontmatter.ts      单文件开关（obsidian-auto-headings: true/false）读取
 │   ├── i18n.ts             中英双语文案（Messages 接口 + zh/en 两套）
@@ -164,7 +163,7 @@ obsidian-auto-headings/
 │   │   ├── model.ts        设置数据模型（全局开关、防抖延迟、路径规则持久化）
 │   │   ├── SettingsTab.ts  设置 GUI 壳：TAB 栏 + 分发（内容在 tabs/，M7 多 TAB 已拆完）
 │   │   └── tabs/           七个 TAB 的实现
-│   │       ├── GeneralTab.ts      常规设置（全局开关、防抖、语言、Backlink 开关）
+│   │       ├── GeneralTab.ts      常规设置（全局开关、防抖、语言、Backlink 开关、复制净化开关）
 │   │       ├── TemplatesTab.ts    模板列表（自绘 header：折叠/命名/删除）
 │   │       ├── EditPanel.ts       模板编辑面板（级别格式网格 + 跳级/占位字符）
 │   │       ├── WhitelistEditor.ts 白名单行编辑器（分段控件/行内编辑/命中角标）

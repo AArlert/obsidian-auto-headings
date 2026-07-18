@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-07-10 1.0.9 剪贴板 WJ 净化：技术选型定案（用户指示，claude/clipboard-wj-pollution-mecppf）
+
+**做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
+
+1. **承接上一周期的遗留讨论**（剪贴板 WJ 污染净化，见 status 首行 `next`）：本周期继续只讨论
+   方向，验证了「插件能否识别被清除 WJ 的内容」这一悬而未决的前提——答案是**不能安全识别**：
+   `hasUnclaimedForeignNumbering`（`src/cleanup.ts:112-118`）的外来编号探测是**全文件级**的，
+   只要目标文件别处还有一个 WJ 就不生效；净化后的无 WJ 内容粘贴进已编号 vault 会被 `stripPrefix`
+   当纯正文、叠加新前缀，产生 `## 2 1 标题` 式双重编号（与 U1/U2/J10 系列历史 bug 同构）。据此
+   否决了「单通道净化」（复制时无条件清 WJ），转向「双通道」方向。
+2. **摸清双通道的技术选型**（WebSearch 调研 + 用户拍板）：
+   - Electron 原生 `clipboard.writeBuffer` 一次只挂一个自定义格式、与 `writeText` 无法原子共存
+     （Electron issue #41462 未解决），**不适用**。
+   - 改用标准 Async Clipboard API（`navigator.clipboard.write` + `ClipboardItem`），自定义格式走
+     `"web "` 前缀（Chrome 104+，Obsidian Electron 内核远超此版本），对外部应用默认不可见。
+   - Obsidian 官方论坛确认插件在 Android/iOS WebView 沙箱内写自定义剪贴板数据默认被拦截——
+     **移动端只能靠运行时能力探测 + 静默完全跳过**，不能退化成单通道（会重现①的双重编号 bug）。
+3. **设计落盘 `doc/spec.md` §2.8「剪贴板净化设计」**（新增小节，2.6/2.7/目录/Roadmap M11「复制
+   净化开关」条目同步链接）：范围边界（只覆盖交互式 `copy`/`cut`，不含 Pandoc/静态站点生成器/
+   Publish 等文件级导出——那类工具直接读磁盘、不经过剪贴板事件，已由 M11「导出验证矩阵」与附录
+   A §A.5 单独覆盖）、copy/paste 两端设计、移动端能力探测降级、降级默认值（任何一步失败一律不
+   介入、维持现状，不做单通道半吊子方案）、三个留给实现周期拍板的未决问题。
+4. **`doc/testplan.md` §O 补场景**：O8（桌面端外部粘贴净化）/ O9（粘贴回已编号 vault 验证双通道
+   避免双重编号）/ O10（能力探测失败静默跳过），O4 改写为指向三者的入口行。
+
+**没做什么**：仍未写任何代码——用户本轮要求「先规划如何开工、文档写好」，不是实现。三个「留给
+实现周期拍板」的问题（触发范围、隐藏通道 payload 内容、`clipboard.read()` 是否弹权限提示）故意
+留白，等下一个编码周期在真实 Obsidian 渲染进程里边做边定，不在纯设计阶段瞎猜。
+
+**验证方式**：纯文档改动，无代码变更，不适用 `npm test`/`lint`；`npm run docs` 归档 + 内部锚点
+校验（新增 §2.8 锚点 `#28-剪贴板净化设计m11复制净化开关技术选型2026-07-10-定案未实现` 与
+Roadmap/testplan 三处引用手动核对一致）。
+
+**本周期派发 0 次**（用户全程直接对话讨论 + 主模型自己读代码验证 `hasUnclaimedForeignNumbering`
+判据范围，未派 SubAgent）。
+
+**下一步**：进入实现周期——按 spec §2.8 设计实现桌面端双通道 copy/paste 钩子，拍板三个留白问题，
+补 `tests/dev_tests/` 单测（重点覆盖 O9 的双重编号回归）与 O8/O10 的实机验证方式；testplan O8–O10
+状态回填。其后回到 M11 其余项（导出矩阵、Canvas O1、E8、审阅模式、H8+清库撤销、CM6 原子区域）。
+
+---
+
 ## 2026-07-10 1.0.9 Backlink 两开关合一（用户指示，claude/backlink-switch-consolidation-j7mol6）
 
 **做了什么**：

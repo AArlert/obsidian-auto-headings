@@ -46,6 +46,13 @@ export interface AutoHeadingsSettings {
 	 * 弹一条较长的说明（改了什么、在哪里关），只弹一次。持久化以免每次启动重复打扰。
 	 */
 	backlinksIntroShown: boolean;
+	/**
+	 * 复制净化（M11「复制净化开关」，1.0.10，见 spec.md §2.8）：copy/cut 时把插件写入的 WJ 哨兵
+	 * 从剪贴板出口剥净（外部应用不再收到隐形字符），同会话内粘贴回本库时自动还原原文避免双重
+	 * 编号。**默认开**（M11 信任包：把 WJ 风险从「披露」升级到「主动消解」；WJ 守卫保证不含
+	 * 编号的复制粘贴零介入）。单开关同时门控 copy/cut 净化与 paste 还原两端。
+	 */
+	sanitizeClipboard: boolean;
 }
 
 /** 防抖延迟的边界与默认值（见 spec.md §3.9）。 */
@@ -59,7 +66,7 @@ export function defaultPathRules(): PathRule[] {
 }
 
 /** 默认设置：全局自动编号开启、防抖延迟 300 ms、预置 `/`→「默认」根规则、语言自动、
- * Backlink 同步开（全局生效，与编号与否无关）。 */
+ * Backlink 同步开（全局生效，与编号与否无关）、复制净化开（M11 信任包）。 */
 export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	autoNumber: true,
 	debounceDelay: DEBOUNCE_DEFAULT,
@@ -67,6 +74,7 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	language: DEFAULT_LANG_SETTING,
 	updateBacklinks: true,
 	backlinksIntroShown: false,
+	sanitizeClipboard: true,
 };
 
 /** 将防抖延迟夹到合法范围 [50, 2000]，非数字回退到默认值。 */
