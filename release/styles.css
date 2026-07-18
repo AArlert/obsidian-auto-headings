@@ -287,8 +287,8 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 
 .ah-path-row {
 	display: grid;
-	/* 拖拽手柄 行号 路径模式 模板 删除 */
-	grid-template-columns: 24px 32px 1fr 1fr 40px;
+	/* 拖拽手柄 行号 路径模式 模板 批量重编号 删除 */
+	grid-template-columns: 24px 32px 1fr 1fr 28px 28px;
 	gap: 6px;
 	align-items: center;
 }
@@ -408,6 +408,10 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 	flex-shrink: 0;
 	cursor: pointer;
 	color: var(--text-faint);
+	/* lucide SVG（setIcon）：flex 居中；尺寸取 --icon-s，与下钻箭头同族同大小、比例适中不至于太小。 */
+	display: flex;
+	align-items: center;
+	--icon-size: var(--icon-s, 16px);
 	/* 视觉尺寸仍与文字相当，靠 padding + 负 margin 扩大实际点击区，不占用额外行内空间。 */
 	padding: 0.35em 0.5em;
 	margin: -0.35em 0 -0.35em -0.5em;
@@ -419,11 +423,14 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 	background: var(--background-modifier-hover);
 }
 
-/* 文件夹行右侧的下钻箭头：与 .ah-path-suggest-back 同一套「padding + 负 margin 扩大点击区」手法。 */
+/* 文件夹行右侧的下钻箭头：与 .ah-path-suggest-back 同一套「padding + 负 margin 扩大点击区」手法与图标尺寸。 */
 .ah-path-suggest-chevron {
 	flex-shrink: 0;
 	cursor: pointer;
 	color: var(--text-faint);
+	display: flex;
+	align-items: center;
+	--icon-size: var(--icon-s, 16px);
 	padding: 0.35em 0.5em;
 	margin: -0.35em -0.5em -0.35em 0;
 	border-radius: var(--radius-s, 4px);
@@ -464,6 +471,27 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 
 .ah-path-del:hover {
 	color: var(--text-error);
+}
+
+/* 批量重编号入口（M12，testplan K16）：行内 lucide 图标按钮；「不编号」规则置灰不可点。 */
+.ah-path-batch {
+	color: var(--text-faint);
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	--icon-size: var(--icon-s, 16px);
+}
+
+.ah-path-batch:hover {
+	color: var(--text-accent);
+}
+
+.ah-path-batch-disabled,
+.ah-path-batch-disabled:hover {
+	color: var(--text-faint);
+	opacity: 0.4;
+	cursor: default;
 }
 
 /* 危险区域标题：可点击折叠/展开 */

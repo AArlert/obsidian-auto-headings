@@ -13,6 +13,7 @@
 
 import { normalizePath, type DataAdapter } from "obsidian";
 import type { Template } from "../numbering";
+import { NO_NUMBERING_TEMPLATE } from "../pathrules";
 import {
 	createDefaultTemplate,
 	DEFAULT_TEMPLATE_FILENAME,
@@ -205,6 +206,9 @@ export class TemplateStore {
 		}
 		if (trimmed === "" || trimmed === DEFAULT_TEMPLATE_NAME) {
 			return false; // 不可为空，也不可与默认模板重名。
+		}
+		if (trimmed === NO_NUMBERING_TEMPLATE) {
+			return false; // 不可占用「不编号」伪模板的哨兵名（M12，见 pathrules.ts）。
 		}
 		if (trimmed === oldName) {
 			return false; // 未改变。

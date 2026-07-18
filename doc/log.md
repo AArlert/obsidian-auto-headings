@@ -40,6 +40,45 @@
 
 ---
 
+## 2026-07-18 1.0.13 M12 两项落地：批量重编号 +「不编号」伪模板；K14/K14b 手验回填 + 箭头图标统一
+
+**做了什么**：
+
+1. **用户真机手验 1.0.12 通过**（「效果达标」）：testplan K14/K14b 的「手验 DOM」回填 ✅。随手感
+   反馈做小改：分层浏览的 `⬅` 返回 / `▸` 下钻改用**同族 lucide 图标**（`setIcon` `arrow-left` /
+   `arrow-right`，`--icon-size: var(--icon-s)`，点击区扩大手法不变）。
+2. **M12「不编号」伪模板（testplan K15）**：`pathrules.ts` 新增哨兵 `NO_NUMBERING_TEMPLATE = "$none"`；
+   `getTemplateForFile` 对哨兵返回无模板（复用「无可用模板」既有语义，自动路径静默跳过、已有编号
+   冻结）；伪模板**参与具体度解析并可胜出**（`daily/→不编号` 压过根规则）；手动命令经
+   `resolvesToNoNumbering` 弹专用 Notice；`TemplateStore.rename` 拒占哨兵名；GUI 下拉在真实模板后
+   固定伪选项，「失效模板」兜底不误伤哨兵。
+3. **M12 多文件批量重编号（testplan K16）**：`main.ts` 新增 `batchRenumberRule`——作用域=规则**路径
+   模式**命中的全部 Markdown 文件，**每个文件用它自己解析出的模板**；跳过 fm `false` / 未接管外来
+   编号（J10 同源）/「不编号」；**已打开文件走编辑器单一事务**（可撤销、无 `vault.process` 竞态），
+   未打开走 `vault.process`；backlink 照常同步且改写数**汇总一条 Notice**（`syncBacklinksCounted`
+   从 `syncBacklinks` 拆出计数核心 + `notifyBacklinkTotal` 统一出口）。GUI：行内 `list-ordered`
+   图标按钮（「不编号」行置灰）+ `BatchRenumberModal` 确认框（显示命中文件数，内联在
+   `PathRules.ts`，随 `DeleteTemplateModal` 先例）；表格加第 6 列（grid 28px×2）。
+4. **测试**：`main.test.ts` 新增 K15×3 + K16×5 共 8 例（含「点根规则批量不覆盖子规则文件」「编辑器
+   通道不被 vault 竞态覆盖」），68 例全过；`pathrules.test.ts` 45 例全过；tsc 干净。
+5. **文档**：spec §3.8 新增两段规格 + M12 两项勾选；README 双语补「规则级两件配套工具」段并修
+   「没打开的文件永远不会被碰」表述（显式确认的批量操作除外）；release-notes/1.0.13.md 双语。
+
+**没做什么**：K15/K16 的 GUI 手验 DOM 仍 🔲（下拉伪选项观感、批量确认框、批量后实测编号），留用户
+真机确认；批量重编号未做进度条 / 取消（命中数极大的库一次跑完，Notice 只在结束时汇总）——如有需求
+再立项。
+
+**验证方式**：`main.test.ts` 68 例 + `pathrules.test.ts` 45 例全过（quality-gate 定向）；
+`npm run preflight` 全绿（Windows ICU collation 预存噪音除外，CI 为准）。
+
+**本周期派发 3 次（repo-scout × 1、quality-gate × 2）**。
+
+**下一步**：用户真机手验 K15/K16（伪模板下拉 + 批量按钮/确认框）；打 tag `1.0.13` 发布（release
+工作流取 `doc/release-notes/1.0.13.md`）；M12 余项（注释块跳过、断链扫描命令、description 重排、
+公开 API 改名事件、迁移指南与社区发布）。
+
+---
+
 ## 2026-07-18 1.0.12 路径建议弹窗：统一「已配置行再次点击」的外观（K14b，用户实测反馈）
 
 **做了什么**：
@@ -112,51 +151,6 @@ testplan K14 标记 🔲 手验 DOM。
 
 **下一步**：等用户在真实 Obsidian 环境里实测分层浏览的点击/下钻/返回手感，回填 K14 手验结论；
 M11 其余项（导出验证矩阵、Canvas O1、E8 拍板、Backlink 审阅模式、H8+清库撤销、CM6 原子区域）。
-
----
-
-## 2026-07-18 1.0.10 复制净化落地：同步净化 + 内存映射双通道（用户拍板新方案，claude/clipboard-paste-spike-impl）
-
-**做了什么**：
-
-1. **方案翻案（用户认可后定案）**：spike 判死的只是「从 OS 剪贴板读自定义格式」；「是不是我们
-   净化过的内容」这一判断改问插件自己——copy/cut 净化时把 `规范化(净化文本) → 原文` 记入**插件
-   内存 LRU**，paste 时同步读 `text/plain`（标准格式在 paste 事件语境同步可读，spike 已证）查表，
-   命中才 `preventDefault()` + 还原原文。双通道复活，隐藏通道从 OS 剪贴板搬进内存；原「不接管
-   paste、O9 降已知限制」的 2026-07-15 裁定被本方案取代。`spec.md` §2.8 整节改写（spike 实测
-   保留为历史依据），§2.6「剪贴板投毒」行改记「主动消解已实现」，Roadmap M11 该项勾选。
-2. **实现（1.0.10，行为变化已 bump）**：
-   - 新增 `src/clipboard.ts`（纯逻辑：`stripWordJoiners`/`stripWordJoinersFromHtml`/
-     `normalizeClipboardText`/`ClipboardOriginalCache` LRU，条数 50 + 总字符 2M 上限，仅内存
-     不持久化——隐私考量见 spec §2.8）；
-   - `main.ts` 接线：`registerClipboardSanitizer`（copy/cut 冒泡监听，主窗口 + window-open
-     弹窗；`defaultPrevented` 区分 CM6 编辑器路径=覆写 text/plain+text/html 并记 LRU、阅读模式
-     路径=DOM 选区自构造净化 payload 不记 LRU）与 `restoreSanitizedPaste`（editor-paste 五道
-     同步守卫：他人已处理 / 未命中 / 目标编号未生效 / 多光标 / 开关关，全过才整段还原原文）；
-   - 设置开关 `sanitizeClipboard`（默认开，GeneralTab + i18n 中英 + loadSettings 迁移兜底）；
-   - README 双语：「粘贴到其他应用」改为已消解 + 开关位置，「导出与外发」复制行改「已消除」。
-3. **测试**：`tests/dev_tests/clipboard.test.ts` 28 例——纯函数 / LRU（含 CRLF 规范化命中、
-   逐出与刷新序、超限不驻留）/ O9 内容级回归（还原→重排等价裸文本追加、反例出现 `3 1` 双重
-   编号证明还原必要）/ 插件级 copy/paste 守卫矩阵（经 obsidian-mock 直调私有方法）。
-   `testplan.md` O8/O9 改写为新方案并升 ⚠️（逻辑已单测、实机待 §7.1），O10 改写降级语义。
-
-**没做什么 / 环境注记**：O4/O8 实机字节检查、O10 移动端实机仍待 §7.1 环境。本机（Windows）有
-两处**预存**环境性红灯，与本次改动无关、CI（Ubuntu）为准：① `whitelist.test.ts:406` 排序断言
-随本地 ICU collation 失败（stash 干净基线复现）；② `format:check` 对未跟踪 `.codex/`、`.claude/`
-配置与部分历史文件报换行符差异。本次触碰的全部文件已单独 `prettier --check` 全绿。
-
-**验证方式**：`clipboard.test.ts` 28/28、`npm run lint`、`test:fuzz` 5000×80、触碰文件
-prettier 全绿；`npm test` 除上述预存红灯外全过；合并后以 master CI 结果为最终门槛。
-
-**追记（同周期第二笔提交）**：Release 工作流升级——`gh release create` 的说明优先取仓库内
-`doc/release-notes/<tag>.md`（人写双语说明、随代码入库可追溯），缺文件回退 `--generate-notes`；
-新增 `doc/release-notes/1.0.10.md`（本版复制净化的用户向双语说明）。动机：本机无 gh CLI，
-发布说明走「入库 + CI 发布」通道，顺带沉淀为常设机制。
-
-**本周期派发 3 次（quality-gate × 3）**。
-
-**下一步**：M11 其余项（导出验证矩阵、Canvas O1、E8 拍板、Backlink 审阅模式、H8+清库撤销、
-CM6 原子区域）；§7.1 实机环境就绪后回填 O4/O8/O9/O10 实测结论。
 
 ---
 

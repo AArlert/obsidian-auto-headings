@@ -5,6 +5,51 @@
 
 ---
 
+## 2026-07-18 1.0.10 复制净化落地：同步净化 + 内存映射双通道（用户拍板新方案，claude/clipboard-paste-spike-impl）
+
+**做了什么**：
+
+1. **方案翻案（用户认可后定案）**：spike 判死的只是「从 OS 剪贴板读自定义格式」；「是不是我们
+   净化过的内容」这一判断改问插件自己——copy/cut 净化时把 `规范化(净化文本) → 原文` 记入**插件
+   内存 LRU**，paste 时同步读 `text/plain`（标准格式在 paste 事件语境同步可读，spike 已证）查表，
+   命中才 `preventDefault()` + 还原原文。双通道复活，隐藏通道从 OS 剪贴板搬进内存；原「不接管
+   paste、O9 降已知限制」的 2026-07-15 裁定被本方案取代。`spec.md` §2.8 整节改写（spike 实测
+   保留为历史依据），§2.6「剪贴板投毒」行改记「主动消解已实现」，Roadmap M11 该项勾选。
+2. **实现（1.0.10，行为变化已 bump）**：
+   - 新增 `src/clipboard.ts`（纯逻辑：`stripWordJoiners`/`stripWordJoinersFromHtml`/
+     `normalizeClipboardText`/`ClipboardOriginalCache` LRU，条数 50 + 总字符 2M 上限，仅内存
+     不持久化——隐私考量见 spec §2.8）；
+   - `main.ts` 接线：`registerClipboardSanitizer`（copy/cut 冒泡监听，主窗口 + window-open
+     弹窗；`defaultPrevented` 区分 CM6 编辑器路径=覆写 text/plain+text/html 并记 LRU、阅读模式
+     路径=DOM 选区自构造净化 payload 不记 LRU）与 `restoreSanitizedPaste`（editor-paste 五道
+     同步守卫：他人已处理 / 未命中 / 目标编号未生效 / 多光标 / 开关关，全过才整段还原原文）；
+   - 设置开关 `sanitizeClipboard`（默认开，GeneralTab + i18n 中英 + loadSettings 迁移兜底）；
+   - README 双语：「粘贴到其他应用」改为已消解 + 开关位置，「导出与外发」复制行改「已消除」。
+3. **测试**：`tests/dev_tests/clipboard.test.ts` 28 例——纯函数 / LRU（含 CRLF 规范化命中、
+   逐出与刷新序、超限不驻留）/ O9 内容级回归（还原→重排等价裸文本追加、反例出现 `3 1` 双重
+   编号证明还原必要）/ 插件级 copy/paste 守卫矩阵（经 obsidian-mock 直调私有方法）。
+   `testplan.md` O8/O9 改写为新方案并升 ⚠️（逻辑已单测、实机待 §7.1），O10 改写降级语义。
+
+**没做什么 / 环境注记**：O4/O8 实机字节检查、O10 移动端实机仍待 §7.1 环境。本机（Windows）有
+两处**预存**环境性红灯，与本次改动无关、CI（Ubuntu）为准：① `whitelist.test.ts:406` 排序断言
+随本地 ICU collation 失败（stash 干净基线复现）；② `format:check` 对未跟踪 `.codex/`、`.claude/`
+配置与部分历史文件报换行符差异。本次触碰的全部文件已单独 `prettier --check` 全绿。
+
+**验证方式**：`clipboard.test.ts` 28/28、`npm run lint`、`test:fuzz` 5000×80、触碰文件
+prettier 全绿；`npm test` 除上述预存红灯外全过；合并后以 master CI 结果为最终门槛。
+
+**追记（同周期第二笔提交）**：Release 工作流升级——`gh release create` 的说明优先取仓库内
+`doc/release-notes/<tag>.md`（人写双语说明、随代码入库可追溯），缺文件回退 `--generate-notes`；
+新增 `doc/release-notes/1.0.10.md`（本版复制净化的用户向双语说明）。动机：本机无 gh CLI，
+发布说明走「入库 + CI 发布」通道，顺带沉淀为常设机制。
+
+**本周期派发 3 次（quality-gate × 3）**。
+
+**下一步**：M11 其余项（导出验证矩阵、Canvas O1、E8 拍板、Backlink 审阅模式、H8+清库撤销、
+CM6 原子区域）；§7.1 实机环境就绪后回填 O4/O8/O9/O10 实测结论。
+
+---
+
 ## 2026-07-15 1.0.9 剪贴板 WJ 净化：paste 端 spike 完成，OS 剪贴板隐藏通道判死（Codex 会话，claude/clipboard-paste-spike-impl；收尾由 2026-07-18 会话补记）
 
 **做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：

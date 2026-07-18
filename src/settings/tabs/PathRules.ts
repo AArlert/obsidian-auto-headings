@@ -1,10 +1,11 @@
-import { Notice, Setting } from "obsidian";
+import { Modal, Notice, Setting, setIcon, type App } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import type { Messages } from "../../i18n";
 import {
 	autocompleteFolderSlash,
 	findDuplicatePatternIndex,
 	hasRootRule,
+	NO_NUMBERING_TEMPLATE,
 	type PathCandidate,
 	type PathRule,
 } from "../../pathrules";
@@ -75,7 +76,7 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 	// —— 规则表格（可滚动；表头 sticky）——
 	const table = containerEl.createDiv({ cls: "ah-path-table" });
 	const head = table.createDiv({ cls: "ah-path-row ah-path-head" });
-	for (const label of ["", "#", t.pathColPattern, t.pathColTemplate, ""]) {
+	for (const label of ["", "#", t.pathColPattern, t.pathColTemplate, "", ""]) {
 		head.createDiv({ cls: "ah-path-cell", text: label });
 	}
 
@@ -182,8 +183,17 @@ function renderPathRuleRow(
 			opt.selected = true;
 		}
 	}
-	// 规则引用的模板已不存在（理论上不应发生）时，补一个失效项以免静默改投。
-	if (!plugin.templateStore.has(rule.template)) {
+	// 「不编号」伪模板（M12，testplan K15）：固定排在真实模板之后的伪选项——文件夹级彻底关闭
+	// 编号，替代逐文件 frontmatter `false`（哨兵值不落模板文件，见 pathrules.ts）。
+	const noneOpt = select.createEl("option", {
+		value: NO_NUMBERING_TEMPLATE,
+		text: t.pathTemplateNone,
+	});
+	if (rule.template === NO_NUMBERING_TEMPLATE) {
+		noneOpt.selected = true;
+	}
+	// 规则引用的模板已不存在（理论上不应发生）时，补一个失效项以免静默改投（伪模板不算失效）。
+	if (rule.template !== NO_NUMBERING_TEMPLATE && !plugin.templateStore.has(rule.template)) {
 		const opt = select.createEl("option", {
 			value: rule.template,
 			text: t.templateMissingSuffix(rule.template),
@@ -194,8 +204,33 @@ function renderPathRuleRow(
 		rule.template = select.value;
 		void plugin.saveSettings().then(() => {
 			plugin.renumberActiveFile();
+			tab.display(); // 重绘行内状态：切到/切出「不编号」要同步置灰/恢复批量按钮（K16）。
 		});
 	});
+
+	// 批量重编号入口（M12，testplan K16）：确认对话框后对该规则命中的全部文件生效；
+	// 「不编号」规则无可批量编号的内容，置灰。
+	const batchCell = row.createDiv({ cls: "ah-path-cell" });
+	const batch = batchCell.createEl("span", { cls: "ah-path-batch" });
+	setIcon(batch, "list-ordered");
+	if (rule.template === NO_NUMBERING_TEMPLATE) {
+		batch.addClass("ah-path-batch-disabled");
+		batch.setAttr("aria-label", t.batchRenumberNoneTooltip);
+		batch.title = t.batchRenumberNoneTooltip;
+	} else {
+		batch.setAttr("aria-label", t.batchRenumberTooltip);
+		batch.title = t.batchRenumberTooltip;
+		batch.addEventListener("click", () => {
+			const count = plugin.matchedMarkdownFiles(rule).length;
+			if (count === 0) {
+				new Notice(t.noticeBatchNoMatch);
+				return;
+			}
+			new BatchRenumberModal(plugin.app, t, rule.pattern, count, () => {
+				void plugin.batchRenumberRule(rule);
+			}).open();
+		});
+	}
 
 	// 删除整条规则（无背景的 ✕，不再是被椭圆按钮包住的样式）。
 	const delCell = row.createDiv({ cls: "ah-path-cell" });
@@ -249,6 +284,47 @@ function renderPathRuleRow(
  * 转而只剩「路径字面含 `/`」的深层嵌套项，观感诡异（testplan K14）。根规则改由分层浏览模式的
  * 顶部 header（可点击选中当前层，根层即「/」）承接，不再经过扁平模糊匹配这条路径。
  */
+/**
+ * 批量重编号确认对话框（M12，testplan K16）：展示规则路径与命中文件数，确认后才执行
+ * （`batchRenumberRule` 见 main.ts——跳过 frontmatter `false`/外来编号守卫/「不编号」，
+ * 已打开文件可撤销、未打开文件直接改写）。
+ */
+class BatchRenumberModal extends Modal {
+	constructor(
+		app: App,
+		private readonly t: Messages,
+		private readonly pattern: string,
+		private readonly count: number,
+		private readonly onConfirm: () => void,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl("h3", { text: this.t.batchModalTitle });
+		contentEl.createEl("p", { text: this.t.batchModalBody(this.pattern, this.count) });
+		new Setting(contentEl)
+			.addButton((btn) =>
+				btn.setButtonText(this.t.batchModalCancel).onClick(() => this.close()),
+			)
+			.addButton((btn) =>
+				btn
+					.setButtonText(this.t.batchModalConfirm)
+					.setCta()
+					.onClick(() => {
+						this.close();
+						this.onConfirm();
+					}),
+			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 function collectPathCandidates(tab: AutoHeadingsSettingTab): PathCandidate[] {
 	const vault = tab.plugin.app.vault as unknown as {
 		getAllLoadedFiles?: () => Array<{ path: string; children?: unknown }>;

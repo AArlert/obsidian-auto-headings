@@ -34,7 +34,7 @@ import {
 	type HeadingSnapshot,
 } from "./backlinks";
 import { parseHeadings, type Heading } from "./parser";
-import { resolvePathRule } from "./pathrules";
+import { NO_NUMBERING_TEMPLATE, resolvePathRule, ruleMatches, type PathRule } from "./pathrules";
 import { TemplateStore } from "./templates/TemplateStore";
 
 /**
@@ -297,7 +297,24 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (!rule) {
 			return null;
 		}
+		if (rule.template === NO_NUMBERING_TEMPLATE) {
+			// 「不编号」伪模板（M12，testplan K15）：该路径明确关闭编号——文件夹级的 frontmatter
+			// `false`。伪模板参与具体度解析并可胜出，故能压过更泛的根规则；已有编号冻结不动。
+			return null;
+		}
 		return this.templateStore.get(rule.template) ?? null;
+	}
+
+	/**
+	 * 某文件解析出的规则是否为「不编号」伪模板（M12，testplan K15）。
+	 * 供手动命令区分「路径设为不编号」与「未匹配任何规则」两种无模板情形，给出不误导的提示。
+	 */
+	private resolvesToNoNumbering(filePath: string | undefined | null): boolean {
+		if (!filePath) {
+			return false;
+		}
+		const rule = resolvePathRule(this.settings.pathRules, filePath);
+		return rule?.template === NO_NUMBERING_TEMPLATE;
 	}
 
 	/**
@@ -691,6 +708,135 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 	}
 
+	/** 某条路径规则**按路径模式**命中的全部 Markdown 文件（批量重编号的作用域，M12/K16）。 */
+	matchedMarkdownFiles(rule: PathRule): TFile[] {
+		return this.app.vault.getMarkdownFiles().filter((f) => ruleMatches(rule.pattern, f.path));
+	}
+
+	/**
+	 * 批量重编号（M12，testplan K16）：对 `rule` 路径模式命中的全部 Markdown 文件重编号，
+	 * 由路径规则表格的行内按钮经确认对话框调用（见 `PathRules.ts`）。
+	 *
+	 * - **每个文件用它自己解析出的模板**（{@link getTemplateForFile}，与自动路径一致）——点根规则
+	 *   的批量按钮不会把根模板强加给已被更具体子规则接管的文件；解析为「不编号」/无模板者跳过。
+	 * - 跳过 frontmatter `false` 与含未接管外来编号的文件（{@link guardForeignNumbering} 同源判据）：
+	 *   批量是一次作用于大量文件的操作，尊重文件级显式关闭与迁移守卫，不同于单文件手动命令的
+	 *   「绕过一切开关」。
+	 * - 已打开的文件走编辑器单一事务（可撤销，且避免 `vault.process` 读到未落盘编辑器内容的竞态，
+	 *   见 {@link foldSelfBacklinks} 的根因说明）；未打开的走 `vault.process`（无撤销，确认框已提示）。
+	 * - Backlink 同步照常（同文件内链折进主写回、跨文件改写），改写总数**汇总为一条** Notice
+	 *   （{@link syncBacklinksCounted}），避免一次批量弹出几十条「已更新链接」。
+	 */
+	async batchRenumberRule(rule: PathRule): Promise<void> {
+		const m = this.messages();
+		const files = this.matchedMarkdownFiles(rule);
+		if (files.length === 0) {
+			new Notice(m.noticeBatchNoMatch);
+			return;
+		}
+		// path → editor 映射：已打开的文件走编辑器通道。
+		const editors = new Map<string, Editor>();
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view as unknown as {
+				editor?: Editor;
+				file?: { path: string } | null;
+			};
+			if (view.editor && view.file?.path) {
+				editors.set(view.file.path, view.editor);
+			}
+		}
+		let changed = 0;
+		let unchanged = 0;
+		let skipped = 0;
+		let links = 0;
+		for (const file of files) {
+			const template = this.getTemplateForFile(file.path);
+			if (!template) {
+				skipped++; // 解析为「不编号」伪模板，或无可用模板（如更具体规则引用已失效模板）。
+				continue;
+			}
+			const editor = editors.get(file.path);
+			const result = editor
+				? await this.batchRenumberViaEditor(editor, file, template)
+				: await this.batchRenumberViaVault(file, template);
+			if (result.outcome === "skipped") {
+				skipped++;
+			} else if (result.outcome === "changed") {
+				changed++;
+			} else {
+				unchanged++;
+			}
+			links += result.links;
+		}
+		new Notice(m.noticeBatchDone(changed, unchanged, skipped));
+		await this.notifyBacklinkTotal(links);
+	}
+
+	/** 已打开文件的批量重编号通道：与 {@link applyRenumber} 同构，但 backlink Notice 交批量端汇总。 */
+	private async batchRenumberViaEditor(
+		editor: Editor,
+		file: LinkTarget,
+		template: Template,
+	): Promise<{ outcome: "changed" | "unchanged" | "skipped"; links: number }> {
+		const oldContent = editor.getValue();
+		if (readFileSwitch(oldContent) === false || hasUnclaimedForeignNumbering(oldContent)) {
+			return { outcome: "skipped", links: 0 };
+		}
+		const { prefixes, suffixes } = this.strippableAffixes();
+		const fold = this.foldSelfBacklinks(
+			file,
+			oldContent,
+			renumberContent(oldContent, template, {
+				strippablePrefixes: prefixes,
+				strippableSuffixes: suffixes,
+			}),
+		);
+		const wrote = this.writeLineDiff(editor, oldContent, fold.content);
+		this.headingSnapshots.set(file.path, snapshotHeadings(fold.content));
+		const links = await this.syncBacklinksCounted(file, fold.renames, fold.selfCount);
+		return { outcome: wrote ? "changed" : "unchanged", links };
+	}
+
+	/** 未打开文件的批量重编号通道：`vault.process` 原子读改写（守卫命中时原样返回、不写入）。 */
+	private async batchRenumberViaVault(
+		file: TFile,
+		template: Template,
+	): Promise<{ outcome: "changed" | "unchanged" | "skipped"; links: number }> {
+		// 结果经对象属性带出闭包（TS 的流分析不追踪闭包内赋值，直接用局部 let 会误判比较恒假）。
+		const box: {
+			outcome: "changed" | "unchanged" | "skipped";
+			renames: HeadingRename[];
+			selfCount: number;
+			content: string;
+		} = { outcome: "unchanged", renames: [], selfCount: 0, content: "" };
+		await this.app.vault.process(file, (content) => {
+			if (readFileSwitch(content) === false || hasUnclaimedForeignNumbering(content)) {
+				box.outcome = "skipped";
+				return content;
+			}
+			const { prefixes, suffixes } = this.strippableAffixes();
+			const fold = this.foldSelfBacklinks(
+				file,
+				content,
+				renumberContent(content, template, {
+					strippablePrefixes: prefixes,
+					strippableSuffixes: suffixes,
+				}),
+			);
+			box.renames = fold.renames;
+			box.selfCount = fold.selfCount;
+			box.content = fold.content;
+			box.outcome = fold.content === content ? "unchanged" : "changed";
+			return fold.content;
+		});
+		if (box.outcome === "skipped") {
+			return { outcome: "skipped", links: 0 };
+		}
+		this.headingSnapshots.set(file.path, snapshotHeadings(box.content));
+		const links = await this.syncBacklinksCounted(file, box.renames, box.selfCount);
+		return { outcome: box.outcome, links };
+	}
+
 	/**
 	 * 取「当前活动 Markdown 文件」的编辑器与上下文，供设置面板**敏感操作 TAB** 的两个单文件清除
 	 * 入口使用。设置面板是模态层，`getActiveViewOfType(MarkdownView)` 可能返回 `null`（N1 同源），
@@ -883,7 +1029,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 		const template = this.getTemplateForFile(path);
 		if (!template) {
-			new Notice(this.messages().noticeNoRule);
+			// 区分「路径设为不编号」与「未匹配任何规则」（K15）：前者是用户的明确配置，不该提示成后者。
+			const m0 = this.messages();
+			new Notice(
+				this.resolvesToNoNumbering(path) ? m0.noticeNoNumberingRule : m0.noticeNoRule,
+			);
 			return;
 		}
 
@@ -1026,8 +1176,21 @@ export default class AutoHeadingsPlugin extends Plugin {
 		renames: HeadingRename[],
 		selfCount: number,
 	): Promise<void> {
+		const total = await this.syncBacklinksCounted(target, renames, selfCount);
+		await this.notifyBacklinkTotal(total);
+	}
+
+	/**
+	 * {@link syncBacklinks} 的计数核心（不弹 Notice，返回改写的链接总数）：批量重编号（M12，
+	 * testplan K16）逐文件调用本方法并**汇总成一条** Notice，避免一次批量弹出几十条「已更新链接」。
+	 */
+	private async syncBacklinksCounted(
+		target: LinkTarget | null | undefined,
+		renames: HeadingRename[],
+		selfCount: number,
+	): Promise<number> {
 		if (!this.settings.updateBacklinks || !target?.path || renames.length === 0) {
-			return;
+			return 0;
 		}
 		let total = selfCount;
 		const map = new Map(renames.map((r) => [r.from, r.to]));
@@ -1058,16 +1221,25 @@ export default class AutoHeadingsPlugin extends Plugin {
 				}
 			}
 		}
-		if (total > 0) {
-			const m = this.messages();
-			new Notice(m.noticeBacklinksUpdated(total));
-			// 首次实际改写别的文件时，弹一次较长的说明（默认开的曝光度配套，0.7.11）：说清改了什么、
-			// 改动不在被改文件的撤销历史内、以及在哪里关闭。只弹一次并持久化。
-			if (!this.settings.backlinksIntroShown) {
-				this.settings.backlinksIntroShown = true;
-				await this.saveSettings();
-				new Notice(m.noticeBacklinksIntro, 12000);
-			}
+		return total;
+	}
+
+	/**
+	 * Backlink 改写总数的统一 Notice 出口：单文件路径由 {@link syncBacklinks} 调用，批量重编号
+	 * 汇总后调用一次。`total ≤ 0` 时静默。
+	 */
+	private async notifyBacklinkTotal(total: number): Promise<void> {
+		if (total <= 0) {
+			return;
+		}
+		const m = this.messages();
+		new Notice(m.noticeBacklinksUpdated(total));
+		// 首次实际改写别的文件时，弹一次较长的说明（默认开的曝光度配套，0.7.11）：说清改了什么、
+		// 改动不在被改文件的撤销历史内、以及在哪里关闭。只弹一次并持久化。
+		if (!this.settings.backlinksIntroShown) {
+			this.settings.backlinksIntroShown = true;
+			await this.saveSettings();
+			new Notice(m.noticeBacklinksIntro, 12000);
 		}
 	}
 }

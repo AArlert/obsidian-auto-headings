@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AutoHeadingsPlugin from "../../src/main";
 import { DEFAULT_TEMPLATE, WORD_JOINER, type Template } from "../../src/numbering";
-import type { PathRule } from "../../src/pathrules";
+import { NO_NUMBERING_TEMPLATE, type PathRule } from "../../src/pathrules";
 import { Notice, TFile as MockTFile } from "./obsidian-mock";
 
 /** 假编辑器：持有按行切分的文本，记录 `transaction` 调用次数（用于「单一事务」断言）。 */
@@ -66,6 +66,7 @@ interface PluginInternals {
 	vaultClearInProgress: boolean;
 	scheduleRenumber(editor: unknown, info: unknown): void;
 	runImmediateRenumber(editor: unknown, ctx: unknown): void;
+	batchRenumberRule(rule: PathRule): Promise<void>;
 	strippableAffixes(): { prefixes: string[]; suffixes: string[] };
 	renumberActiveFile(): void;
 	renumberOnOpen(file: { path: string }): void;
@@ -1068,5 +1069,93 @@ describe("清除全库编号（敏感操作 TAB，0.7.11：清除期间压制自
 		p.scheduleRenumber(ed, fileInfo("a.md"));
 		vi.advanceTimersByTime(300);
 		expect(ed.txnCount).toBe(0);
+	});
+});
+
+describe("M12：「不编号」伪模板（testplan K15）与多文件批量重编号（K16）", () => {
+	/** 根规则投「默认」+ `sub/` 文件夹规则投「不编号」伪模板。 */
+	const noneRules = (): PathRule[] => [
+		{ pattern: "/", template: "默认" },
+		{ pattern: "sub/", template: NO_NUMBERING_TEMPLATE },
+	];
+
+	it("K15：解析命中「不编号」规则时无可用模板，且压过更泛的根规则", () => {
+		const { p } = makePlugin({ pathRules: noneRules() });
+		expect(p.getTemplateForFile("a.md")).not.toBeNull();
+		expect(p.getTemplateForFile("sub/x.md")).toBeNull();
+	});
+
+	it("K15：自动路径对「不编号」路径静默跳过，已有编号冻结不动", () => {
+		const { p } = makePlugin({ pathRules: noneRules() });
+		const ed = new FakeEditor([`## ${WORD_JOINER}1 ${WORD_JOINER}旧章`, "## 新章"].join("\n"));
+		p.scheduleRenumber(ed, fileInfo("sub/x.md"));
+		vi.advanceTimersByTime(300);
+		expect(ed.txnCount).toBe(0); // 不重排、也不剥除已有编号（与 frontmatter false 同语义）。
+	});
+
+	it("K15：手动「立即重新编号」弹专用 Notice，而非误导性的「未匹配任何规则」", () => {
+		const { p } = makePlugin({ pathRules: noneRules() });
+		const ed = new FakeEditor("## 章");
+		p.runImmediateRenumber(ed, fileInfo("sub/x.md"));
+		expect(ed.txnCount).toBe(0);
+		expect(Notice.messages).toContain("当前文件所在路径已设为「不编号」");
+		expect(Notice.messages).not.toContain("当前文件未匹配任何路径规则，无法编号");
+	});
+
+	it("K16：批量重编号改写规则命中的未打开文件（vault 通道），并汇总完成 Notice", async () => {
+		const { p, vaultFiles } = makePlugin({
+			vaultFiles: {
+				"a.md": "## 甲",
+				"b.md": `## ${WORD_JOINER}1 ${WORD_JOINER}乙`, // 已是正确编号 → 无变化。
+			},
+		});
+		await p.batchRenumberRule({ pattern: "/", template: "默认" });
+		expect(vaultFiles.get("a.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}甲`);
+		expect(vaultFiles.get("b.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}乙`);
+		expect(Notice.messages).toContain("批量重编号完成：改写 1 个，无变化 1 个，跳过 0 个");
+	});
+
+	it("K16：每个文件用自己解析出的模板——「不编号」子规则接管的文件被跳过、内容冻结", async () => {
+		const rules = noneRules();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: { "a.md": "## 甲", "sub/x.md": "## 乙" },
+		});
+		await p.batchRenumberRule(rules[0]); // 点的是根规则的批量按钮，sub/x.md 也在其路径模式命中范围内。
+		expect(vaultFiles.get("a.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}甲`);
+		expect(vaultFiles.get("sub/x.md")).toBe("## 乙"); // 不套用根模板，尊重更具体的「不编号」。
+		expect(Notice.messages).toContain("批量重编号完成：改写 1 个，无变化 0 个，跳过 1 个");
+	});
+
+	it("K16：frontmatter false 与未接管外来编号的文件被跳过（J10 守卫同源）", async () => {
+		const fmOff = ["---", "obsidian-auto-headings: false", "---", "## 甲"].join("\n");
+		const foreign = "## 1 红米\n### 1.1 工艺";
+		const { p, vaultFiles } = makePlugin({
+			vaultFiles: { "off.md": fmOff, "foreign.md": foreign, "ok.md": "## 乙" },
+		});
+		await p.batchRenumberRule({ pattern: "/", template: "默认" });
+		expect(vaultFiles.get("off.md")).toBe(fmOff);
+		expect(vaultFiles.get("foreign.md")).toBe(foreign);
+		expect(vaultFiles.get("ok.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}乙`);
+		expect(Notice.messages).toContain("批量重编号完成：改写 1 个，无变化 0 个，跳过 2 个");
+	});
+
+	it("K16：已打开的文件走编辑器单一事务，不经 vault 写回（无竞态覆盖）", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			vaultFiles: { "a.md": "## 落盘旧内容" },
+		});
+		const ed = new FakeEditor("## 编辑器新内容");
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+		await p.batchRenumberRule({ pattern: "/", template: "默认" });
+		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}编辑器新内容`);
+		expect(ed.txnCount).toBe(1);
+		expect(vaultFiles.get("a.md")).toBe("## 落盘旧内容"); // vault 侧未被读盘-写回竞态覆盖。
+	});
+
+	it("K16：规则未命中任何文件时直接 Notice、不做任何写入", async () => {
+		const { p, vaultFiles } = makePlugin({ vaultFiles: { "a.md": "## 甲" } });
+		await p.batchRenumberRule({ pattern: "nope/", template: "默认" });
+		expect(vaultFiles.get("a.md")).toBe("## 甲");
+		expect(Notice.messages).toContain("该规则当前未命中任何 Markdown 文件");
 	});
 });

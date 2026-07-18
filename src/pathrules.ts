@@ -24,9 +24,22 @@
 export interface PathRule {
 	/** 路径模式：`/`（根）、`Foo/`（文件夹）、`Foo/bar.md`（文件）。 */
 	pattern: string;
-	/** 命中时使用的模板名（即 `templates/*.json` 的模板显示名）。 */
+	/**
+	 * 命中时使用的模板名（即 `templates/*.json` 的模板显示名），
+	 * 或伪模板哨兵 {@link NO_NUMBERING_TEMPLATE}（「不编号」）。
+	 */
 	template: string;
 }
+
+/**
+ * 「不编号」伪模板的哨兵值（M12，testplan K15）：存进 `PathRule.template`，表示命中该规则的
+ * 文件**彻底关闭编号**——文件夹级的 frontmatter `false`，免去逐文件维护。语义细节：
+ * - 参与常规的具体度解析（{@link resolvePathRule}）并可胜出，故能**压过更泛的根规则**；
+ * - 命中后自动路径静默不编号、已有编号冻结不动（与 frontmatter `false` 相同，不主动剥除）；
+ * - 手动「立即重新编号」命中它时弹专用 Notice（不是误导性的「未匹配任何规则」）。
+ * 取值带 `$` 前缀以避开正常模板名；`TemplateStore` 的新建/重命名会拒绝占用此名（防御性）。
+ */
+export const NO_NUMBERING_TEMPLATE = "$none";
 
 /**
  * 归一化路径模式：折叠反斜杠与重复斜杠、去首尾空白；`/` 视为根。

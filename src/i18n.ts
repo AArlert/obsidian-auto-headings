@@ -97,6 +97,15 @@ export interface Messages {
 	pathSuggestBackTooltip: string;
 	pathSuggestDescendTooltip: string;
 	pathSuggestSelectHereTooltip: string;
+	/** 「不编号」伪模板（M12，testplan K15）：模板下拉里的伪选项显示名。 */
+	pathTemplateNone: string;
+	/** 批量重编号（M12，testplan K16）：行内按钮 tooltip / 「不编号」行置灰 tooltip / 确认对话框文案。 */
+	batchRenumberTooltip: string;
+	batchRenumberNoneTooltip: string;
+	batchModalTitle: string;
+	batchModalBody: (pattern: string, count: number) => string;
+	batchModalConfirm: string;
+	batchModalCancel: string;
 
 	// —— 模板区 ——
 	templatesHeading: string;
@@ -239,6 +248,11 @@ export interface Messages {
 	noticeCleared: string;
 	noticeClearedVault: (count: number) => string;
 	noticeNoRule: string;
+	/** 「立即重新编号」命中「不编号」伪模板时的专用提示（区别于「未匹配任何规则」，K15）。 */
+	noticeNoNumberingRule: string;
+	/** 批量重编号（K16）：命中 0 个文件 / 完成汇总。 */
+	noticeBatchNoMatch: string;
+	noticeBatchDone: (changed: number, unchanged: number, skipped: number) => string;
 	noticeRenumbered: string;
 	noticeNoChange: string;
 	noticeNoForeign: string;
@@ -300,6 +314,16 @@ const zh: Messages = {
 	pathSuggestBackTooltip: "返回上一级",
 	pathSuggestDescendTooltip: "查看子项",
 	pathSuggestSelectHereTooltip: "选中当前层级",
+	pathTemplateNone: "不编号",
+	batchRenumberTooltip: "批量重编号：对该规则命中的全部文件重新编号",
+	batchRenumberNoneTooltip: "该规则已设为「不编号」，无可批量编号的内容",
+	batchModalTitle: "批量重编号",
+	batchModalBody: (pattern, count) =>
+		`将对匹配「${pattern}」的 ${count} 个 Markdown 文件按各自生效的模板重新编号。` +
+		"已设为「不编号」、frontmatter 关闭、或含未接管外来编号的文件会被自动跳过；" +
+		"已打开的文件可撤销，未打开的文件直接改写，建议先确认影响范围。",
+	batchModalConfirm: "重新编号",
+	batchModalCancel: "取消",
 
 	templatesHeading: "模板",
 	templatesDesc: "定义各级标题的编号格式与白名单；哪个文件用哪个模板由上方「路径规则」决定。",
@@ -438,6 +462,10 @@ const zh: Messages = {
 	noticeCleared: "已清除编号",
 	noticeClearedVault: (count) => `已清除全库编号（共修改 ${count} 个文件）`,
 	noticeNoRule: "当前文件未匹配任何路径规则，无法编号",
+	noticeNoNumberingRule: "当前文件所在路径已设为「不编号」",
+	noticeBatchNoMatch: "该规则当前未命中任何 Markdown 文件",
+	noticeBatchDone: (changed, unchanged, skipped) =>
+		`批量重编号完成：改写 ${changed} 个，无变化 ${unchanged} 个，跳过 ${skipped} 个`,
 	noticeRenumbered: "已重新编号",
 	noticeNoChange: "无需改动",
 	noticeNoForeign: "当前文件无可清理的外来编号",
@@ -503,6 +531,16 @@ const en: Messages = {
 	pathSuggestBackTooltip: "Go up one level",
 	pathSuggestDescendTooltip: "View contents",
 	pathSuggestSelectHereTooltip: "Select this level",
+	pathTemplateNone: "No numbering",
+	batchRenumberTooltip: "Batch renumber: renumber every file matched by this rule",
+	batchRenumberNoneTooltip: "This rule is set to “No numbering” — nothing to renumber",
+	batchModalTitle: "Batch renumber",
+	batchModalBody: (pattern, count) =>
+		`This will renumber ${count} Markdown file(s) matching “${pattern}”, each with its own effective template. ` +
+		"Files set to “No numbering”, disabled via frontmatter, or containing unclaimed foreign numbering are skipped automatically; " +
+		"open files support undo, closed files are rewritten directly — make sure you know the scope.",
+	batchModalConfirm: "Renumber",
+	batchModalCancel: "Cancel",
 
 	templatesHeading: "Templates",
 	templatesDesc:
@@ -648,6 +686,10 @@ const en: Messages = {
 	noticeCleared: "Numbering cleared",
 	noticeClearedVault: (count) => `Vault numbering cleared (${count} file(s) changed)`,
 	noticeNoRule: "The current file matches no path rule; cannot number it",
+	noticeNoNumberingRule: "This file's path is set to “No numbering”",
+	noticeBatchNoMatch: "This rule currently matches no Markdown files",
+	noticeBatchDone: (changed, unchanged, skipped) =>
+		`Batch renumber done: ${changed} updated, ${unchanged} unchanged, ${skipped} skipped`,
 	noticeRenumbered: "Renumbered",
 	noticeNoChange: "No change needed",
 	noticeNoForeign: "No foreign (non-plugin) numbering to clear in the current file",

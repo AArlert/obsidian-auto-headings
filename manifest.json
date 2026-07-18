@@ -1,7 +1,7 @@
 {
 	"id": "auto-headings",
 	"name": "Auto Headings",
-	"version": "1.0.12",
+	"version": "1.0.13",
 	"minAppVersion": "1.8.7",
 	"description": "Automatic heading numbering with fully customizable templates, per-folder rules, whitelist and backlink sync. Bilingual UI (English / 中文).",
 	"author": "AArlert",

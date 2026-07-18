@@ -1,3 +1,4 @@
+import { setIcon } from "obsidian";
 import {
 	browseDirForInput,
 	type PathCandidate,
@@ -218,7 +219,9 @@ export class PathSuggestPopup {
 	private renderLocationHeader(el: HTMLElement, dir: string): void {
 		const header = el.createDiv({ cls: "ah-path-suggest-location" });
 		if (dir !== "") {
-			const back = header.createSpan({ cls: "ah-path-suggest-back", text: "⬅" });
+			// lucide `arrow-left`，与下钻的 `arrow-right` 同族（用户手验反馈：两枚箭头要同一套图标）。
+			const back = header.createSpan({ cls: "ah-path-suggest-back" });
+			setIcon(back, "arrow-left");
 			back.setAttr("aria-label", this.labels.backTooltip);
 			back.title = this.labels.backTooltip;
 			back.addEventListener("mousedown", (e) => {
@@ -256,7 +259,9 @@ export class PathSuggestPopup {
 		row.addEventListener("mousemove", () => this.setSelected(i));
 
 		if (browsing && item.isFolder && this.hasChildren(item.path)) {
-			const chevron = row.createSpan({ cls: "ah-path-suggest-chevron", text: "▸" });
+			// lucide `arrow-right`，与 header 返回键的 `arrow-left` 同族。
+			const chevron = row.createSpan({ cls: "ah-path-suggest-chevron" });
+			setIcon(chevron, "arrow-right");
 			chevron.setAttr("aria-label", this.labels.descendTooltip);
 			chevron.title = this.labels.descendTooltip;
 			chevron.addEventListener("mousedown", (e) => {
