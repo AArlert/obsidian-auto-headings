@@ -361,7 +361,13 @@
 | O2 | 文件在编辑器中打开期间被外部改写（模拟 Sync / git pull：直接改磁盘同一文件的标题），随后用户编辑触发防抖 | 快照基线不陈旧：Backlink 同步不把外部改动误判为本地改名、不产生错误的链接重写 | 🔲（现状无 `vault.on("modify")` 快照刷新，spec §2.6）|
 | O3 | 与 gurjar1/auto-heading-obsidian 同库同文件先后启用 | 共存已声明**不受支持**（marker-contract §4）；实测记录互认前缀的具体现象，作为声明的证据附注 | 🔲 |
 | O4 | 复制含编号标题的段落到系统剪贴板（xclip / wl-paste 检查字节） | 现状：WJ 随剪贴板外带（记录各目标应用表现）；净化开关落地后细化场景见 O8–O10 | 🔲（M11，spec §2.8）|
-| O5 | 导出验证矩阵：内置「导出为 PDF」/ Pandoc 直转 / Pandoc `--number-sections` / Publish 锚点 URL | PDF 无 tofu、编号完整；Pandoc 直转编号保留；`--number-sections` 出现双重编号（README 已预警 + 契约 Lua filter 可剥净）；Publish 锚点记录现状 | 🔲（M11，结论回填 spec §2.6 与 README「导出与外发」）|
+| O5a | Pandoc 直转（无 filter、无 `--number-sections`），夹具 `tests/user_tests/10-导出与Pandoc兼容.md` | 插件编号原样保留；WJ 随 HTML/AST 输出外带。**出 PDF 时（`--pdf-engine=typst`）文本层无 U+2060**——PDF 的 `ToUnicode` CMap 不含 `2060`，阳性对照（同批标题里的汉字码位）正常命中 ⇒ 探针有效 | ✅（2026-07-19，pandoc 3.10 + typst 0.15.1）|
+| O5b | Pandoc `--number-sections`，不挂 filter | **复现双重编号**：pandoc 自己的 `1.1` 叠在插件烧入的 `1.1` 上 ⇒ `1.1 1.1 纯文本标题`。旧单哨兵标题同样双重；未编号标题只有 pandoc 一层（正常） | ✅（已取证，README 预警有实据）|
+| O5c | Pandoc `--number-sections` + `assets/pandoc/strip-autoheadings.lua` 默认 `strip-prefix` 模式 | 单层干净编号；**标题内联格式完好**（`<strong>`/`<code>`/`<a>` 全在，不被 stringify 压平）；输出零 WJ；旧单哨兵一并剥净；无 WJ 的标题一个字符不动 | ✅ |
+| O5d | 同上但 `-M autoheadings=strip-marker`、不加 `--number-sections` | 插件编号保留；输出零 WJ；内联格式完好 | ✅ |
+| O5e | 首个标题为 `##` 的文档（插件默认 `topLevel=H2`）+ `--number-sections` | pandoc 按**嵌套深度**而非绝对层级编号：首个 `##` = `1`、其下 `###` = `1.1`——与插件默认方案**恰好吻合**，不产生层级错位 | ✅（此前未知，本次实测定论）|
+| O5f | Obsidian **内置**「导出为 PDF」：把夹具放进真实 vault 导出，检查 ① 编号有无 tofu ② PDF 内搜索标题文字 ③ 复制粘贴到记事本看有无多余不可见字符 | 编号完整、无 tofu、文本层可搜可复制 | 🔲 **待用户真机手验**——与 O5a 是两条不同链路（Electron print-to-PDF over 阅读视图 vs pandoc+typst），O5a 的结论**不可外推** |
+| O5g | Obsidian Publish 锚点 URL：含编号标题的页面发布后检查锚点链接 | 记录 WJ 被 percent-encode 成 `%E2%81%A0` 后的链接可用性与观感 | 🔲（无 Publish 订阅，开发机无法验）|
 | O6 | CM6 原子区域交互面：整段删除 / 插件自家写回 / Vim 模式 / 编辑器内搜索替换 / IME 边界 / 移动端 | 整段删除放行（前缀随行整体删除）；自家 `editor.transaction` 不被自身拦截；其余逐项拍板并回填本行 | 🔲（M11 实现时逐项展开）|
 | O7 | 公开 API（M12）：第三方订阅标题改名事件 | 可消费"文件 F 第 N 行标题 A→B"；事件在写回完成后发出、与快照刷新口径一致 | 🔲（M12 实现时细化）|
 | O8 | 复制含编号标题的段落（编辑器选区 / 阅读模式选区各一次），粘贴到系统外部应用（记事本 / 浏览器地址栏检查字节） | 外部收到的 `text/plain`（及已写入的 `text/html`）剥净全部 WJ；编辑器路径（CM6 已接管，覆写其 payload）与阅读模式路径（原生默认复制，自构造 payload + 保留富文本）都生效；vault 内源文件与渲染不变 | ⚠️（1.0.10 已实现；净化 / 覆写决策逻辑已 dev 单测 `clipboard.test.ts`，实机字节检查待 §7.1 环境，spec §2.8）|

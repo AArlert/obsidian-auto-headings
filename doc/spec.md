@@ -206,11 +206,13 @@ Obsidian 社区呼声第一的痛点是**改标题断链**：`[[file#heading]]` 
 |------|------|------|
 | **外部全文检索 / 正则失效** | `render.ts` 的 `buildPrefix` 写出的前缀首尾各带一个 WJ（见 [2.5](#25-双哨兵自愈删后缀致序号重复的根治0720)），实际文件内容是 `## ⁠1 ⁠模块设计`，而非看起来的 `## 1 模块设计`。用户若习惯用 VS Code / ripgrep / Total Commander 等外部工具对正文做精确字符串或正则检索，搜索连续串「`1 模块设计`」**必然搜不到**——`1 ` 与 `模块设计` 之间夹着不可见字符 | ✅ 已用代码核对成立（`render.ts` 前缀拼装公式），**README 已披露**（「工作原理」节，两语言版本，2026-07-10） |
 | **跨平台剪贴板"投毒"** | 复制 Obsidian 内容粘贴到微信 / 知乎 / 语雀 / Notion / 邮件客户端等第三方编辑器时，部分平台或字体可能无法正确处理 U+2060，渲染为空白方块（tofu）、多余空格，甚至导致排版错乱 | 🔲 具体表现**仍待在真实客户端逐一实测**验证，当前开发环境无法验证；**README 已按"已知风险、不承诺具体表现"的措辞披露**（2026-07-10），并给出手动 `.replace(/⁠/g, "")` 清理建议；**主动消解已实现（1.0.10「复制净化」开关，默认开，同步净化 + 内存映射双通道，见 [2.8](#28-剪贴板净化设计m11复制净化开关2026-07-18-定案同步净化--内存映射双通道)）**——交互式 copy/cut 出口不再携带 WJ；各真实客户端的粘贴表现矩阵（O4/O8）仍待实机回填 |
-| **Dataview 检索受 WJ 影响** | Dataview 的 `page.file.headers` 读取的是 Obsidian `metadataCache` 中的原始标题文本（含 WJ），`WHERE file.headers = "1 模块设计"` 一类精确字符串匹配查询会判定为 `false` | ✅ **README 已出使用建议**（2026-07-10，DataviewJS `.replace(/⁠/g, "")` 清洗示例 + 改用 `.includes()` 匹配标题片段两种规避方式）。仍列入 [Roadmap M9「Dataview 集成」](#milestone-9--后续候选功能)候选项①——README 建议只解决"用户自己写 DataviewJS 怎么避坑"，插件原生的检索/生成集成仍是后续候选，不受本次影响 |
+| **Dataview 检索受 WJ 影响** | WJ 经三个入口进入 Dataview：`TASK`/`LIST` 查询的 `section`（Link，subpath 即标题文本）、链接 subpath、DataviewJS 里的 `metadataCache` 标题。这三处读到的都含 WJ，精确字符串匹配判定为 `false` | ✅ 已实测定案（2026-07-19，`marker-contract.md` §3「Dataview」）。**同时订正一处长期错误承诺**：此前本行与两版 README 都称 `page.file.headers`，但 Dataview **根本没有这个字段**（页面隐式字段表里无任何标题类字段，官方 metadata-pages 文档核对），那条示例查询去掉 WJ 也一样查不到——旧建议在教一个不存在的 API。新方案首推**零转义路线**（编号恒为前缀 ⇒ `endswith()`/`contains()` 不受 WJ 影响），需归一时用 `regexreplace(x, "\u2060", "")`——已逐环验证：Dataview 字符串解析器对 `\u` 原样透传（`parse.ts` escapeChar 只特判 `\"` 与 `\\`），`regexreplace` 走 `new RegExp(pat,"g")`（`functions.ts`），故那 6 个字符到达正则引擎后被当作 Unicode 转义编译。插件原生检索/生成集成仍是 [M9](#milestone-9--后续候选功能) 候选 |
 | **Backlink 批量同步引发 Git diff 噪音** | 用 Git 管理笔记库的用户，一旦改名一个被高频引用的标题，Backlink 同步会在同一时刻改写库内所有引用它的文件（如 20 个），Git 历史里产生大量单行变更的"噪音"提交 | 🔲 **新发现，尚未规划落地方案**——候选缓解方向：现有 Notice 已汇报"已更新 N 处链接"让用户至少有感知；更进一步可考虑 [Roadmap M9](#milestone-9--后续候选功能)已有的「Backlink 审阅模式（决策 D2：生成变更清单供批准）」——用户先看变更清单再批准写入而非自动静默改写，恰好同时回应"批量误改"与"Git 噪音"两个诉求，可并入同一个候选项 |
 
 | **Canvas 引用方处理靠巧合** | `syncBacklinks` 遍历 `getBacklinksForFile` 的引用方时**不过滤扩展名**：`.canvas` 文本节点里的 `[[note#锚点]]` 可能被 `[[…]]` 正则命中、在 JSON 字符串里做纯文本替换（碰巧无害但未经设计），而 canvas 的 `"file"` 字段式引用永远匹配不到、静默断链 | 🔲 已代码核对成立（`main.ts` `syncBacklinks`，2026-07-10），处理策略（显式跳过 `.canvas` 或显式支持 + 测试）待 [M11](#milestone-11--信任包插队-m8a-之前) 拍板，场景登记 testplan O1 |
-| **Obsidian Publish 锚点 URL** | Publish 按标题文本生成锚点，WJ 会被 percent-encode 成 `%E2%81%A0` 进 URL，链接可用性与观感未验证 | 🔲 待实测（[M11 导出验证矩阵](#milestone-11--信任包插队-m8a-之前)），登记 testplan O5 |
+| **Obsidian Publish 锚点 URL** | Publish 按标题文本生成锚点，WJ 会被 percent-encode 成 `%E2%81%A0` 进 URL，链接可用性与观感未验证 | 🔲 待实测（无订阅，开发机无法验），登记 testplan O5e |
+| **Pandoc 导出双重编号** | 编号已烧入正文，`--number-sections` 再编一遍 ⇒ `1.1 1.1 引言` | ✅ 已实测复现并给出解法（2026-07-19，pandoc 3.10）：仓库内置 [`assets/pandoc/strip-autoheadings.lua`](../assets/pandoc/strip-autoheadings.lua)，默认剥整个前缀交给 `--number-sections`，`-M autoheadings=strip-marker` 则保号去标记；两模式都保住标题内联格式。**旧草稿 filter 有实缺陷**（`pandoc.utils.stringify` 压平内联格式），已弃用。附带结论：`##` 起头的文档 pandoc 按嵌套深度编号（首个 `##` = `1`），与插件默认 `topLevel=H2` 方案**恰好吻合**，不产生层级错位。登记 testplan O5a–O5d |
+| **PDF 文本层残留 WJ** | 不可见字符若进 PDF 文本层，会打穿 PDF 内的搜索与复制 | ✅ Pandoc + `--pdf-engine=typst` 路径**已证无残留**（2026-07-19）：四种导出的 PDF 其 `ToUnicode` CMap 均不含 `2060`，阳性对照（同批标题里的汉字码位）正常命中 ⇒ 探针有效。**不能外推**到其他 PDF 引擎与 Obsidian 内置导出（Electron print-to-PDF，另一条链路），后者登记 testplan O5f 待真机手验 |
 | **外部写入下的陈旧快照** | `headingSnapshots` 只在 file-open 播种、插件写回后刷新，**无 `vault.on("modify")` 刷新**：文件打开期间被 Obsidian Sync / git pull 外部改写后，下一次触发的快照改名表基线陈旧，Backlink 同步可能把外部改动当成本地改名处理 | 🔲 已代码核对成立（`main.ts` 事件注册面仅 editor-change/file-open/rename/delete，2026-07-10），缓解方向（modify 事件刷新快照）待 [M11](#milestone-11--信任包插队-m8a-之前) 评估，场景登记 testplan O2 |
 | **WJ 无命名空间（同类插件共存冲突）** | gurjar1/auto-heading-obsidian 等同类插件也用 U+2060 标记编号，共存（或迁移残留）时彼此的 `stripPrefix` 可能认领对方前缀，现象为"插件互相吃对方编号"且用户无法诊断 | 🔲 未实测；已在 [`marker-contract.md`](./marker-contract.md) §4 声明共存**不受支持**并邀请下游协调换字符（2026-07-10），场景登记 testplan O3 |
 
@@ -1391,10 +1393,17 @@ i18n.ts                     // 中英双语文案（Messages 接口 + zh/en 两�
       编号，未命中完全放行 Obsidian 默认粘贴管线；任何一步失败静默维持现状；文件不变、渲染不变。
       [2.6](#26-已知生态兼容性风险待验证)「跨平台剪贴板投毒」已改记「主动消解已实现」；
       真实客户端表现矩阵与移动端实机（testplan O4/O8/O10）待回填
-- [ ] **导出验证矩阵**（吸收原 M9「带编号的导出」调研项）：核心 PDF 导出 / Pandoc（含
-      `--number-sections` 双重编号问题与 Lua filter 配方，配方初稿已在
-      [`marker-contract.md`](./marker-contract.md) §3）/ Obsidian Publish 锚点，逐一实测回填
-      [2.6](#26-已知生态兼容性风险待验证) 与 README「导出与外发」节（骨架已建，2026-07-10）
+- [x] **导出验证矩阵**（吸收原 M9「带编号的导出」调研项）：Pandoc 侧**已实测完毕**
+      （2026-07-19，pandoc 3.10 + typst 0.15.1，testplan O5a–O5e 全 ✅）——复现了
+      `--number-sections` 双重编号，交付了**可用的** filter
+      [`assets/pandoc/strip-autoheadings.lua`](../assets/pandoc/strip-autoheadings.lua)
+      （双模式、保内联格式、兼容旧单哨兵），并证实该路径 PDF 文本层无 WJ 残留；
+      附带定论：`##` 起头文档 pandoc 按嵌套深度编号，与默认 `topLevel=H2` 恰好吻合。
+      结论已回填 [2.6](#26-已知生态兼容性风险待验证) 与两版 README「导出与外发」节。
+      **注**：`marker-contract.md` §3 原 filter 初稿有实缺陷（`pandoc.utils.stringify`
+      压平标题内联格式），本次弃用并替换为指向仓库内 filter 的实测配方。
+      剩余两格不在开发机能力内，转手验：内置「导出为 PDF」（O5f，待用户真机）、
+      Publish 锚点（O5g，无订阅）
 - [ ] **大库性能实测**（testplan M12 场景）：高引用标题改名时串行 `vault.process` 的体感；
       实测后在契约/README 立性能预算数字
 - [ ] **CM6 原子区域**（自 [2.5](#25-双哨兵自愈删后缀致序号重复的根治0720) 方案表"留作后续"升格，
