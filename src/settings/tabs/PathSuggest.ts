@@ -1,4 +1,5 @@
 import {
+	browseDirForInput,
 	type PathCandidate,
 	filterPathCandidates,
 	listImmediateChildren,
@@ -18,14 +19,17 @@ export interface PathSuggestLabels {
  * 见 doc/spec.md §3.8「参考实现」）：支持键盘 ↑↓ 选择、Enter 确认、Esc 关闭，鼠标点击 / 悬停同样
  * 可选中；选中文件夹时自动带上尾斜杠。
  *
- * **两种模式（testplan K14）**：
- * - **输入框为空** → **分层浏览**：从根目录开始，只列出当前层的直接子项（文件夹优先、字典序）；
- *   顶部 header 显示当前层路径且可点击直接选中该层（根层即「/」），非根层额外有一个 `⬅` 返回
- *   上一级；文件夹行右侧的小箭头 `▸` 用于下钻查看下一层（**不**选中），行文字本身点击＝选中
- *   （与打字搜索模式手感一致，贴合参考实现「点击即选中」的默认行为——见 K14 与用户讨论定案）。
- * - **输入框有内容** → 沿用既有**扁平模糊搜索**（`filterPathCandidates`，跨全库匹配），不支持下钻。
- * 一旦开始打字即从浏览模式退出；清空回空输入则重新从根开始浏览（不记忆上次下钻到的层级，
- * 避免「误以为在编辑一个新规则、其实还停留在上次浏览的深层目录」的困惑）。
+ * **两种模式（testplan K14）**，由 {@link browseDirForInput} 依当前输入框内容决定：
+ * - **分层浏览**：输入框为空、为根 `/`、或已是某个**真实存在的文件夹**（尾斜杠，如 `A/`）时进入
+ *   ——只列出**当前层**的直接子项（文件夹优先、字典序）；顶部 header 显示当前层路径且可点击直接
+ *   选中该层（根层即「/」），非根层额外有一个 `⬅` 返回上一级；文件夹行右侧的小箭头 `▸` 用于下钻
+ *   查看下一层（**不**选中），行文字本身点击＝选中（与打字搜索模式手感一致，贴合参考实现「点击
+ *   即选中」的默认行为——见 K14 与用户讨论定案）。**已配置好 `/` 或 `A/` 的规则行再次点击时同样
+ *   进浏览**（浏览进该文件夹），与新增空行的外观一致——修复用户报告的「配好后再点又回落成扁平
+ *   匹配一堆」的视觉/功能不统一。
+ * - **扁平模糊搜索**（`filterPathCandidates`，跨全库匹配，不支持下钻）：输入框内容是**正在打字的
+ *   片段**（如 `Pro`）、**文件规则**（无尾斜杠，如 `A/note.md`）、或**尚不存在的文件夹名**时进入。
+ * 一旦开始打字非文件夹片段即从浏览退出；清空回空输入则重新从根开始浏览（不记忆上次下钻到的层级）。
  *
  * **不注入合成根候选**：参考实现的 `FolderSuggest` 显式排除根目录（`folder.path &&`），根规则
  * 改由浏览模式的 header 承接「点击选中当前层」——见 `PathRules.ts` `collectPathCandidates` 注释。
@@ -130,19 +134,22 @@ export class PathSuggestPopup {
 			activeWindow.clearTimeout(this.closeTimer);
 			this.closeTimer = null;
 		}
-		if (this.inputEl.value.trim() === "") {
-			// 空输入：进入 / 维持分层浏览，默认从根开始（不记忆上次浏览到的层级，见类注释）。
-			if (this.browseDir === null) {
-				this.browseDir = "";
-			}
-			this.items = listImmediateChildren(this.getCandidates(), this.browseDir);
+		const candidates = this.getCandidates();
+		const folderPaths = candidates.filter((c) => c.isFolder).map((c) => c.path);
+		// 决定模式：空 / 根 `/` / 已配置好的真实文件夹（尾斜杠）→ 分层浏览；其余 → 扁平模糊搜索。
+		// 关键点：已提交为 `/` 或 `A/` 的规则行再次聚焦时也进浏览（浏览进该层），视觉与新增行一致，
+		// 不再回落到「匹配一堆」的扁平列表（testplan K14 用户报告的视觉/功能不统一）。
+		const browseTarget = browseDirForInput(this.inputEl.value, folderPaths);
+		if (browseTarget !== null) {
+			this.browseDir = browseTarget;
+			this.items = listImmediateChildren(candidates, browseTarget);
 			this.open();
 			this.render();
 			return;
 		}
-		// 有输入内容：退出浏览模式，回到既有的扁平模糊搜索。
+		// 打字中的片段 / 文件规则 / 尚不存在的文件夹：退出浏览模式，回到扁平模糊搜索。
 		this.browseDir = null;
-		this.items = filterPathCandidates(this.getCandidates(), this.inputEl.value);
+		this.items = filterPathCandidates(candidates, this.inputEl.value);
 		if (this.items.length === 0) {
 			this.close();
 			return;

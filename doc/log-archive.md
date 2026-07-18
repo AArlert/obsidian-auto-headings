@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-15 1.0.9 剪贴板 WJ 净化：paste 端 spike 完成，OS 剪贴板隐藏通道判死（Codex 会话，claude/clipboard-paste-spike-impl；收尾由 2026-07-18 会话补记）
+
+**做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
+
+1. **paste 端真机 spike**：在真实 Obsidian 桌面客户端（Electron 37.10.2 / Chromium
+   138.0.7204.251，Windows）DevTools Console 实测四步，结论回填 `spec.md` §2.8：
+   - `event.clipboardData.types`（同步）与 `paste` 事件内的异步 `navigator.clipboard.read()`
+     **都看不到** `"web "` 自定义格式（只见 `text/plain`）——Chromium 对 paste 事件语境的既有
+     安全限制，非本地环境异常；
+   - `keydown` 层拦截后事件外 `read()` **能**读到自定义格式（证明写入本身成功），但该方案要求
+     无差别接管所有 Ctrl+V 并合成 `paste` 事件（`isTrusted=false`），跨插件兼容风险与功能定位
+     不成比例，否决。
+2. **范围裁定（用户决策）**：paste 端不接管，只做 copy/cut 端净化；O9（粘贴回同 vault 已编号
+   文件的双重编号）降为已知限制。
+
+**没做什么**：未写代码；本周期收尾三件套（log 块 / status 行 / 提交）当时缺失，由 2026-07-18
+接手会话补记——**该裁定随后即被 2026-07-18 周期的「内存映射双通道」新方案推翻**，见上一块
+（倒序在本块之上）；本块保留 spike 实测事实作为历史依据。
+
+**验证方式**：纯文档改动；spike 结论以 `spec.md` §2.8 回填文本为准。
+
+**本周期派发 0 次**（Codex 会话直接实测）。
+
+**下一步**：按裁定实现 copy/cut 端净化（后被新方案取代，见后续周期块）。
+
+---
+
 ## 2026-07-10 1.0.9 剪贴板 WJ 净化：3 个留白问题拍板 2 个（用户指示，claude/clipboard-wj-pollution-mecppf）
 
 **做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：

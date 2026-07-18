@@ -250,3 +250,34 @@ export function listImmediateChildren(
 			return a.path.localeCompare(b.path);
 		});
 }
+
+/**
+ * 判断某输入框内容是否应进入**分层浏览**：是则返回要浏览的目录路径（根为 `""`），否则返回
+ * `null`（交给 {@link filterPathCandidates} 的扁平模糊搜索）。供建议弹窗决定两种模式（testplan K14）。
+ *
+ * **规则**（`folderPaths` 是 vault 内真实文件夹路径清单，均不带尾斜杠、根为 `""`）：
+ * - 空串（新增未填的行）或根 `/`（含 `//`、`\` 等归一化写法）→ 返回 `""`，浏览根目录；
+ * - **以 `/` 结尾**且去掉尾斜杠后是 `folderPaths` 里真实存在的文件夹 → 返回该文件夹路径，浏览**进**
+ *   该文件夹（header 显示当前层、可 `⬅` 返回上一级）——这样**已配置好 `/` 或 `A/` 的规则行再次
+ *   点击时，看到的仍是分层视图**，而不是回落到「匹配一堆」的扁平列表（用户报告的视觉/功能不统一）；
+ * - 其余一律 `null`：正在打字的片段（如 `Pro`）、文件规则（如 `A/note.md`，无尾斜杠）、尚不存在的
+ *   文件夹名（如新建时手输 `newdir/`）——这些交给扁平模糊搜索，配合 `autocompleteFolderSlash` 兜底。
+ */
+export function browseDirForInput(input: string, folderPaths: readonly string[]): string | null {
+	const trimmed = input.trim();
+	if (trimmed === "") {
+		return "";
+	}
+	const slashed = trimmed.replace(/\\/g, "/");
+	// 去掉前导 `./` 与前导斜杠、折叠重复斜杠后为空 ⇒ 用户表达的是根（`/`、`//`、`\` 等写法）。
+	const normalized = slashed.replace(/\/+/g, "/").replace(/^\.?\//, "");
+	if (normalized === "") {
+		return "";
+	}
+	if (!slashed.endsWith("/")) {
+		// 非文件夹写法（正在打字、或指向具体文件）——交给扁平模糊搜索。
+		return null;
+	}
+	const dir = normalized.replace(/\/$/, "");
+	return folderPaths.includes(dir) ? dir : null;
+}
