@@ -1,3 +1,4 @@
+{"type": "log", "date": "2026-07-06", "version": "1.0.7", "summary": "doc/harness-workflow-ic-verification.md 追加 §7（Agent 工作流脚本串联链路：SessionStart→handover→质量自检→release/bump/docs→pre-commit/CI 门禁→合并 master）与 §8（省上下文/省 token 六机制：分层摘要/归档不加载/脚本代数/handover聚合/grep菜谱/结构化数据+字数上限）；纯知识沉淀，未 bump 版本号。"}
 {"type": "log", "date": "2026-07-06", "version": "1.0.7", "summary": "新增 doc/harness-workflow-ic-verification.md：提炼本仓库多 Agent 协作 Harness 机制（分层记忆/机械脚本化/两级门禁/UVM 约束随机测试思想）为通用原则，并给出迁移到 IC 设计验证 Agent 工作的具体架构建议；纯知识沉淀，不涉及插件行为，未 bump 版本号。"}
 {"type": "log", "date": "2026-07-05", "version": "1.0.7", "summary": "新增 hasUnclaimedForeignNumbering 探测 + main.ts 三处自动写入前守卫：疑似外来编号且插件从未接触过的文件跳过自动写入、提示一次；手动命令不受影响；已知边界（部分接管文件新增外来段落不再拦截）已测试固化。"}
 {"type": "log", "date": "2026-07-05", "version": "1.0.6", "summary": "按 doc/README_UPDATE_REPORT.md 结构提案重写 README.md/README.zh.md（开箱即用/深入定制两层组织），融入八处设计权衡说明，删除已落地的调研报告；纯文档改动，未 bump 版本号。"}

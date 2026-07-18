@@ -5,6 +5,51 @@
 
 ---
 
+## 2026-07-10 1.0.9 Backlink 两开关合一（用户指示，claude/backlink-switch-consolidation-j7mol6）
+
+**做了什么**：
+
+1. **设置模型合并**（`src/settings/model.ts`）：删除 `backlinkStandaloneTrigger` 字段与
+   `DEFAULT_SETTINGS` 对应默认值；`updateBacklinks` 字段注释改为「全局生效，与是否命中编号模板 /
+   是否实际写入编号无关」。
+2. **触发逻辑合并**（`src/main.ts`）：`shouldBacklinkStandaloneTrigger` 判据从
+   `!backlinkStandaloneTrigger || !updateBacklinks` 简化为仅 `!updateBacklinks`——独立于编号模板的
+   触发路径（CR-18）不再需要额外 opt-in，随总开关一起全局生效；仍受 frontmatter `false` 与
+   `vaultClearInProgress` 约束（未变）。`loadSettings` 迁移逻辑删掉旧字段的默认值回填，改为
+   `delete merged.backlinkStandaloneTrigger` 清理存量 data.json 里的死字段。
+3. **GUI 精简**（`src/settings/tabs/GeneralTab.ts` + `src/i18n.ts`）：删除第二个开关
+   「无模板/未编号时也同步链接」（`backlinkStandaloneTriggerName/Desc`，中英文接口 + 两语言实现）；
+   保留的「同步内部链接（Backlink）」开关描述改写为说明「全局生效，与是否编号无关」，用户不再需要
+   理解两层开关语义。
+4. **测试同步**（`tests/dev_tests/main.test.ts`）：测试辅助 `PluginInternals`/`makePlugin` 选项删除
+   `backlinkStandaloneTrigger` 字段；原「M19–M25」用例矩阵重写为「M20–M25」——M19（独立触发关+无模板）
+   与 M23（总开关关）语义合并（现在只有一个总开关，关闭即两种效果都不触发），其余用例改为断言单开关
+   下的全局生效行为，不再传 `backlinkStandaloneTrigger` 选项。
+5. **文档同步**：`doc/spec.md` §3.12 三处（`updateBacklinks` 设计原则段、CR-18 详述段、CR-18 表格行）
+   + Roadmap M12 打勾项，改写为「1.0.8 落地独立开关 → 1.0.9 并入单开关」的演变叙事，说明两层开关是
+   「无谓认知负担」；`doc/testplan.md` §M 开头 blockquote + M19–M26 场景行同步重写，删除 M19（并入
+   M23）与 M26（GUI 面板行，因第二个开关已不存在）。
+
+**没做什么**（用户明确本轮范围之外）：剪贴板 WJ 污染问题（复制到 Obsidian 外应清除所有 WJ 标记、
+复制到 Obsidian 内应保留 WJ 以便识别「这是本插件已编号的内容」避免重复编号）本轮**只讨论不动代码**——
+用户原话「干净导出属于讨论任务」。现状：`main.ts` 依旧无任何 `clipboard`/`copy`/`paste` 事件钩子
+（`repo-scout` 定位确认），该问题连「插件能否识别被清除 WJ 的内容」这一前提都未探明，留待后续周期
+单独立项讨论（候选落点：spec.md §2.6 已知生态兼容性风险 或 M11 信任包「复制净化」项，见 status.jsonl
+`next`）。
+
+**验证方式**：`npm test`（359 通过）/ `npm run lint` / `npm run format:check` 三项全绿（quality-gate
+子代理跑的收尾档）；`npm run release` 重建 `release/` 三件套 + zip，`tsc -noEmit` 随 build 隐式过一遍
+类型检查（设置模型删字段后接口收窄，若有遗漏引用会在此处报错，实测无报错）。未做 Obsidian 内实测
+（远程环境无 GUI，纯代码 + 单测层面验证）。
+
+**本周期派发 2 次**（repo-scout ×1 定位两开关与 WJ 剪贴板现状、quality-gate ×1 收尾档 test+lint+format）。
+
+**下一步**：M11 信任包内「复制净化」讨论——需要先探明「插件能否从被清除 WJ 的编号标题正确识别/恢复
+编号状态」这一前提是否成立，成立的话方案可以简化（无需区分粘贴目的地，插件自适应识别即可）；不成立
+再回到「复制到 Ob 内保留 WJ / 复制到 Ob 外清除 WJ」的双路径设计。
+
+---
+
 ## 2026-07-10 1.0.8 SubAgent 派发体系落地 + 清理 sync-plugin-repo 迁移遗留（claude/subagent-harness-dispatch）
 
 **做了什么**（纯 harness/文档周期，无插件行为变化，按上架后策略不 bump）：

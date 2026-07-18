@@ -40,6 +40,33 @@
 
 ---
 
+## 2026-07-15 1.0.9 剪贴板 WJ 净化：paste 端 spike 完成，OS 剪贴板隐藏通道判死（Codex 会话，claude/clipboard-paste-spike-impl；收尾由 2026-07-18 会话补记）
+
+**做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
+
+1. **paste 端真机 spike**：在真实 Obsidian 桌面客户端（Electron 37.10.2 / Chromium
+   138.0.7204.251，Windows）DevTools Console 实测四步，结论回填 `spec.md` §2.8：
+   - `event.clipboardData.types`（同步）与 `paste` 事件内的异步 `navigator.clipboard.read()`
+     **都看不到** `"web "` 自定义格式（只见 `text/plain`）——Chromium 对 paste 事件语境的既有
+     安全限制，非本地环境异常；
+   - `keydown` 层拦截后事件外 `read()` **能**读到自定义格式（证明写入本身成功），但该方案要求
+     无差别接管所有 Ctrl+V 并合成 `paste` 事件（`isTrusted=false`），跨插件兼容风险与功能定位
+     不成比例，否决。
+2. **范围裁定（用户决策）**：paste 端不接管，只做 copy/cut 端净化；O9（粘贴回同 vault 已编号
+   文件的双重编号）降为已知限制。
+
+**没做什么**：未写代码；本周期收尾三件套（log 块 / status 行 / 提交）当时缺失，由 2026-07-18
+接手会话补记——**该裁定随后即被 2026-07-18 周期的「内存映射双通道」新方案推翻**，见上一块
+（倒序在本块之上）；本块保留 spike 实测事实作为历史依据。
+
+**验证方式**：纯文档改动；spike 结论以 `spec.md` §2.8 回填文本为准。
+
+**本周期派发 0 次**（Codex 会话直接实测）。
+
+**下一步**：按裁定实现 copy/cut 端净化（后被新方案取代，见后续周期块）。
+
+---
+
 ## 2026-07-10 1.0.9 剪贴板 WJ 净化：3 个留白问题拍板 2 个（用户指示，claude/clipboard-wj-pollution-mecppf）
 
 **做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
@@ -112,51 +139,6 @@ Roadmap/testplan 三处引用手动核对一致）。
 **下一步**：进入实现周期——按 spec §2.8 设计实现桌面端双通道 copy/paste 钩子，拍板三个留白问题，
 补 `tests/dev_tests/` 单测（重点覆盖 O9 的双重编号回归）与 O8/O10 的实机验证方式；testplan O8–O10
 状态回填。其后回到 M11 其余项（导出矩阵、Canvas O1、E8、审阅模式、H8+清库撤销、CM6 原子区域）。
-
----
-
-## 2026-07-10 1.0.9 Backlink 两开关合一（用户指示，claude/backlink-switch-consolidation-j7mol6）
-
-**做了什么**：
-
-1. **设置模型合并**（`src/settings/model.ts`）：删除 `backlinkStandaloneTrigger` 字段与
-   `DEFAULT_SETTINGS` 对应默认值；`updateBacklinks` 字段注释改为「全局生效，与是否命中编号模板 /
-   是否实际写入编号无关」。
-2. **触发逻辑合并**（`src/main.ts`）：`shouldBacklinkStandaloneTrigger` 判据从
-   `!backlinkStandaloneTrigger || !updateBacklinks` 简化为仅 `!updateBacklinks`——独立于编号模板的
-   触发路径（CR-18）不再需要额外 opt-in，随总开关一起全局生效；仍受 frontmatter `false` 与
-   `vaultClearInProgress` 约束（未变）。`loadSettings` 迁移逻辑删掉旧字段的默认值回填，改为
-   `delete merged.backlinkStandaloneTrigger` 清理存量 data.json 里的死字段。
-3. **GUI 精简**（`src/settings/tabs/GeneralTab.ts` + `src/i18n.ts`）：删除第二个开关
-   「无模板/未编号时也同步链接」（`backlinkStandaloneTriggerName/Desc`，中英文接口 + 两语言实现）；
-   保留的「同步内部链接（Backlink）」开关描述改写为说明「全局生效，与是否编号无关」，用户不再需要
-   理解两层开关语义。
-4. **测试同步**（`tests/dev_tests/main.test.ts`）：测试辅助 `PluginInternals`/`makePlugin` 选项删除
-   `backlinkStandaloneTrigger` 字段；原「M19–M25」用例矩阵重写为「M20–M25」——M19（独立触发关+无模板）
-   与 M23（总开关关）语义合并（现在只有一个总开关，关闭即两种效果都不触发），其余用例改为断言单开关
-   下的全局生效行为，不再传 `backlinkStandaloneTrigger` 选项。
-5. **文档同步**：`doc/spec.md` §3.12 三处（`updateBacklinks` 设计原则段、CR-18 详述段、CR-18 表格行）
-   + Roadmap M12 打勾项，改写为「1.0.8 落地独立开关 → 1.0.9 并入单开关」的演变叙事，说明两层开关是
-   「无谓认知负担」；`doc/testplan.md` §M 开头 blockquote + M19–M26 场景行同步重写，删除 M19（并入
-   M23）与 M26（GUI 面板行，因第二个开关已不存在）。
-
-**没做什么**（用户明确本轮范围之外）：剪贴板 WJ 污染问题（复制到 Obsidian 外应清除所有 WJ 标记、
-复制到 Obsidian 内应保留 WJ 以便识别「这是本插件已编号的内容」避免重复编号）本轮**只讨论不动代码**——
-用户原话「干净导出属于讨论任务」。现状：`main.ts` 依旧无任何 `clipboard`/`copy`/`paste` 事件钩子
-（`repo-scout` 定位确认），该问题连「插件能否识别被清除 WJ 的内容」这一前提都未探明，留待后续周期
-单独立项讨论（候选落点：spec.md §2.6 已知生态兼容性风险 或 M11 信任包「复制净化」项，见 status.jsonl
-`next`）。
-
-**验证方式**：`npm test`（359 通过）/ `npm run lint` / `npm run format:check` 三项全绿（quality-gate
-子代理跑的收尾档）；`npm run release` 重建 `release/` 三件套 + zip，`tsc -noEmit` 随 build 隐式过一遍
-类型检查（设置模型删字段后接口收窄，若有遗漏引用会在此处报错，实测无报错）。未做 Obsidian 内实测
-（远程环境无 GUI，纯代码 + 单测层面验证）。
-
-**本周期派发 2 次**（repo-scout ×1 定位两开关与 WJ 剪贴板现状、quality-gate ×1 收尾档 test+lint+format）。
-
-**下一步**：M11 信任包内「复制净化」讨论——需要先探明「插件能否从被清除 WJ 的编号标题正确识别/恢复
-编号状态」这一前提是否成立，成立的话方案可以简化（无需区分粘贴目的地，插件自适应识别即可）；不成立
-再回到「复制到 Ob 内保留 WJ / 复制到 Ob 外清除 WJ」的双路径设计。
 
 ---
 
