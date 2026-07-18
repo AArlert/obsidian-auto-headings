@@ -32,16 +32,14 @@
  * 两者相等 ⟺ `stripPrefix` 把历史前缀剥得干干净净。**任何前缀叠加 / 残留都会让两侧不等而被当场抓出**
  * （B1–B5、C3 都能被这一条逮到），且参考侧复用**可信的 build 路径**、不重复实现编号逻辑。
  *
- * ## 两种模式与两块记分板（0.6.2 升级）
+ * ## 两种模式与两块记分板
  *
  * 由 {@link GenConfig} 切换：
  * - **默认模式**（{@link DEFAULT_GEN}，参考模型记分板 {@link World.check}）：在「已修好、参考不变量恒成立」
- *   的受约束空间里随机，确保 CI 常绿、专逮残留 / 叠加。本轮在此**放开 inherit×非空前后缀**（B8 实测无 bug）、
- *   **新增就地安全编辑** {@link OpKind editTitleInPlace}（模拟在已编号标题里继续打字）。
+ *   的受约束空间里随机，确保 CI 常绿、专逮残留 / 叠加。
  * - **explore 模式**（{@link EXPLORE_GEN}，幂等性记分板 {@link World.checkIdempotent}）：**放开全部约束**
  *   （字母样式 / inherit×非空前后缀 / 脏标题 / 手动破坏前缀），用恒成立的幂等性（`renumber∘renumber===renumber`）
- *   找 bug。本轮在 20000×80 里撞出 testplan §3.2 的 **U1**（低于 topLevel 标题逐次侵蚀）、**U2**（标点
- *   titleSeparator 吞标题首段数字）、**U3**（字母样式吞英文起头标题）。
+ *   找 bug。历次压测撞出的 bug（U1–U4）及各自修复状态见 `doc/testplan.md` §3.2，不在此重复。
  *
  * ## 约束（= 默认模式下 strip 健壮性的精确刻画）
  *
@@ -56,59 +54,14 @@
  * > 默认约束**就是 bug 边界**：放开一条 = 扩大覆盖，放开后变红即没修彻底。explore 模式则故意越过这些边界
  * > 找新 bug（U1/U2/U3 即此而来）。详见 uvm/README.md「放开约束」。
  *
- * ## 0.6.5 升级：扩大验证空间与自由度
+ * ## 历史演进
  *
- * 把「插件全部可设置 + 用户可操作」更完整地纳入激励空间：
- * - **真实白名单驱动**：删去旧版注入的 `isWhitelisted` 回调，改由 `template.whitelist`（随机 0–2 条，
- *   匹配方式含 **exact/partial/subtree**）驱动引擎的 {@link computeWhitelistExemptions}——旧版**完全没
- *   覆盖子树 / 部分匹配与「子标题随根豁免」**。新增 `setWhitelist` 配置激励（增 / 删 / 改条目，覆盖
- *   「改白名单后再触发」的状态转移）。DUT 与参考两侧均走真实 whitelist，故能逮「带历史前缀 vs 裸文档」
- *   的豁免分叉（8000×80 默认模式全绿 → 确认 exact/partial/subtree 引擎实现一致、无前缀敏感分叉）。
- * - **结束编号层级 bottomLevel**：新增 `setBottomLevel` 激励（在 [topLevel,6] 随机），覆盖「只编号区间」
- *   与「收窄区间后剥残留」。
- * - **起始编号数字 startIndex**（0.7.13，M8 批次 1）：新增 `setStartIndex` 激励（0/1/2/5 随机，偏 0/1），
- *   覆盖「0 起编号首段偏移」与「改值后再触发旧前缀剥净」；配 startIndex=0 / non-default 两个覆盖 bin。
- * - **覆盖率新 bin**：whitelist-exact/partial/subtree、subtree-带子标题、bottomLevel-narrowed（默认 500×60 闭合）。
- * - explore 模式（新维度叠加脏编辑）撞出 **U4**（标题正文以**空白起头**时连续触发非幂等：首次保留前导空格、
- *   再次被 parser `[ \t]+` 收拢，见 testplan §3.2）——登记未修。
- *
- * ## 0.7.1 升级：纳入 Backlink 往返不变量（M7）
- *
- * 编号改写标题文本 → 指向旧标题的内部链接需同步（见 spec.md §3.12）。新增第三块记分板
- * {@link World.checkBacklinkRoundTrip}：对每次触发的「编号前→后」文本，断言 `src/backlinks.ts` 的
- * **改名表幂等** + **链接重写往返一致**（指向旧标题的 `[[Target#旧]]` 重写后恰指向同一标题的新名）。
- * 两种 oracle 都跑（纯属文本性质），在整个随机编号空间里压测 backlink 核心；新增覆盖率 bin `backlink-rename`。
- *
- * ## 0.7.5 升级：纳入「清除命令」与「两层触发门控」（扩展蓝图阶段 1，见 testplan §4.1）
- *
- * 把更多**真实用户操作**纳入激励空间，原框架只压 `renumberContent`，现补两类：
- * - **缺口①清除命令**：新增激励 {@link OpKind clearNumbering}（`clearNumberingContent`）/
- *   {@link OpKind clearForeign}（`clearForeignNumberingContent`），并配两条记分板——
- *   **S4 清除还原律**（清除编号 → 还原裸文档）+ **S5 清外来不动律**（清外来 → 不动自家 WJ 编号）。
- *   只在「裸文档为 clear 定点」时施加（排除自食/外来样标题），且**仅参考模式**（explore 的 mutatePrefix
- *   故意抹 WJ，此后清外来剥掉残缺前缀属预期，见 testplan §3.2 S5b）。
- * - **缺口②两层触发门控**：新增 {@link OpKind setFrontmatterSwitch}（true/false/非法/删除）/
- *   {@link OpKind setAutoNumber}，触发分**手动**（{@link OpKind manualTrigger}，绕过门控）/**自动**
- *   （`trigger`，过真实 {@link readFileSwitch} + 全局开关的 `shouldAutoTrigger`）。**S6 门控**：门控关时
- *   `rendered` 冻结、且真实开关解析与结构化 fm 状态一致（{@link World.checkGate}）。
- *
- * 8000×80 两记分板全绿、**未发现引擎 bug**。
- *
- * ## 0.7.6 升级：World→Vault 多文件 + 多模板 + 路径规则 + S7（扩展蓝图阶段 2，缺口③）
- *
- * 把「单文件单模板」升级为**仓库模型**，覆盖远更多真实用户操作：
- * - **多文件**：{@link World.files} 持若干文件（各自 bare/rendered/frontmatter），`switchFile` 切换当前
- *   编辑 / 触发对象；每文件按真实 {@link resolvePathRule} + 查找解析**各自的生效模板**。
- * - **多模板**：{@link World.templates} 命名模板集（共享前后缀候选池，保固定剥离并集为真实
- *   `strippableAffixes()` 上界）；config 类激励改**随机一个模板**的字段。生命周期：createTemplate /
- *   deleteTemplate（锚点「默认」不可删；引用其的规则降级/改投/连删）/ renameTemplate（改名 + 同步规则）。
- * - **路径规则**：{@link World.pathRules}（addRule/deleteRule/editRulePattern/setRuleTemplate/reorderRule），
- *   删根规则 → 该文件无模板（自动静默 / 手动无操作，I7/K6）。
- * - **S7 模板解析记分板**（{@link World.checkResolution}）：无悬挂引用（生命周期同步正确）+ 锚点恒在 +
- *   真实解析与独立参考 {@link World.expectedResolve} 一致。跨模板残留（B2/B3）由参考模型每文件压测。
- *
- * 8000×80 + 20000×80 三记分板全绿、**未发现引擎 bug**。剥离并集取共享候选池上界（动态活模板并集 +
- * 删模板孤儿残留留 backlog，见 testplan §4.1.1 注）。Backlink 开关门控（缺口④）属集成层，留 main.test。
+ * 框架历经多轮扩容：0.6.2 建立双记分板雏形；0.6.5 纳入真实白名单驱动 + bottomLevel + startIndex；
+ * 0.7.1 纳入 Backlink 往返不变量（`World.checkBacklinkRoundTrip`）；0.7.5 纳入清除命令 S4/S5 与两层
+ * 触发门控 S6；0.7.6 从「单文件单模板」升级为多文件 + 多模板 + 路径规则的仓库模型（S7）。1.0.13 起
+ * 按职责拆成 9 个文件（见文末 re-export 与 `uvm/README.md`「文件分工」节）。各阶段动机、实现细节与
+ * 压测结果已详细记录，**不在此重复**，需要时查 `doc/log-archive.md` 对应版本条目（`0.6.2`/`0.6.5`/
+ * `0.7.1`/`0.7.5`/`0.7.6`）；bug 发现与修复状态以 `doc/testplan.md` §3.2 为准。
  */
 
 import {
