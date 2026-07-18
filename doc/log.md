@@ -41,6 +41,86 @@
 
 ---
 
+## 2026-07-19 1.0.14 M12 两项：注释块跳过（含分区域残留分治）+ 固化编号并交还所有权（全库）
+
+**背景**：本块是「导出 + 离场」四项里的**周期 B**（有行为变化，故 bump 1.0.14 并重建 `release/`）；
+周期 A（导出与 Dataview，纯文档）见下一块。
+
+**做了什么**：
+
+1. **注释块跳过**（M12，spec §3.17 新节，testplan E19–E29 全 ✅）：`%%…%%` 与 `<!--…-->` 内的
+   `#` 行不视为标题——不编号、**不推进计数器**、不进 backlink 快照。
+   - **新增 `src/scan.ts`** 作为跳过区域的唯一权威扫描器。此前 `parser.ts` 与 `numbering.ts`
+     各自维护了一份**同构的围栏状态机**、且后者要反向从 `./parser` 借 `FENCE_RE`，依赖方向别扭；
+     现在两处都只消费 `scanSkipRegions`。`parser.ts` 保留一个 `FENCE_RE` 的 re-export 兼容既有 import。
+   - 与围栏的关键差异是**注释可行内开闭**，不能沿用「整行 continue」。定下 **R1–R10 十条裁决**
+     （spec §3.17 表），核心是 **R2「行首定标题」**：`## 标题 %% 批注 %%` 与 `## 标题 <!--`
+     **本行都仍是标题**（`#` 未被遮蔽），后者只遮蔽**下方**各行。
+   - 两条**明确记为已知限制**、并各配一条钉住现状的用例：① 注释内的 ``` 会开启围栏（R5 反向）；
+     ② 行内代码 `` `<!--` `` 里的分隔符照常触发（R6，正确处理需 CommonMark 级反引号游程
+     tokenizer）。两者的失败方向都是「多跳过 / 冻结」而非「误编号」，且可见可恢复，故接受。
+2. **区域内残留的分区域分治**（本次最细的一条决策，用户拍板 + 设计审查共同收敛，spec §3.17）：
+   标题被**事后**包进区域后，WJ 前缀会留在里面。两类区域**故意给不同待遇**——
+
+   | 区域 | 自动重编号 | 显式清除命令 |
+   |---|---|---|
+   | 注释块 | **清掉** | 清掉 |
+   | 围栏代码块 | **原样冻结** | 清掉 |
+
+   理由：**注释块是隐藏散文**，里面的 WJ 残留在阅读视图根本不可见、用户肉眼永远找不到，
+   插件清掉自己留下的东西是安全的；**围栏是字面内容**，日常编辑绝不能改写——否则一段
+   「演示本插件 WJ 格式的代码块」会在敲字过程中被静默吃掉。但**清除命令必须两类都清**，
+   否则注释里那份不可见残留会挺过「清除全库编号」，直接违背标记契约「永远可退出 / 精确剥净」
+   的承诺。判据一律用 **WJ 而非「看起来像编号」**；一行同时属两类时以围栏为准（更保守）。
+   实现为 `cleanDemotedResidue` 的 `ResidueScope` 参数，缺省两者 false = 0.7.20 原行为。
+3. **固化编号并交还所有权（全库）**（M12，spec §3.18 新节，testplan H9–H12）：编号**原样保留**
+   为普通文本、移除全部标记、插件停止接管。入口在敏感操作 TAB 第 4 项 + 二次确认框，
+   **刻意不注册命令面板命令**——它比清库更需要防误触（清库清掉的还能重编回来，固化之后插件
+   已认不出那些编号是自己写的）。三个非显然点：
+   - **必须全文级剥离，不能只处理标题行**。`backlinks.ts` 的 `displayAnchor` 刻意把 WJ 写进
+     `[[file#⁠1 ⁠标题]]`（Obsidian 锚点解析按字节比对、不剥 WJ），只剥标题行会让链接侧仍带 WJ、
+     与标题字节对不上 ⇒ **全库内链集体断链**。两侧同步归零才对。H9 用例把这条钉死。
+   - **停止接管需要硬闸，只关 `autoNumber` 不够**：`shouldAutoTrigger` 里 `fm === true` 在全局
+     开关**之前**返回 true，带 `obsidian-auto-headings: true` 的文件固化后一编辑就会在已成普通
+     文本的编号上再叠一层 ⇒ 双重编号。故新增 `settings.retired`，闸放在该函数**首行**。
+     刻意**不动 `autoNumber`**（那是用户偏好，恢复接管时不该要他重设）——与清库 H7 刻意相反。
+   - **恢复路径复用既有机制、零新建**：解除 retired 后，固化编号因已无 WJ 被
+     `hasUnclaimedForeignNumbering` 判为外来编号，`guardForeignNumbering` 命中并跳过写入；
+     用户跑既有的「清理非本插件的标题编号」即可干净重编。
+   - **离场状态必须可见**：`retired` 时全局设置页顶部显示提示条 + 「恢复接管」按钮
+     （`.ah-retired-banner`）。离场后下面那个「全局自动编号」开关即便开着也没有任何效果，
+     没有这条提示用户只会觉得「插件坏了」——这是本功能最容易砸掉信任的地方。
+4. **`stripWordJoiners` 从 `clipboard.ts` 迁到 `strip.ts`**（`WORD_JOINER` 的定义处）：它现在同时
+   服务剪贴板净化与固化离场，不再是剪贴板专属。原处 re-export，既有 import 与单测零改动。
+5. **文档**：spec 新增 §3.17/§3.18 + §2 边界表加一行 + M12 两条勾掉；`marker-contract.md` §1 给
+   「无 WJ ⇒ 插件从未碰过」加了**固化**这个新例外（这是对下游的语义变更，必须写进契约）、
+   §5「干净卸载」扩为 A/B 两条路；两版 README 的「如何干净地离开」同步；**订正 README 关于
+   Number Headings 的说法**——它久拖未决的两条呼声（按文件夹排除编号、注释块跳过）**现在都已实现**，
+   原文还写着「都在路线图上」。新增 `doc/release-notes/1.0.14.md`。
+
+**没做什么**：**UVM 激励未扩到注释块**——按设计审查的落地顺序，先做 DUT + 静态用例并让**现有 UVM 套件
+一行不改跑全绿**（这本身即零回归证明，已达成），扩激励另起一个 commit。扩之前必须先拆三颗雷：
+① `SAFE_FRAGMENTS`/`MESSY_FRAGMENTS` 若含未配对的 `%%` 或裸 `<!--`，`editTitleInPlace` 会在标题行
+开启未闭合注释、遮蔽下方全文 ⇒ 参考模型必然假红；② `deleteLine` 删注释定界行与既有围栏失衡同因同果，
+`deletable` 过滤需同步扩；③ R3 形态标题会把 `%%` 带进 backlink 往返（`oracles.ts` 现只排除 `[[]#|`），
+应先只进 explore 池。H12（确认框文案与离场提示条）是 GUI 手验，保持 🔲。
+
+**验证方式**：`npx tsc -noEmit` ✅；`npm test` **438 通过**（新增 25 条注释块用例 + 6 条固化用例全绿），
+唯一红灯仍是 `whitelist.test.ts:406` 的本机 ICU collation 既知假红；`npm run lint` ✅；
+**`npm run test:fuzz --runs=5000 --ops=80` 两块记分板全绿（4.64s）**——核心逻辑（`scan.ts` +
+`cleanDemotedResidue` 重写）在大规模随机状态转移下稳定。零回归的结构性论证：UVM 激励不产生注释块，
+故 `inComment` 恒 false，加上自动路径 `fences: false`，行为与 0.7.20 逐字节一致。
+另：三条断言「空数组」的已知限制用例本身缺乏鉴别力（解析器整个坏掉也会通过），已给 R5 反向那条
+**补了对照组**（去掉 ``` 后必须恢复识别）。
+
+**本周期派发 4 次（quality-gate × 4）**。
+
+**下一步**：打 tag `1.0.14` 发布（`doc/release-notes/1.0.14.md` 已备好）。手验清单交用户：
+H12 固化确认框与离场提示条、H9 真库跑一遍确认内链不断、O5f 内置「导出为 PDF」、Dataview 样例真库跑通。
+UVM 注释块激励（含上面三颗雷）另起一轮。
+
+---
+
 ## 2026-07-19 1.0.13（未 bump）M11 导出验证矩阵实测落地 + 订正两处已上架的错误承诺（Pandoc filter / Dataview `file.headers`）
 
 **背景**：接手做 M11/M12 的「导出 + 离场」四项，本块是其中的**周期 A（导出与 Dataview，纯文档 + 一个
@@ -165,57 +245,19 @@ UVM 侧 backlog 不变（放开「各模板不同前后缀候选」+ 按活模�
 
 ---
 
-## 2026-07-18 1.0.13 M12 两项落地：批量重编号 +「不编号」伪模板；K14/K14b 手验回填 + 箭头图标统一
-
-**做了什么**：
-
-1. **用户真机手验 1.0.12 通过**（「效果达标」）：testplan K14/K14b 的「手验 DOM」回填 ✅。随手感
-   反馈做小改：分层浏览的 `⬅` 返回 / `▸` 下钻改用**同族 lucide 图标**（`setIcon` `arrow-left` /
-   `arrow-right`，`--icon-size: var(--icon-s)`，点击区扩大手法不变）。
-2. **M12「不编号」伪模板（testplan K15）**：`pathrules.ts` 新增哨兵 `NO_NUMBERING_TEMPLATE = "$none"`；
-   `getTemplateForFile` 对哨兵返回无模板（复用「无可用模板」既有语义，自动路径静默跳过、已有编号
-   冻结）；伪模板**参与具体度解析并可胜出**（`daily/→不编号` 压过根规则）；手动命令经
-   `resolvesToNoNumbering` 弹专用 Notice；`TemplateStore.rename` 拒占哨兵名；GUI 下拉在真实模板后
-   固定伪选项，「失效模板」兜底不误伤哨兵。
-3. **M12 多文件批量重编号（testplan K16）**：`main.ts` 新增 `batchRenumberRule`——作用域=规则**路径
-   模式**命中的全部 Markdown 文件，**每个文件用它自己解析出的模板**；跳过 fm `false` / 未接管外来
-   编号（J10 同源）/「不编号」；**已打开文件走编辑器单一事务**（可撤销、无 `vault.process` 竞态），
-   未打开走 `vault.process`；backlink 照常同步且改写数**汇总一条 Notice**（`syncBacklinksCounted`
-   从 `syncBacklinks` 拆出计数核心 + `notifyBacklinkTotal` 统一出口）。GUI：行内 `list-ordered`
-   图标按钮（「不编号」行置灰）+ `BatchRenumberModal` 确认框（显示命中文件数，内联在
-   `PathRules.ts`，随 `DeleteTemplateModal` 先例）；表格加第 6 列（grid 28px×2）。
-4. **测试**：`main.test.ts` 新增 K15×3 + K16×5 共 8 例（含「点根规则批量不覆盖子规则文件」「编辑器
-   通道不被 vault 竞态覆盖」），68 例全过；`pathrules.test.ts` 45 例全过；tsc 干净。
-5. **文档**：spec §3.8 新增两段规格 + M12 两项勾选；README 双语补「规则级两件配套工具」段并修
-   「没打开的文件永远不会被碰」表述（显式确认的批量操作除外）；release-notes/1.0.13.md 双语。
-
-**没做什么**：K15/K16 的 GUI 手验 DOM 仍 🔲（下拉伪选项观感、批量确认框、批量后实测编号），留用户
-真机确认；批量重编号未做进度条 / 取消（命中数极大的库一次跑完，Notice 只在结束时汇总）——如有需求
-再立项。
-
-**验证方式**：`main.test.ts` 68 例 + `pathrules.test.ts` 45 例全过（quality-gate 定向）；
-`npm run preflight` 全绿（Windows ICU collation 预存噪音除外，CI 为准）。
-
-**本周期派发 3 次（repo-scout × 1、quality-gate × 2）**。
-
-**下一步**：用户真机手验 K15/K16（伪模板下拉 + 批量按钮/确认框）；打 tag `1.0.13` 发布（release
-工作流取 `doc/release-notes/1.0.13.md`）；M12 余项（注释块跳过、断链扫描命令、description 重排、
-公开 API 改名事件、迁移指南与社区发布）。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
 obsidian-auto-headings/
 ├── src/                  ← 源代码（TypeScript）
 │   ├── main.ts             插件入口：生命周期、命令、防抖、事务写回、Backlink 同步接线
-│   ├── parser.ts           Markdown 标题解析（ATX、代码块边界）
+│   ├── parser.ts           Markdown 标题解析（ATX；跳过区域判定委托 scan.ts）
+│   ├── scan.ts             跳过区域扫描器：围栏代码块 + 注释块（%%…%% / <!-- -->），parser 与 numbering 共用
 │   ├── numbering.ts        编号引擎编排（numberHeadings/renumberContent）+ 对外 barrel（↓四模块经它转发）
 │   ├── template.ts         模板数据模型：类型/默认值/字段规范化
 │   ├── count.ts            计数器状态机 HeadingCounter
 │   ├── render.ts           序号渲染器 + 前缀拼装 buildPrefix + 面板预览
-│   ├── strip.ts            三个剥离器（WJ 边界/清除全样式/清理外来）+ WORD_JOINER
+│   ├── strip.ts            三个剥离器（WJ 边界/清除全样式/清理外来）+ WORD_JOINER + stripWordJoiners
 │   ├── whitelist.ts        白名单归一化/命中判定/面板预览分析
 │   ├── backlinks.ts        Backlink 同步纯函数核心（改名表/锚点归一/链接重写）
 │   ├── cleanup.ts          清除编号命令的内容级封装

@@ -327,6 +327,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * {@link getTemplateForFile}）。手动命令不走此判定。
 	 */
 	private shouldAutoTrigger(content: string): boolean {
+		// 已交还所有权（M12「固化编号并交还所有权」）：**硬闸，必须在 frontmatter 判断之前**。
+		// `fm:true` 的文件本就绕开全局开关，若让它在此闸之后被检查，固化后一编辑就会在已成
+		// 普通文本的编号上再叠一层新前缀 → 双重编号。想恢复接管走设置面板的「恢复接管」。
+		if (this.settings.retired) {
+			return false;
+		}
 		if (this.vaultClearInProgress) {
 			return false; // 清除全库进行中：临时压制自动编号，完毕恢复（见 clearAllVaultNumbering）。
 		}
@@ -706,6 +712,63 @@ export default class AutoHeadingsPlugin extends Plugin {
 		} finally {
 			this.vaultClearInProgress = false;
 		}
+	}
+
+	/**
+	 * 「固化编号并交还所有权（全库）」（M12，见 spec.md §3.18，testplan H9–H12）。
+	 * 由 SettingsTab 的 FreezeVaultModal 在二次确认后调用。
+	 *
+	 * 与 {@link clearAllVaultNumbering} 相反：**编号原样留下**（成为普通文本），只把插件的
+	 * 所有权标记全部移除，并让插件停止接管。给「我喜欢现在的编号，但不想再被插件管着」
+	 * 以及「准备卸载但要留住编号成果」的用户一条干净的离场路。
+	 *
+	 * **为什么是全文级剥离而不是只处理标题行**：`backlinks.ts` 的 `displayAnchor` 刻意把 WJ
+	 * 写进 `[[file#⁠1 ⁠标题]]`（Obsidian 锚点解析按字节比对、不剥 WJ）。只剥标题行会让链接侧
+	 * 仍带 WJ、与标题字节对不上，**全库内链集体断链**。两侧同步归零链接才继续可解析。
+	 *
+	 * **不可逆（对插件而言）**：按标记契约「无 WJ ⇒ 插件从未碰过」，固化之后插件自己也再认不出
+	 * 那些编号是它写的。想恢复接管需先跑「清理非本插件的标题编号」——这条路由既有的
+	 * {@link guardForeignNumbering} 兜着，不必新建机制。
+	 *
+	 * **不在 Obsidian 编辑历史内（vault.modify 无撤销），确认框已提示建议备份。**
+	 */
+	async freezeVaultNumbering(): Promise<void> {
+		// 先落盘「已离场」再动文件：中途异常也不会留下「标记已剥、插件却还在编号」的坏状态
+		// （那会立刻把普通文本编号叠成双重编号）。
+		this.settings.retired = true;
+		await this.saveSettings();
+		this.settingTab?.display();
+
+		this.vaultClearInProgress = true;
+		for (const timer of this.debounceTimers.values()) {
+			window.clearTimeout(timer);
+		}
+		this.debounceTimers.clear();
+		try {
+			const files = this.app.vault.getMarkdownFiles();
+			let count = 0;
+			for (const file of files) {
+				const content = await this.app.vault.read(file);
+				const frozen = stripWordJoiners(content);
+				if (frozen !== content) {
+					await this.app.vault.modify(file, frozen);
+					count++;
+				}
+			}
+			// 快照直接清空：插件已离场，改名表基线不再有意义（与清库的「刷新」不同）。
+			this.headingSnapshots.clear();
+			new Notice(this.messages().noticeFrozenVault(count));
+		} finally {
+			this.vaultClearInProgress = false;
+		}
+	}
+
+	/** 恢复接管（撤销「已离场」状态）：只翻开关，不回写任何文件——编号已是普通文本，收不回来了。 */
+	async resumeFromRetired(): Promise<void> {
+		this.settings.retired = false;
+		await this.saveSettings();
+		this.settingTab?.display();
+		new Notice(this.messages().noticeResumed);
 	}
 
 	/** 某条路径规则**按路径模式**命中的全部 Markdown 文件（批量重编号的作用域，M12/K16）。 */

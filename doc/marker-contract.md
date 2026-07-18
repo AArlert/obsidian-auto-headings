@@ -41,7 +41,12 @@ Properties you can rely on:
   frontmatter, not in non-heading lines (a heading demoted to body text by the user may
   transiently carry residue; the plugin cleans it on next trigger).
 - **Unnumbered headings contain no WJ.** Absence of WJ ⇒ the plugin has never touched
-  that heading (or its numbering was fully cleared).
+  that heading, or its numbering was fully cleared, **or the user ran
+  *Freeze numbering and release ownership*** (see §5) — that command deliberately leaves the
+  numbers behind as ordinary text while removing every marker, so afterwards those numbers
+  are indistinguishable from hand-written ones. That is the point of it: the user is taking
+  the numbering back. Downstream code should treat such text as user content, which is
+  exactly what it now is.
 
 ## 2. Stability guarantees
 
@@ -190,11 +195,31 @@ tracker to coordinate).
 
 ## 5. Uninstalling cleanly
 
-1. Run **Clear numbering in entire vault** (Settings → Auto Headings → sensitive-operations
-   tab) — this strips every plugin-written prefix, both sentinel formats included.
-2. Disable/uninstall the plugin.
-3. Optionally remove `obsidian-auto-headings` keys from frontmatter (they are inert
-   without the plugin).
+Two exits, depending on whether you want to keep the numbers. Both live in
+Settings → Auto Headings → sensitive-operations tab, and both are deliberately **not**
+command-palette commands (a vault-wide irreversible rewrite should not sit on a hotkey).
+
+**A — drop the numbering.** Run **Clear numbering in entire vault**: strips every
+plugin-written prefix, both sentinel formats included, leaving bare headings.
+
+**B — keep the numbering.** Run **Freeze numbering and release ownership**: keeps every
+number as ordinary text and removes only the markers, then stops all automatic numbering.
+Use this when you like the numbering but no longer want it managed — or you are uninstalling
+and want to keep the result.
+
+Note that B strips WJ **vault-wide, including inside link anchors**. That is required, not
+incidental: the plugin writes WJ into `[[note#⁠1 ⁠heading]]` anchors on purpose, because
+Obsidian resolves anchors by byte comparison and does not strip WJ. Removing the marker from
+headings only would leave every internal link pointing at a byte sequence that no longer
+exists. Both sides go to zero together, so links keep resolving.
+
+B is irreversible *from the plugin's side* — per §1 it can no longer tell those numbers were
+its own. To hand control back, re-enable it in settings and run **Clean foreign numbering**
+on the affected files first; otherwise the existing numbers count as foreign numbering and a
+fresh prefix gets stacked on top.
+
+Then disable/uninstall the plugin, and optionally remove `obsidian-auto-headings` keys from
+frontmatter (they are inert without the plugin).
 
 Files numbered while the plugin was installed contain no other trace than the prefixes and
 the two WJs described above.

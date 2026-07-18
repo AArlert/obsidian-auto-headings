@@ -71,6 +71,8 @@ interface PluginInternals {
 	renumberActiveFile(): void;
 	renumberOnOpen(file: { path: string }): void;
 	clearAllVaultNumbering(): Promise<void>;
+	freezeVaultNumbering(): Promise<void>;
+	resumeFromRetired(): Promise<void>;
 	onunload(): void;
 }
 
@@ -1067,6 +1069,78 @@ describe("清除全库编号（敏感操作 TAB，0.7.11：清除期间压制自
 		// 清库后继续编辑：自动路径被关闭的开关门控，不再编号。
 		const ed = new FakeEditor("## 甲");
 		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(ed.txnCount).toBe(0);
+	});
+});
+
+describe("M12：固化编号并交还所有权（敏感操作 TAB，testplan H9–H11）", () => {
+	it("H9：编号保留为普通文本，全库 WJ 归零——**链接锚点里的一并剥净**，内链不断", async () => {
+		// 这条是本功能的核心不变量：displayAnchor 刻意把 WJ 写进 [[file#锚点]]，只剥标题行
+		// 会让链接侧仍带 WJ、与标题字节对不上 → 全库内链集体断链。两侧必须同步归零。
+		const { p, vaultFiles } = makePlugin({
+			vaultFiles: {
+				"a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲\n### ${WORD_JOINER}1.1 ${WORD_JOINER}子`,
+				"b.md": `见 [[a#${WORD_JOINER}1 ${WORD_JOINER}甲]] 一节。`,
+				"c.md": "## 从没被编号过", // 无 WJ，不应被计入修改数。
+			},
+		});
+
+		await p.freezeVaultNumbering();
+
+		// 编号原样保留、只掉标记
+		expect(vaultFiles.get("a.md")).toBe("## 1 甲\n### 1.1 子");
+		// 链接侧同步归零 ⇒ 与标题字节一致 ⇒ 仍解析得到
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#1 甲]] 一节。");
+		expect(vaultFiles.get("c.md")).toBe("## 从没被编号过");
+		// 全库不残留任何标记
+		for (const content of vaultFiles.values()) {
+			expect(content).not.toContain(WORD_JOINER);
+		}
+		expect(p.settings.retired).toBe(true);
+	});
+
+	it("H10：离场后连 frontmatter `true` 的文件也不再自动编号（硬闸凌驾于 fm 开关）", async () => {
+		// 只关 autoNumber 是不够的：fm:true 本就绕开全局开关，会把已成普通文本的编号叠成双重编号。
+		const { p } = makePlugin({ vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲` } });
+		await p.freezeVaultNumbering();
+
+		const ed = new FakeEditor("---\nobsidian-auto-headings: true\n---\n## 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(ed.txnCount).toBe(0);
+	});
+
+	it("H10：离场刻意**不动** autoNumber——那是用户偏好，恢复接管时不该要他重设", async () => {
+		const { p } = makePlugin({ vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲` } });
+		expect(p.settings.autoNumber).toBe(true);
+		await p.freezeVaultNumbering();
+		expect(p.settings.autoNumber).toBe(true); // 与 clearAllVaultNumbering（H7）刻意不同
+		expect(p.settings.retired).toBe(true);
+	});
+
+	it("H11：恢复接管后，固化过的编号被既有迁移守卫接住（不叠成双重编号）", async () => {
+		const { p } = makePlugin({ vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲` } });
+		await p.freezeVaultNumbering();
+		await p.resumeFromRetired();
+		expect(p.settings.retired).toBe(false);
+
+		// 固化后的 `## 1 甲` 已无 WJ ⇒ 对插件来说就是「外来编号」⇒ guardForeignNumbering 命中、
+		// 跳过自动写入（而不是在 `1 甲` 左边再叠一个 `1 `）。恢复路径不必新建机制。
+		const ed = new FakeEditor("## 1 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(ed.txnCount).toBe(0);
+	});
+
+	it("固化期间挂起的防抖被取消，刚固化的内容不会被立刻编回去", async () => {
+		const { p } = makePlugin({
+			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲` },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+
+		await p.freezeVaultNumbering();
 		vi.advanceTimersByTime(300);
 		expect(ed.txnCount).toBe(0);
 	});

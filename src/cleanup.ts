@@ -54,8 +54,13 @@ export function clearNumberingContent(content: string, options: CleanupOptions =
 	}
 	// 与 renumberContent 的 ③ 一致：也清掉「降级为正文」的行里残留的 WJ 哨兵 + 编号——否则用户降级
 	// 标题后跑「清除编号」会留下 `⁠①） 三` 之类垃圾。清除是全样式独立于模板，故用 stripPrefixBroad。
-	cleanDemotedResidue(lines, headingLines, (paragraph) =>
-		stripPrefixBroad(paragraph, prefixes, suffixes),
+	// 与自动路径不同，清除命令**注释块与围栏内一并清**：注释里的 WJ 残留在阅读视图不可见、用户肉眼
+	// 永远找不到，若挺过「清除全库编号」就直接违背标记契约「永远可退出 / 精确剥净」的承诺。
+	cleanDemotedResidue(
+		lines,
+		headingLines,
+		(paragraph) => stripPrefixBroad(paragraph, prefixes, suffixes),
+		{ comments: true, fences: true },
 	);
 	return lines.join("\n");
 }

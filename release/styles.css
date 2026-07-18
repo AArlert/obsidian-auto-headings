@@ -569,6 +569,33 @@ button.ah-tab.ah-tab-active:hover {
 	margin: 4px 0 12px;
 }
 
+/* 已交还所有权（M12 离场）时全局设置 TAB 顶部的提示条：
+   离场后下面的开关全部失效，必须显眼到用户不会误以为插件坏了。 */
+.ah-retired-banner {
+	border: 1px solid var(--text-warning, var(--background-modifier-border));
+	border-radius: var(--radius-m, 6px);
+	background: var(--background-secondary);
+	padding: 10px 14px;
+	margin-bottom: 16px;
+}
+
+.ah-retired-banner h4 {
+	margin: 0 0 6px;
+	color: var(--text-warning, var(--text-normal));
+}
+
+.ah-retired-banner p {
+	margin: 0;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+/* 提示条内的按钮行不需要设置项那套上下边框与留白 */
+.ah-retired-banner .setting-item {
+	border: none;
+	padding: 10px 0 0;
+}
+
 /* 关于 TAB 的链接行 */
 .ah-about-links {
 	display: flex;

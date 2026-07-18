@@ -200,3 +200,59 @@ describe("hasUnclaimedForeignNumbering（迁移守卫探测，testplan J10）", 
 		expect(hasUnclaimedForeignNumbering(cleaned)).toBe(false);
 	});
 });
+
+describe("clearNumberingContent — 跳过区域内的残留（M12，testplan E29）", () => {
+	const p = (n: string): string => `${WORD_JOINER}${n} ${WORD_JOINER}`;
+
+	it("E29：清除命令**注释块与围栏内一并清净**", () => {
+		// 与自动路径的分治不同：清除是用户主动的一次性操作，且注释里的不可见残留若挺过
+		// 「清除全库编号」，就直接违背标记契约「永远可退出 / 精确剥净」的承诺。
+		const input = [
+			`## ${p("1")}正常标题`,
+			"%%",
+			`## ${p("9.9")}注释里的旧编号`,
+			"%%",
+			"```",
+			`## ${p("8.8")}围栏里的旧编号`,
+			"```",
+		].join("\n");
+		const out = clearNumberingContent(input);
+		expect(out).not.toContain(WORD_JOINER);
+		const lines = out.split("\n");
+		expect(lines[0]).toBe("## 正常标题");
+		expect(lines[2]).toBe("## 注释里的旧编号");
+		expect(lines[5]).toBe("## 围栏里的旧编号");
+	});
+
+	it("E29：区域内**不含 WJ** 的普通文本一个字符都不动", () => {
+		const input = [
+			"%%",
+			"# 用户自己写的注释标题",
+			"手写的 1. 编号也不该被碰",
+			"%%",
+			"```",
+			"# 代码块里的井号",
+			"```",
+		].join("\n");
+		expect(clearNumberingContent(input)).toBe(input);
+	});
+
+	it("E29：注释块内的降级正文残留也清净", () => {
+		const input = ["%%", `${p("9.9")}降级残留`, "%%"].join("\n");
+		expect(clearNumberingContent(input).split("\n")[1]).toBe("降级残留");
+	});
+
+	it("clearForeignNumberingContent 对注释块内部不做任何事", () => {
+		// 它按定义只碰无 WJ 的标题，而注释内的无 WJ 文本是插件从未染指的用户文本。
+		const input = ["## 1 外来编号", "%%", "## 2 注释里的外来编号", "%%"].join("\n");
+		const out = clearForeignNumberingContent(input).split("\n");
+		expect(out[0]).toBe("## 外来编号");
+		expect(out[2]).toBe("## 2 注释里的外来编号");
+	});
+
+	it("hasUnclaimedForeignNumbering：唯一的外来样标题在注释内 → 不命中（迁移误报减少）", () => {
+		expect(hasUnclaimedForeignNumbering(["%%", "## 1 注释里的", "%%"].join("\n"))).toBe(false);
+		// 对照：同样的标题在注释外则命中
+		expect(hasUnclaimedForeignNumbering("## 1 正文里的")).toBe(true);
+	});
+});

@@ -156,7 +156,7 @@ Number Headings has been unmaintained for roughly 2.5 years. Migrating takes thr
 2. Enable this plugin and pick a template (the out-of-the-box default `1.1.1` is close to its style; path rules can assign different templates per folder);
 3. Run **Clean foreign numbering** on your old files — it strips only numbering _not_ written by this plugin (Number Headings' prefixes, hand-written ones, and imported documents all qualify), after which normal editing renumbers everything with your template.
 
-Its two longest-standing open requests — excluding folders from numbering, and skipping headings inside comment blocks — are both on this plugin's roadmap.
+Its two longest-standing open requests are both **implemented here**: excluding folders from numbering (pick the "No numbering" pseudo-template on a path rule) and skipping headings inside comment blocks (`%%…%%` and `<!-- -->` are ignored — not numbered, and they don't consume a counter slot either).
 
 ## Commands
 
@@ -175,11 +175,16 @@ Its two longest-standing open requests — excluding folders from numbering, and
 
 ## Uninstalling cleanly
 
-The only things this plugin ever writes into your files are numbering prefixes and two invisible marker characters — all fully removable:
+The only things this plugin ever writes into your files are numbering prefixes and two invisible marker characters — all fully removable. Two ways out, depending on whether you want to keep the numbers:
 
-1. Settings → sensitive operations → **Clear numbering in entire vault** (it first switches global auto-numbering off, so nothing gets renumbered mid-clear);
-2. Disable / uninstall the plugin;
-3. (Optional) remove `obsidian-auto-headings` keys from frontmatter — they're inert without the plugin.
+**Drop the numbering** — Settings → sensitive operations → **Clear numbering in entire vault** (it first switches global auto-numbering off, so nothing gets renumbered mid-clear). Headings go back to bare text.
+
+**Keep the numbering** — Settings → sensitive operations → **Freeze numbering and release ownership**. Every number stays exactly as it is, as ordinary text; only the invisible markers go, and the plugin stops numbering anything from then on. This is the one to use if you like your current numbering but no longer want a plugin managing it, or you're uninstalling and want to keep the result. Markers are removed vault-wide **including inside link anchors**, so your `[[note#heading]]` links keep resolving. Once frozen, the plugin can no longer tell those numbers were its own — that's the point, but it does mean the step is one-way: to hand control back, re-enable it and run **Clean foreign numbering** first, or the existing numbers get a second prefix stacked on top.
+
+Then:
+
+1. Disable / uninstall the plugin;
+2. (Optional) remove `obsidian-auto-headings` keys from frontmatter — they're inert without the plugin.
 
 Because the marker lives in the file bytes themselves, even years after uninstalling you can reinstall the plugin and run the vault-wide clear to strip its old numbering precisely; for external batch cleanup without reinstalling (a one-liner), see the [marker character contract](doc/marker-contract.md).
 

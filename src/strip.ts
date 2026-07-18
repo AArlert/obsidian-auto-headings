@@ -23,6 +23,22 @@ import { getLevelFormat, normalizeTopLevel, type NumeralStyle, type Template } f
 export const WORD_JOINER = "⁠";
 
 /**
+ * 剥净任意字符串里的全部 WJ 哨兵——**不做任何结构解析**，纯字符替换。
+ *
+ * 两个用途，都刻意是「全文级、连链接一起」的口径：
+ * - **剪贴板净化**（spec §2.8）：copy/cut 出口不再把不可见字符带给外部应用。
+ * - **固化编号并交还所有权**（M12，spec §3.18）：编号作为普通文本留下、标记全部移除。
+ *   这里**必须**是全文级而不能只处理标题行——`backlinks.ts` 的 `displayAnchor` 刻意把 WJ
+ *   写进 `[[file#⁠1 ⁠标题]]`（Obsidian 锚点解析按字节比对、不剥 WJ），只剥标题行会让链接侧
+ *   仍带 WJ、与标题字节不匹配，**全库内链集体断链**。两侧同步归零才是对的。
+ *
+ * 这也正是 `doc/marker-contract.md` §3 公布给下游的第一条配方（`/⁠/g`），语义一致。
+ */
+export function stripWordJoiners(text: string): string {
+	return text.split(WORD_JOINER).join("");
+}
+
+/**
  * 剥离时**额外**纳入的前 / 后缀候选字面量集合（方案 A，见 {@link affixAlternation}）。
  * `numbering.ts` 的 `NumberOptions` 扩展本接口；白名单命中判定（`whitelist.ts`）也复用它。
  */

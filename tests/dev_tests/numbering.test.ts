@@ -1386,3 +1386,58 @@ describe("起始编号数字 startIndex（M8 批次 1，testplan N1–N8）", ()
 		expect(h3[1]).toBe(`${WORD_JOINER}0.2 ${WORD_JOINER}`);
 	});
 });
+
+describe("renumberContent — 注释块跳过与分区域残留清理（M12，testplan E27/E28）", () => {
+	const num = (content: string): string => renumberContent(content, DEFAULT_TEMPLATE);
+	/** 双哨兵编号前缀。 */
+	const p = (n: string): string => `${WORD_JOINER}${n} ${WORD_JOINER}`;
+
+	it("E27：注释块内的标题不占计数器槽位", () => {
+		const out = num(["## A", "%%", "## 注释里的", "%%", "## C"].join("\n"));
+		const lines = out.split("\n");
+		expect(lines[0]).toBe(`## ${p("1")}A`);
+		// 注释内那行原样不动（它本来就没有编号）
+		expect(lines[2]).toBe("## 注释里的");
+		// C 拿到 2 而不是 3 —— 注释块没有推进计数器
+		expect(lines[4]).toBe(`## ${p("2")}C`);
+	});
+
+	it("E27：`<!-- -->` 块同样不占槽位", () => {
+		const out = num(["## A", "<!--", "## 注释里的", "-->", "## C"].join("\n"));
+		expect(out.split("\n")[4]).toBe(`## ${p("2")}C`);
+	});
+
+	it("E28①：已编号标题被包进注释块后，自动路径**清掉**它的 WJ 前缀", () => {
+		// 注释块是隐藏散文，里面的不可见残留用户肉眼永远找不到，留着没有价值。
+		const input = ["## A", "%%", `## ${p("9.9")}旧编号标题`, "%%"].join("\n");
+		const out = num(input);
+		expect(out.split("\n")[2]).toBe("## 旧编号标题");
+		expect(out).not.toContain(WORD_JOINER + "9.9");
+	});
+
+	it("E28②：已编号标题被包进围栏后，自动路径**原样冻结**（不改写字面内容）", () => {
+		// 反面守门用例：一段演示本插件 WJ 格式的代码块，绝不能在日常编辑中被静默吃掉。
+		const fenced = `## ${p("9.9")}演示用的编号标题`;
+		const input = ["## A", "```", fenced, "```"].join("\n");
+		const out = num(input);
+		expect(out.split("\n")[2]).toBe(fenced);
+	});
+
+	it("E28：清理后二次触发幂等", () => {
+		const input = ["## A", "%%", `## ${p("9.9")}旧编号标题`, "%%", "## C"].join("\n");
+		const once = num(input);
+		expect(num(once)).toBe(once);
+	});
+
+	it("注释块内的**降级正文**残留（行首即 WJ）同样被自动路径清掉", () => {
+		const input = ["## A", "%%", `${p("9.9")}降级残留`, "%%"].join("\n");
+		expect(num(input).split("\n")[2]).toBe("降级残留");
+	});
+
+	it("注释块内**不含 WJ** 的普通文本一个字符都不动", () => {
+		const input = ["## A", "%%", "# 这是用户写的注释，没有 WJ", "普通正文", "%%"].join("\n");
+		const out = num(input).split("\n");
+		expect(out[2]).toBe("# 这是用户写的注释，没有 WJ");
+		expect(out[3]).toBe("普通正文");
+	});
+});
