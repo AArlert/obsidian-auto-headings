@@ -18,7 +18,8 @@ import {
 import { AutoHeadingsSettingTab } from "./settings/SettingsTab";
 import { getMessages, type Messages, resolveLang } from "./i18n";
 import { readFileSwitch, SWITCH_KEY } from "./frontmatter";
-import { renumberContent, type Template } from "./numbering";
+import { renumberContent, WORD_JOINER, type Template } from "./numbering";
+import { ClipboardOriginalCache, stripWordJoiners, stripWordJoinersFromHtml } from "./clipboard";
 import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
@@ -100,6 +101,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 但不重复打扰。随文件改名迁移键、随删除清除，插件卸载时整体清空。
 	 */
 	private readonly foreignNumberingWarned = new Set<string>();
+
+	/**
+	 * 剪贴板净化的会话级「净化文本 → 原文」LRU（M11「复制净化开关」，spec.md §2.8「内存映射
+	 * 双通道」）：copy/cut 出口净化时记录，editor-paste 命中时还原原文避免双重编号（O9）。
+	 * 只存内存、不持久化，随插件卸载丢弃。
+	 */
+	private readonly clipboardCache = new ClipboardOriginalCache();
 
 	/**
 	 * 当前界面语言的文案表（按 `settings.language` 解析，见 {@link resolveLang} / {@link getMessages}）。
@@ -190,6 +198,21 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.registerDomEvent(activeDocument, "compositionend", () => {
 			this.imeComposing = false;
 		});
+
+		// 剪贴板净化（M11「复制净化开关」，spec.md §2.8）：copy/cut 出口剥 WJ + editor-paste
+		// 命中还原。主窗口挂一份，弹出窗口在 window-open 时各挂一份（registerDomEvent 随插件
+		// 卸载自动清理，重复打开同一弹窗会重新注册、旧监听随窗口销毁）。
+		this.registerClipboardSanitizer(activeDocument);
+		this.registerEvent(
+			this.app.workspace.on("window-open", (ww) => {
+				this.registerClipboardSanitizer(ww.doc);
+			}),
+		);
+		this.registerEvent(
+			this.app.workspace.on("editor-paste", (evt, editor, info) => {
+				this.restoreSanitizedPaste(evt, editor, info);
+			}),
+		);
 
 		// 文件打开：① 按当前生效模板自动重排（J9，用户需求：路径规则改投模板后无需先编辑，
 		// 打开即刷新）；② 播种标题快照（M14 基线）。①在前——若①写回，快照会随 applyRenumber
@@ -298,6 +321,109 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return true;
 		}
 		return this.settings.autoNumber;
+	}
+
+	/**
+	 * 在指定 document 上挂 copy/cut 出口净化监听（spec.md §2.8 copy/cut 端）。
+	 * 主窗口与每个弹出窗口各挂一份；监听在**冒泡阶段**执行——CM6（编辑器路径）在更深的
+	 * contentDOM 上已处理完毕，据 `defaultPrevented` 区分两条路径（见 {@link sanitizeClipboardEvent}）。
+	 */
+	private registerClipboardSanitizer(doc: Document): void {
+		const handler = (evt: ClipboardEvent): void => {
+			this.sanitizeClipboardEvent(evt, doc);
+		};
+		this.registerDomEvent(doc, "copy", handler);
+		this.registerDomEvent(doc, "cut", handler);
+	}
+
+	/**
+	 * copy/cut 出口净化（spec.md §2.8）：选区含 WJ 才介入，两条路径——
+	 * - **已被接管**（编辑器路径：CM6 已 `setData("text/plain")` + `preventDefault()`，剪切的
+	 *   选区删除也已完成）：净化覆写 `text/plain`（已写入的 `text/html` 一并剥 WJ），并把
+	 *   `规范化(净化文本) → 原文` 记入内存 LRU 供粘贴回还原。不改 `defaultPrevented`、不删其他
+	 *   格式，对 CM6 与其他插件最小侵入。
+	 * - **未被接管**（阅读模式等原生默认复制）：按 DOM 选区自构造净化 payload（`text/plain` +
+	 *   保留富文本的 `text/html`）后 `preventDefault()`。**此路不记 LRU**：渲染文本不含 `##`
+	 *   标记，粘贴回编辑器构不成标题行，无 O9 风险。
+	 * 降级默认值：任一步缺失 / 抛错一律不介入，剪贴板维持现状（等于本功能不存在）。
+	 */
+	private sanitizeClipboardEvent(evt: ClipboardEvent, doc: Document): void {
+		if (!this.settings.sanitizeClipboard) {
+			return;
+		}
+		const data = evt.clipboardData;
+		if (!data) {
+			return;
+		}
+		try {
+			if (evt.defaultPrevented) {
+				const original = data.getData("text/plain");
+				if (!original.includes(WORD_JOINER)) {
+					return;
+				}
+				const html = data.getData("text/html");
+				data.setData("text/plain", this.clipboardCache.record(original));
+				if (html.includes(WORD_JOINER)) {
+					data.setData("text/html", stripWordJoinersFromHtml(html));
+				}
+				return;
+			}
+			const selection = doc.defaultView?.getSelection() ?? null;
+			const text = selection ? selection.toString() : "";
+			if (!selection || !text.includes(WORD_JOINER)) {
+				return;
+			}
+			const html = renderSelectionHtml(doc, selection);
+			data.setData("text/plain", stripWordJoiners(text));
+			if (html) {
+				data.setData("text/html", stripWordJoinersFromHtml(html));
+			}
+			evt.preventDefault();
+		} catch {
+			/* 任一步失败：不介入、维持现状（spec §2.8 降级默认值）。 */
+		}
+	}
+
+	/**
+	 * paste 端回程还原（spec.md §2.8）：全部判断**同步**完成，任一守卫不过即放行原生粘贴管线
+	 * （零影响）——依次：他人已 `preventDefault` / 无文本 / LRU 未命中（外部内容或改动过、过期，
+	 * 当新内容处理）/ 目标文件编号未生效（全局关、frontmatter `false`、无模板命中——此时没有
+	 * 编号引擎兜底，还原反而把 WJ 重新引入用户声明「别碰」的文件；引擎不跑也不存在双重编号）/
+	 * 多光标（原生多光标粘贴有按行分配语义，不模仿）。全过 → 接管并整段插入原文：WJ 完好、
+	 * 编号仍是「被认领」状态，后续防抖重编正常改写序号，不产生 O9 双重编号。
+	 */
+	private restoreSanitizedPaste(
+		evt: ClipboardEvent,
+		editor: Editor,
+		info: MarkdownView | MarkdownFileInfo,
+	): void {
+		if (!this.settings.sanitizeClipboard || evt.defaultPrevented) {
+			return;
+		}
+		try {
+			const text = evt.clipboardData?.getData("text/plain") ?? "";
+			if (!text) {
+				return;
+			}
+			const original = this.clipboardCache.lookup(text);
+			if (original === null) {
+				return;
+			}
+			if (
+				!info.file ||
+				!this.shouldAutoTrigger(editor.getValue()) ||
+				!this.getTemplateForFile(info.file.path)
+			) {
+				return;
+			}
+			if (editor.listSelections().length > 1) {
+				return;
+			}
+			evt.preventDefault();
+			editor.replaceSelection(original);
+		} catch {
+			/* 任一步失败：放行原生粘贴管线（spec §2.8 降级默认值）。 */
+		}
 	}
 
 	/**
@@ -637,6 +763,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (typeof merged.backlinksIntroShown !== "boolean") {
 			merged.backlinksIntroShown = false;
 		}
+		// sanitizeClipboard 缺失 / 非布尔（含 1.0.10 之前的旧数据）时回退到默认 **true**
+		// （M11 信任包：默认主动消解 WJ 外泄；显式设过 false 的用户不受影响）。
+		if (typeof merged.sanitizeClipboard !== "boolean") {
+			merged.sanitizeClipboard = true;
+		}
 		// 迁移：历史独立开关 `backlinkStandaloneTrigger`（0.7.8–1.0.8，CR-18）已并入 `updateBacklinks`
 		// （1.0.9 起单开关全局生效，与是否命中编号模板无关）；旧字段不再读取，随迁移一并清理。
 		delete merged.backlinkStandaloneTrigger;
@@ -968,4 +1099,16 @@ function backlinkMap(raw: unknown): Map<unknown, unknown> | undefined {
 function linkBasename(path: string): string {
 	const last = path.split("/").pop() ?? path;
 	return last.replace(/\.md$/i, "");
+}
+
+/**
+ * 把 DOM 选区各 Range 的内容序列化为 HTML 字符串——阅读模式原生默认复制会同时写入富文本，
+ * 我们接管后照样提供（剥 WJ 后），复制到 Word 等富文本目标不丢格式（spec.md §2.8 copy/cut 端）。
+ */
+function renderSelectionHtml(doc: Document, selection: Selection): string {
+	const container = doc.createElement("div");
+	for (let i = 0; i < selection.rangeCount; i++) {
+		container.appendChild(selection.getRangeAt(i).cloneContents());
+	}
+	return container.innerHTML;
 }

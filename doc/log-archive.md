@@ -5,6 +5,93 @@
 
 ---
 
+## 2026-07-10 1.0.9 剪贴板 WJ 净化：技术选型定案（用户指示，claude/clipboard-wj-pollution-mecppf）
+
+**做了什么**（纯文档周期，无 `src/` 改动，按上架后策略不 bump）：
+
+1. **承接上一周期的遗留讨论**（剪贴板 WJ 污染净化，见 status 首行 `next`）：本周期继续只讨论
+   方向，验证了「插件能否识别被清除 WJ 的内容」这一悬而未决的前提——答案是**不能安全识别**：
+   `hasUnclaimedForeignNumbering`（`src/cleanup.ts:112-118`）的外来编号探测是**全文件级**的，
+   只要目标文件别处还有一个 WJ 就不生效；净化后的无 WJ 内容粘贴进已编号 vault 会被 `stripPrefix`
+   当纯正文、叠加新前缀，产生 `## 2 1 标题` 式双重编号（与 U1/U2/J10 系列历史 bug 同构）。据此
+   否决了「单通道净化」（复制时无条件清 WJ），转向「双通道」方向。
+2. **摸清双通道的技术选型**（WebSearch 调研 + 用户拍板）：
+   - Electron 原生 `clipboard.writeBuffer` 一次只挂一个自定义格式、与 `writeText` 无法原子共存
+     （Electron issue #41462 未解决），**不适用**。
+   - 改用标准 Async Clipboard API（`navigator.clipboard.write` + `ClipboardItem`），自定义格式走
+     `"web "` 前缀（Chrome 104+，Obsidian Electron 内核远超此版本），对外部应用默认不可见。
+   - Obsidian 官方论坛确认插件在 Android/iOS WebView 沙箱内写自定义剪贴板数据默认被拦截——
+     **移动端只能靠运行时能力探测 + 静默完全跳过**，不能退化成单通道（会重现①的双重编号 bug）。
+3. **设计落盘 `doc/spec.md` §2.8「剪贴板净化设计」**（新增小节，2.6/2.7/目录/Roadmap M11「复制
+   净化开关」条目同步链接）：范围边界（只覆盖交互式 `copy`/`cut`，不含 Pandoc/静态站点生成器/
+   Publish 等文件级导出——那类工具直接读磁盘、不经过剪贴板事件，已由 M11「导出验证矩阵」与附录
+   A §A.5 单独覆盖）、copy/paste 两端设计、移动端能力探测降级、降级默认值（任何一步失败一律不
+   介入、维持现状，不做单通道半吊子方案）、三个留给实现周期拍板的未决问题。
+4. **`doc/testplan.md` §O 补场景**：O8（桌面端外部粘贴净化）/ O9（粘贴回已编号 vault 验证双通道
+   避免双重编号）/ O10（能力探测失败静默跳过），O4 改写为指向三者的入口行。
+
+**没做什么**：仍未写任何代码——用户本轮要求「先规划如何开工、文档写好」，不是实现。三个「留给
+实现周期拍板」的问题（触发范围、隐藏通道 payload 内容、`clipboard.read()` 是否弹权限提示）故意
+留白，等下一个编码周期在真实 Obsidian 渲染进程里边做边定，不在纯设计阶段瞎猜。
+
+**验证方式**：纯文档改动，无代码变更，不适用 `npm test`/`lint`；`npm run docs` 归档 + 内部锚点
+校验（新增 §2.8 锚点 `#28-剪贴板净化设计m11复制净化开关技术选型2026-07-10-定案未实现` 与
+Roadmap/testplan 三处引用手动核对一致）。
+
+**本周期派发 0 次**（用户全程直接对话讨论 + 主模型自己读代码验证 `hasUnclaimedForeignNumbering`
+判据范围，未派 SubAgent）。
+
+**下一步**：进入实现周期——按 spec §2.8 设计实现桌面端双通道 copy/paste 钩子，拍板三个留白问题，
+补 `tests/dev_tests/` 单测（重点覆盖 O9 的双重编号回归）与 O8/O10 的实机验证方式；testplan O8–O10
+状态回填。其后回到 M11 其余项（导出矩阵、Canvas O1、E8、审阅模式、H8+清库撤销、CM6 原子区域）。
+
+---
+
+## 2026-07-10 1.0.9 Backlink 两开关合一（用户指示，claude/backlink-switch-consolidation-j7mol6）
+
+**做了什么**：
+
+1. **设置模型合并**（`src/settings/model.ts`）：删除 `backlinkStandaloneTrigger` 字段与
+   `DEFAULT_SETTINGS` 对应默认值；`updateBacklinks` 字段注释改为「全局生效，与是否命中编号模板 /
+   是否实际写入编号无关」。
+2. **触发逻辑合并**（`src/main.ts`）：`shouldBacklinkStandaloneTrigger` 判据从
+   `!backlinkStandaloneTrigger || !updateBacklinks` 简化为仅 `!updateBacklinks`——独立于编号模板的
+   触发路径（CR-18）不再需要额外 opt-in，随总开关一起全局生效；仍受 frontmatter `false` 与
+   `vaultClearInProgress` 约束（未变）。`loadSettings` 迁移逻辑删掉旧字段的默认值回填，改为
+   `delete merged.backlinkStandaloneTrigger` 清理存量 data.json 里的死字段。
+3. **GUI 精简**（`src/settings/tabs/GeneralTab.ts` + `src/i18n.ts`）：删除第二个开关
+   「无模板/未编号时也同步链接」（`backlinkStandaloneTriggerName/Desc`，中英文接口 + 两语言实现）；
+   保留的「同步内部链接（Backlink）」开关描述改写为说明「全局生效，与是否编号无关」，用户不再需要
+   理解两层开关语义。
+4. **测试同步**（`tests/dev_tests/main.test.ts`）：测试辅助 `PluginInternals`/`makePlugin` 选项删除
+   `backlinkStandaloneTrigger` 字段；原「M19–M25」用例矩阵重写为「M20–M25」——M19（独立触发关+无模板）
+   与 M23（总开关关）语义合并（现在只有一个总开关，关闭即两种效果都不触发），其余用例改为断言单开关
+   下的全局生效行为，不再传 `backlinkStandaloneTrigger` 选项。
+5. **文档同步**：`doc/spec.md` §3.12 三处（`updateBacklinks` 设计原则段、CR-18 详述段、CR-18 表格行）
+   + Roadmap M12 打勾项，改写为「1.0.8 落地独立开关 → 1.0.9 并入单开关」的演变叙事，说明两层开关是
+   「无谓认知负担」；`doc/testplan.md` §M 开头 blockquote + M19–M26 场景行同步重写，删除 M19（并入
+   M23）与 M26（GUI 面板行，因第二个开关已不存在）。
+
+**没做什么**（用户明确本轮范围之外）：剪贴板 WJ 污染问题（复制到 Obsidian 外应清除所有 WJ 标记、
+复制到 Obsidian 内应保留 WJ 以便识别「这是本插件已编号的内容」避免重复编号）本轮**只讨论不动代码**——
+用户原话「干净导出属于讨论任务」。现状：`main.ts` 依旧无任何 `clipboard`/`copy`/`paste` 事件钩子
+（`repo-scout` 定位确认），该问题连「插件能否识别被清除 WJ 的内容」这一前提都未探明，留待后续周期
+单独立项讨论（候选落点：spec.md §2.6 已知生态兼容性风险 或 M11 信任包「复制净化」项，见 status.jsonl
+`next`）。
+
+**验证方式**：`npm test`（359 通过）/ `npm run lint` / `npm run format:check` 三项全绿（quality-gate
+子代理跑的收尾档）；`npm run release` 重建 `release/` 三件套 + zip，`tsc -noEmit` 随 build 隐式过一遍
+类型检查（设置模型删字段后接口收窄，若有遗漏引用会在此处报错，实测无报错）。未做 Obsidian 内实测
+（远程环境无 GUI，纯代码 + 单测层面验证）。
+
+**本周期派发 2 次**（repo-scout ×1 定位两开关与 WJ 剪贴板现状、quality-gate ×1 收尾档 test+lint+format）。
+
+**下一步**：M11 信任包内「复制净化」讨论——需要先探明「插件能否从被清除 WJ 的编号标题正确识别/恢复
+编号状态」这一前提是否成立，成立的话方案可以简化（无需区分粘贴目的地，插件自适应识别即可）；不成立
+再回到「复制到 Ob 内保留 WJ / 复制到 Ob 外清除 WJ」的双路径设计。
+
+---
+
 ## 2026-07-10 1.0.8 SubAgent 派发体系落地 + 清理 sync-plugin-repo 迁移遗留（claude/subagent-harness-dispatch）
 
 **做了什么**（纯 harness/文档周期，无插件行为变化，按上架后策略不 bump）：
