@@ -173,7 +173,10 @@ export function filterPathCandidates(
 	input: string,
 	limit = 30,
 ): PathCandidate[] {
-	const needle = input.trim().toLowerCase();
+	// 前导 "/" 只是路径模式的根锚点写法（见 normalizePattern），vault 内真实路径从不带前导斜杠。
+	// 若原样保留会让「已提交根规则 `/` 后重新点击输入框」这类场景把匹配收窄成「候选路径本身字面
+	// 含 `/`」这一几乎无意义的子集（顶层文件夹反而全部被过滤掉，只剩深层嵌套项）——testplan K14。
+	const needle = input.trim().replace(/^\/+/, "").toLowerCase();
 	return candidates
 		.map((c) => ({ c, idx: c.path.toLowerCase().indexOf(needle) }))
 		.filter(({ idx }) => needle === "" || idx >= 0)
@@ -216,4 +219,34 @@ export function autocompleteFolderSlash(pattern: string, folderPaths: readonly s
 		return `${trimmed}/`;
 	}
 	return pattern;
+}
+
+/**
+ * 某候选路径的**直接父目录**路径；顶层项（路径本身不含 `/`）的父目录是根 `""`。
+ * 供 {@link listImmediateChildren} 与建议弹窗的分层浏览模式（testplan K14）计算「返回上一级」。
+ */
+export function parentDir(path: string): string {
+	const idx = path.lastIndexOf("/");
+	return idx === -1 ? "" : path.slice(0, idx);
+}
+
+/**
+ * 列出某目录下的**直接子项**（文件夹优先，同类按字典序），供建议弹窗的分层浏览模式使用
+ * （testplan K14：路径输入框为空时不再扁平模糊匹配全库，而是从根开始逐层点击文件夹下钻，
+ * 参考 numeroflip/obsidian-auto-template-trigger `FolderSuggest` 排除根目录、扁平子串匹配的
+ * 「打字搜索」模式仍由 {@link filterPathCandidates} 负责，两者互不影响——一旦开始打字即退出浏览）。
+ * `dir` 传空串 `""` 表示根目录。
+ */
+export function listImmediateChildren(
+	candidates: readonly PathCandidate[],
+	dir: string,
+): PathCandidate[] {
+	return candidates
+		.filter((c) => c.path !== dir && parentDir(c.path) === dir)
+		.sort((a, b) => {
+			if (a.isFolder !== b.isFolder) {
+				return a.isFolder ? -1 : 1;
+			}
+			return a.path.localeCompare(b.path);
+		});
 }

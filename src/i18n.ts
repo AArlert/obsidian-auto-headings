@@ -92,6 +92,11 @@ export interface Messages {
 	dragHandleTooltip: string;
 	/** 阻断保存重复路径模式时的 Notice（M7 后续，见 pathrules.ts findDuplicatePatternIndex）。 */
 	pathDuplicateWarn: (otherRow: number) => string;
+	/** 路径建议弹窗分层浏览模式（testplan K14）：当前层空文件夹提示、返回上一级 / 下钻 / 选中当前层的 tooltip。 */
+	pathSuggestEmptyFolder: string;
+	pathSuggestBackTooltip: string;
+	pathSuggestDescendTooltip: string;
+	pathSuggestSelectHereTooltip: string;
 
 	// —— 模板区 ——
 	templatesHeading: string;
@@ -291,6 +296,10 @@ const zh: Messages = {
 	dragHandleTooltip: "拖动以排序",
 	pathDuplicateWarn: (otherRow) =>
 		`该路径已被第 ${otherRow} 条规则使用，不能与不同模板重复关联同一路径；请先修改或删除其中一条。`,
+	pathSuggestEmptyFolder: "（此文件夹为空）",
+	pathSuggestBackTooltip: "返回上一级",
+	pathSuggestDescendTooltip: "查看子项",
+	pathSuggestSelectHereTooltip: "选中当前层级",
 
 	templatesHeading: "模板",
 	templatesDesc: "定义各级标题的编号格式与白名单；哪个文件用哪个模板由上方「路径规则」决定。",
@@ -490,6 +499,10 @@ const en: Messages = {
 	dragHandleTooltip: "Drag to reorder",
 	pathDuplicateWarn: (otherRow) =>
 		`This path is already used by rule #${otherRow}; two rules can't map the same path to different templates. Edit or delete one of them first.`,
+	pathSuggestEmptyFolder: "(This folder is empty)",
+	pathSuggestBackTooltip: "Go up one level",
+	pathSuggestDescendTooltip: "View contents",
+	pathSuggestSelectHereTooltip: "Select this level",
 
 	templatesHeading: "Templates",
 	templatesDesc:

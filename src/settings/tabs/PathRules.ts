@@ -1,5 +1,6 @@
 import { Notice, Setting } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
+import type { Messages } from "../../i18n";
 import {
 	autocompleteFolderSlash,
 	findDuplicatePatternIndex,
@@ -8,17 +9,28 @@ import {
 	type PathRule,
 } from "../../pathrules";
 import { DEFAULT_TEMPLATE_NAME } from "../../templates/schema";
-import { closeAllPathSuggestPopups, PathSuggestPopup } from "./PathSuggest";
+import { closeAllPathSuggestPopups, type PathSuggestLabels, PathSuggestPopup } from "./PathSuggest";
+
+/** 分层浏览模式的提示文案，从当前语言的 `t` 里挑出对应键（见 `PathSuggest.ts` `PathSuggestLabels`）。 */
+function suggestLabelsOf(t: Messages): PathSuggestLabels {
+	return {
+		emptyFolder: t.pathSuggestEmptyFolder,
+		backTooltip: t.pathSuggestBackTooltip,
+		descendTooltip: t.pathSuggestDescendTooltip,
+		selectHereTooltip: t.pathSuggestSelectHereTooltip,
+	};
+}
 
 /**
  * 「路径与模板」TAB 的**路径规则**分区（见 spec.md §3.8）：可视化表格（路径模式 → 模板），
  * 可增删、可拖拽排序、可滚动（移动端横向滚动）；顶部在「无 `/` 根规则且全局自动编号=开」时
  * 显示兜底缺失提示条与快捷添加按钮。
  *
- * 路径输入接建议弹窗（`PathSuggest.ts`，testplan K13，参考 numeroflip/obsidian-auto-template-trigger
- * 的文件夹建议交互）：模糊匹配 vault 内全部文件夹 / 文件，选中文件夹自动带尾斜杠；手动输入不经
- * 弹窗时也有 {@link autocompleteFolderSlash} 兜底补全，避免「填文件夹名漏打尾斜杠→被当成对一个
- * 不存在的文件的精确匹配规则→该文件夹下文件仍套用旧规则」这一用户报告过的 bug。
+ * 路径输入接建议弹窗（`PathSuggest.ts`，testplan K13/K14，参考 numeroflip/obsidian-auto-template-trigger
+ * 的文件夹建议交互）：输入框为空时分层浏览（从根逐层点击文件夹下钻），有输入时模糊匹配 vault 内
+ * 全部文件夹 / 文件；选中文件夹自动带尾斜杠。手动输入不经弹窗时也有 {@link autocompleteFolderSlash}
+ * 兜底补全，避免「填文件夹名漏打尾斜杠→被当成对一个不存在的文件的精确匹配规则→该文件夹下文件
+ * 仍套用旧规则」这一用户报告过的 bug。
  */
 export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLElement): void {
 	// 每次重渲染前先清场：旧行的建议弹窗挂在 activeDocument.body 上，不随本函数的容器一起被清空。
@@ -133,6 +145,7 @@ function renderPathRuleRow(
 			input.focus();
 			void commitPattern();
 		},
+		suggestLabelsOf(t),
 	);
 	input.addEventListener("keydown", (e) => {
 		if (suggest.handleKeydown(e)) {
@@ -226,17 +239,22 @@ function renderPathRuleRow(
 }
 
 /**
- * 收集 vault 内全部文件夹 / 文件，转成建议弹窗用的候选列表（`PathSuggest.ts` 按输入模糊过滤 + 排序）。
- * 与旧版「分层 datalist」不同——不再局限于当前输入所在目录的直接子项，而是让模糊匹配 + 排序
- * 自己挑出相关项（参考 numeroflip/obsidian-auto-template-trigger 的 `FolderSuggest`）。
+ * 收集 vault 内全部文件夹 / 文件，转成建议弹窗用的候选列表：输入框有内容时交给
+ * `filterPathCandidates` 扁平模糊过滤 + 排序（参考 numeroflip/obsidian-auto-template-trigger 的
+ * `FolderSuggest`），输入框为空时交给 `listImmediateChildren` 做分层浏览（testplan K14）。
+ *
+ * **不注入合成根候选**：参考实现 `FolderSuggest.getSuggestions` 用 `folder.path &&` 显式排除根
+ * 目录——本插件早先手动 `push({path:"",isFolder:true})` 意图是让「/」可从下拉一键选中，但一旦
+ * 该候选的路径恰好提交为 `/` 后再次聚焦，`filterPathCandidates` 的子串匹配会把它自己排除掉、
+ * 转而只剩「路径字面含 `/`」的深层嵌套项，观感诡异（testplan K14）。根规则改由分层浏览模式的
+ * 顶部 header（可点击选中当前层，根层即「/」）承接，不再经过扁平模糊匹配这条路径。
  */
 function collectPathCandidates(tab: AutoHeadingsSettingTab): PathCandidate[] {
 	const vault = tab.plugin.app.vault as unknown as {
 		getAllLoadedFiles?: () => Array<{ path: string; children?: unknown }>;
 	};
 	const all = vault.getAllLoadedFiles?.() ?? [];
-	// 根目录本身（`TFolder.path === ""`）恒可选，渲染 / 选中时按 `${path}/` 规则自然显示 `/`。
-	const candidates: PathCandidate[] = [{ path: "", isFolder: true }];
+	const candidates: PathCandidate[] = [];
 	for (const f of all) {
 		if (!f.path) {
 			continue;

@@ -374,6 +374,73 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 	flex-shrink: 0;
 }
 
+.ah-path-suggest-label {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 分层浏览模式（testplan K14）顶部条：当前层路径（点击＝选中该层）+ 非根层的返回箭头。 */
+.ah-path-suggest-location {
+	display: flex;
+	align-items: center;
+	gap: 0.3em;
+	padding: 0.3em 0.6em;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ah-path-suggest-location-label {
+	flex: 1;
+	cursor: pointer;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ah-path-suggest-location-label:hover {
+	color: var(--text-normal);
+}
+
+.ah-path-suggest-back {
+	flex-shrink: 0;
+	cursor: pointer;
+	color: var(--text-faint);
+	/* 视觉尺寸仍与文字相当，靠 padding + 负 margin 扩大实际点击区，不占用额外行内空间。 */
+	padding: 0.35em 0.5em;
+	margin: -0.35em 0 -0.35em -0.5em;
+	border-radius: var(--radius-s, 4px);
+}
+
+.ah-path-suggest-back:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+/* 文件夹行右侧的下钻箭头：与 .ah-path-suggest-back 同一套「padding + 负 margin 扩大点击区」手法。 */
+.ah-path-suggest-chevron {
+	flex-shrink: 0;
+	cursor: pointer;
+	color: var(--text-faint);
+	padding: 0.35em 0.5em;
+	margin: -0.35em -0.5em -0.35em 0;
+	border-radius: var(--radius-s, 4px);
+}
+
+.ah-path-suggest-chevron:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.ah-path-suggest-empty {
+	padding: 0.5em 0.6em;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	font-style: italic;
+}
+
 .ah-path-handle {
 	cursor: grab;
 	color: var(--text-faint);
