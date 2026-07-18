@@ -34,9 +34,69 @@
 > **省 token 读盘**：接手跑 `npm run docs -- --handover` 一条命令即可（更早历史翻 `log-archive.md`）。
 > 源码已按职责拆分（编号引擎 = `template` / `count` / `render` / `strip` / `whitelist` + `numbering` 编排兼
 > barrel，外部一律从 `./numbering` 导入；设置 GUI = `SettingsTab.ts` 壳 + `settings/tabs/` 七个 TAB，
-> 均可整读）；仍大的 `main.ts`（~970 行）与 `i18n.ts`（~650 行）先 `grep` 定位、别整读。
+> 均可整读）；仍大的 `main.ts`（~1290 行）与 `i18n.ts`（~710 行）先 `grep` 定位、别整读。
+> UVM 压测框架（`tests/dev_tests/uvm/`）已按职责拆成 9 个文件、均可整读，入口仍是 `framework.ts`。
 
 > 一句话：**改代码 → `npm run bump` → 写本文件新块 + `status.jsonl` → `npm run preflight`（= docs + release + test + lint + format:check）→ 提交（含 `release/`）。**
+
+---
+
+## 2026-07-18 1.0.13（未 bump）UVM 压测框架拆分（1686→9 文件）+ 修 Windows 上失效的 test:fuzz + 订正过期框架文档
+
+**背景**：外部评审给 UVM 压测引擎 8.5/10，指出三条边界 + 一条工程隐患。核查后**三条边界均不动代码**——
+它们都已在仓库内明确记录（参考模型复用 build 路径是刻意取舍、幂等 oracle 的分工见 uvm/README，
+「明确不入 UVM」清单见本文件 testplan §4 尾部），评审是在复述而非发现。重建一套独立编号实现作参考模型
+属高成本低回报（会变成第二处需同步维护且必然漂移的真相源），**不做**。真正落地的是第四条 + 两处评审
+没发现的实缺陷。
+
+**做了什么**：
+
+1. **`framework.ts` 1686 行拆成 9 个文件**（原为全仓库最大文件，超过 `main.ts` 1286，违反 CLAUDE.md §3
+   「~500 行且多职责 = 拆分信号」）：`framework.ts`(533，World 状态 + step/finish/trigger + runSequence，
+   仍是唯一入口并 re-export 公共 API) / `operations.ts`(262) / `config-ops.ts`(317) / `oracles.ts`(246) /
+   `coverage.ts`(191) / `stimulus.ts`(111) / `config.ts`(98) / `model.ts`(61) / `rng.ts`(41)。
+   `World` 的方法体外移为接收 world 句柄的自由函数、类内保留一行委托，故 `step()` 等调用点零改动；
+   三个新模块用 **`import type { World }`** 引入（编译期擦除）保证运行时依赖图单向无环。
+   `random_sequence.test.ts` 一行未改。
+2. **纯搬运的验收方式（可复用）**：RNG 是种子化 mulberry32 ⇒ 序列完全确定。改动前先采集**黄金基线**
+   （DEFAULT_GEN + EXPLORE_GEN 各 500 seeds × 60 ops，dump 每个 seed 的 World 终态全字段 + Coverage
+   累加器指纹，8MB）。Phase 1（外移常量/Coverage）与 Phase 2（拆 World）后各比对一次，**md5 全程一致**
+   （`4b4552b2…`），实锤 rng 调用序列未被扰动。采集用的临时用例已删。
+   > 踩坑记录：`JSON.stringify` 对 `Map`/`Set` 默认产出 `{}`，会**静默掏空指纹**——`Coverage.numerals`
+   > 是 Set、`Coverage.ops` 与 `World.lastResolved` 是 Map，replacer 里必须显式处理。首版漏了 Set，
+   > 54 个 bin 里只有 1 个是真数字，差点拿一张假的安全网去做重构。
+3. **修 `npm run test:fuzz` 在 Windows 上长期失效**：原命令用 POSIX 前缀赋值
+   `AAH_FUZZ_RUNS=5000 … vitest`，而 npm 在 Windows 默认走 `cmd.exe`（`script-shell` 未配置），
+   该语法直接是语法错误 ⇒ CLAUDE.md §4 第 4 步「动核心逻辑后额外跑一遍 test:fuzz」在本机**一直没生效**。
+   新增 `scripts/fuzz.mjs`：以 `process.execPath` 直接拉起 vitest 的 ESM 入口（免 npx / 免 `shell:true`，
+   参数不会被二次拆词），注入 `AAH_FUZZ_*`，**透传退出码**（已实测失败场景返回 1，否则 CI 会把失败当通过），
+   支持 `--runs=/--ops=/--seed=`。超时从 120s 放宽到 600s（`--runs=20000` 时原值不够）。**不引入 cross-env 依赖**。
+4. **订正 `uvm/README.md` 的过期描述**（评审没发现；过期的地图比大文件更坑接手 Agent）：
+   ① explore 标注「进 CI？否（`it.skip`，会撞 U1/U2/U3）」——实际 0.6.7 起已转正、每次 `npm test` 都跑，
+   且 U1/U2（0.6.3）、U3（0.6.6 方案A）、U4（0.6.7）**全部已修**；② 称 explore 由 `AAH_FUZZ_MODE=explore`
+   切换——该变量早已无门控效果；③ 写「默认 400 条 × 40 步」——实际 500×60；④ explore 序号样式漏了
+   roman（黄金基线的 coverage dump 实测为 arabic/circled/cjk + lower/upper-alpha + lower/upper-roman）。
+   另把「参考侧…**不会和 DUT 一起错**」这句过度声明改准确：它不会与 DUT 各自演化出分歧，但对**共因错误**
+   （两侧对同一条规则一起理解错）没有免疫力——这正是 S7 另配独立参考模型 `indepMatch`/`indepSpec` 的原因。
+   新增「文件分工」节。
+
+**没做什么**：未 bump（按 CLAUDE.md §4.1 上架后策略：只碰 `tests/` `doc/` `scripts/`，`src/` 一行未动、
+无行为与产物变化，故不推送空更新给线上用户），未重建 `release/`。未重建独立参考模型（理由见背景）。
+未动任何 oracle 语义 / 约束表 / 覆盖率 bin 定义。`framework.ts` 533 行仍略超 500，其中 112 行是顶部
+设计文档注释（含 0.6.2→0.7.6 各轮升级史），代码本体约 420 行、职责单一，**未强行再拆**——若日后仍嫌大，
+可考虑把历史升级段落下沉到 log-archive 而非继续切分代码。
+
+**验证方式**：黄金基线逐字节比对（Phase 1 / Phase 2 各一次，md5 全程一致）；`npm test` 409/410 通过
+（唯一红灯是 `whitelist.test.ts:406` 的本机 ICU collation 预存噪音，CI 为准）；
+**`npm run test:fuzz` 5000×80 两块记分板全绿（4.7s）**——这条同时实证了新脚本在 Windows 上真能跑；
+`eslint` + `prettier --check` 对 `tests/dev_tests/uvm` 全绿。
+
+**本周期派发 4 次（Explore × 2、feature-coder × 2）**。
+
+**下一步**：接 1.0.13 原有待办——用户真机手验 K15/K16、打 tag `1.0.13` 发布、M12 余项。
+UVM 侧 backlog 不变（放开「各模板不同前后缀候选」+ 按活模板动态算剥离并集，探「删含唯一前缀模板 →
+旧文件孤儿残留」）；新增可选项：默认模式样式约束（arabic/cjk/circled）的原因已随方案A失效，
+可专项放开跑一轮，绿了就删约束。
 
 ---
 
@@ -112,48 +172,6 @@ CI 为准）。
 
 ---
 
-## 2026-07-18 1.0.11 路径规则建议弹窗：分层浏览模式 + 修根候选诡异过滤（用户报告 + 现场调研 numeroflip 源码定案）
-
-**做了什么**：
-
-1. **用户报告两个疑点**：① 路径规则输入框已提交 `/` 根规则后再次点击，下拉建议出现「诡异／又一个
-   `/`」的观感；② 建议弹窗希望改成按目录层级点击下钻，而非扁平列出全库。
-2. **先复现、后调研、再定案**：① 用纯函数复现脚本实测确认根因——`collectPathCandidates` 手动注入
-   的合成根候选 `{path:"",isFolder:true}` 一旦 needle 恰为 `/` 就被自身子串匹配逻辑排除，顶层文件夹
-   全部消失、只剩深层嵌套项；② 用户要求先调研参考实现 numeroflip/obsidian-auto-template-trigger 的
-   真实逻辑再动手——直接拉取其 GitHub 源码（`fileSuggest.ts`/`suggest.ts`/`Settings.ts`）确认
-   `FolderSuggest.getSuggestions` 是**扁平**子串模糊匹配（非分层）、`folder.path &&` 显式排除根目录、
-   点击即选中并 `close()`；该插件**没有**文件级规则（只有文件夹→模板）。据此推翻了此前给出的
-   「点击=下钻、专门一行选中当前层」分层方案初稿，改为「点文字＝选中（贴合参考实现默认手感）、
-   文件夹行小箭头＝下钻（新增能力，不冲突）」——与用户讨论 ASCII 手绘两版交互后拍板。
-3. **实现（1.0.11，行为变化已 bump）**：
-   - `pathrules.ts`：新增纯函数 `parentDir`/`listImmediateChildren`（分层浏览用）；
-     `filterPathCandidates` 的 needle 剥离前导 `/`（本就是根锚点写法，非字面字符，K14 根因之一）；
-   - `PathRules.ts`：`collectPathCandidates` 不再注入合成根候选（对齐参考实现）；
-   - `PathSuggest.ts`：加状态机——输入框为空进「分层浏览」（header 显示当前层路径且点击选中该层、
-     非根层加 `⬅` 返回上一级；子项文件夹优先字典序列出，行文字点击＝选中，文件夹行小箭头 `▸`＝
-     下钻；ArrowLeft/Right 键盘辅助）；有输入内容沿用既有全库模糊搜索；一打字即退出浏览、清空
-     回空输入重新从根开始（不记忆上次深度）；
-   - `i18n.ts` 新增 4 个中英文案；`styles.css` 新增 header/back/chevron/empty 样式（小箭头用
-     padding+负 margin 扩大点击区，不撑大行内视觉比例，回应用户「小箭头不要太小」的要求）。
-4. **测试**：`pathrules.test.ts` 新增 38 例（`parentDir`/`listImmediateChildren`/
-   `filterPathCandidates` 前导斜杠场景），全过；`tsc --noEmit`/`lint`/`format` 全绿。
-
-**没做什么**：`PathSuggest.ts` 的 DOM 交互（点击/下钻/返回的真实手感）无自动化测试覆盖（仓库现状
-如此，`PathRules.ts`/`PathSuggest.ts` 一直没有 DOM 级测试），留用户在 Obsidian 里实测确认——
-testplan K14 标记 🔲 手验 DOM。
-
-**验证方式**：`pathrules.test.ts` 68 例全过（含本次新增 38 例）、`tsc --noEmit`、`npm run lint`、
-`npm run format` 全绿；`npm test` 唯一红灯是本机预存 Windows ICU collation 排序噪音
-（`whitelist.test.ts:406`，与本次改动无关，CI 为准）。
-
-**本周期派发 1 次（quality-gate × 1）**。
-
-**下一步**：等用户在真实 Obsidian 环境里实测分层浏览的点击/下钻/返回手感，回填 K14 手验结论；
-M11 其余项（导出验证矩阵、Canvas O1、E8 拍板、Backlink 审阅模式、H8+清库撤销、CM6 原子区域）。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -197,6 +215,7 @@ obsidian-auto-headings/
 ├── scripts/
 │   ├── sync-release.mjs    把构建产物同步到 release/（被 npm run release 调用）
 │   ├── bump.mjs            一键版本号同步（npm run bump）
+│   ├── fuzz.mjs            跨平台跑重型随机压测（npm run test:fuzz [-- --runs=/--ops=/--seed=]）
 │   └── docs.mjs            文档维护：归档/滚动/摘要/守卫/交接（npm run docs [-- --handover|--check]）
 ├── .claude/agents/       ← SubAgent 定义（quality-gate / repo-scout / mech-editor / feature-coder）
 ├── manifest.json         ← 插件清单（Obsidian 约定须在插件根目录）

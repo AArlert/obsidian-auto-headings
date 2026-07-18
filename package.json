@@ -13,7 +13,7 @@
 		"preflight": "npm run docs && npm run release && npm test && npm run lint && npm run format:check",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"test:fuzz": "AAH_FUZZ_RUNS=5000 AAH_FUZZ_OPS=80 vitest run tests/dev_tests/random_sequence.test.ts --testTimeout=120000",
+		"test:fuzz": "node scripts/fuzz.mjs",
 		"lint": "eslint . --ext .ts",
 		"format": "prettier --write .",
 		"format:check": "prettier --check ."
