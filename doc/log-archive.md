@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-07-18 1.0.11 路径规则建议弹窗：分层浏览模式 + 修根候选诡异过滤（用户报告 + 现场调研 numeroflip 源码定案）
+
+**做了什么**：
+
+1. **用户报告两个疑点**：① 路径规则输入框已提交 `/` 根规则后再次点击，下拉建议出现「诡异／又一个
+   `/`」的观感；② 建议弹窗希望改成按目录层级点击下钻，而非扁平列出全库。
+2. **先复现、后调研、再定案**：① 用纯函数复现脚本实测确认根因——`collectPathCandidates` 手动注入
+   的合成根候选 `{path:"",isFolder:true}` 一旦 needle 恰为 `/` 就被自身子串匹配逻辑排除，顶层文件夹
+   全部消失、只剩深层嵌套项；② 用户要求先调研参考实现 numeroflip/obsidian-auto-template-trigger 的
+   真实逻辑再动手——直接拉取其 GitHub 源码（`fileSuggest.ts`/`suggest.ts`/`Settings.ts`）确认
+   `FolderSuggest.getSuggestions` 是**扁平**子串模糊匹配（非分层）、`folder.path &&` 显式排除根目录、
+   点击即选中并 `close()`；该插件**没有**文件级规则（只有文件夹→模板）。据此推翻了此前给出的
+   「点击=下钻、专门一行选中当前层」分层方案初稿，改为「点文字＝选中（贴合参考实现默认手感）、
+   文件夹行小箭头＝下钻（新增能力，不冲突）」——与用户讨论 ASCII 手绘两版交互后拍板。
+3. **实现（1.0.11，行为变化已 bump）**：
+   - `pathrules.ts`：新增纯函数 `parentDir`/`listImmediateChildren`（分层浏览用）；
+     `filterPathCandidates` 的 needle 剥离前导 `/`（本就是根锚点写法，非字面字符，K14 根因之一）；
+   - `PathRules.ts`：`collectPathCandidates` 不再注入合成根候选（对齐参考实现）；
+   - `PathSuggest.ts`：加状态机——输入框为空进「分层浏览」（header 显示当前层路径且点击选中该层、
+     非根层加 `⬅` 返回上一级；子项文件夹优先字典序列出，行文字点击＝选中，文件夹行小箭头 `▸`＝
+     下钻；ArrowLeft/Right 键盘辅助）；有输入内容沿用既有全库模糊搜索；一打字即退出浏览、清空
+     回空输入重新从根开始（不记忆上次深度）；
+   - `i18n.ts` 新增 4 个中英文案；`styles.css` 新增 header/back/chevron/empty 样式（小箭头用
+     padding+负 margin 扩大点击区，不撑大行内视觉比例，回应用户「小箭头不要太小」的要求）。
+4. **测试**：`pathrules.test.ts` 新增 38 例（`parentDir`/`listImmediateChildren`/
+   `filterPathCandidates` 前导斜杠场景），全过；`tsc --noEmit`/`lint`/`format` 全绿。
+
+**没做什么**：`PathSuggest.ts` 的 DOM 交互（点击/下钻/返回的真实手感）无自动化测试覆盖（仓库现状
+如此，`PathRules.ts`/`PathSuggest.ts` 一直没有 DOM 级测试），留用户在 Obsidian 里实测确认——
+testplan K14 标记 🔲 手验 DOM。
+
+**验证方式**：`pathrules.test.ts` 68 例全过（含本次新增 38 例）、`tsc --noEmit`、`npm run lint`、
+`npm run format` 全绿；`npm test` 唯一红灯是本机预存 Windows ICU collation 排序噪音
+（`whitelist.test.ts:406`，与本次改动无关，CI 为准）。
+
+**本周期派发 1 次（quality-gate × 1）**。
+
+**下一步**：等用户在真实 Obsidian 环境里实测分层浏览的点击/下钻/返回手感，回填 K14 手验结论；
+M11 其余项（导出验证矩阵、Canvas O1、E8 拍板、Backlink 审阅模式、H8+清库撤销、CM6 原子区域）。
+
+---
+
 ## 2026-07-18 1.0.10 复制净化落地：同步净化 + 内存映射双通道（用户拍板新方案，claude/clipboard-paste-spike-impl）
 
 **做了什么**：

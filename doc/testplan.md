@@ -451,6 +451,13 @@
 >
 > 详见 `tests/dev_tests/uvm/README.md`。
 
+> **框架已按职责拆分**（原 `framework.ts` 单文件 1686 行，曾是全仓库最大文件）：现为
+> `framework.ts`（World 状态 + step/trigger + runSequence，唯一入口）/ `operations.ts`（编辑与清除类激励）/
+> `config-ops.ts`（配置类激励）/ `oracles.ts`（全部记分板 + S7 独立参考模型）/ `coverage.ts` / `config.ts` /
+> `stimulus.ts` / `model.ts` / `rng.ts`，各文件均 < 550 行。拆分为**纯搬运**，以种子化黄金基线
+> （1000 条序列的 World 终态 + Coverage 指纹）逐字节比对验收，rng 调用序列未被扰动。
+> 文件分工表见 `tests/dev_tests/uvm/README.md`「文件分工」节。
+
 ### 4.1 扩展蓝图：把「用户全部操作」纳入验证（阶段 1+2 已落地）★
 
 > **进度（0.7.6）**：**阶段 1+2 均已实现并随 8000×80 / 20000×80 全绿、未发现引擎 bug**——
