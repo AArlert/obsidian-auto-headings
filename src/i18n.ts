@@ -259,6 +259,10 @@ export interface Messages {
 	noticeDisabled: string;
 	noticeNothingToClear: string;
 	noticeCleared: string;
+	/** 清除编号并顺带写入 frontmatter 暂停开关（1.0.15，testplan H13）——必须说清「怎么恢复」。 */
+	noticeClearedAndPaused: string;
+	/** 「立即重新编号」顺带移除了 frontmatter 暂停开关（1.0.15，testplan H15）。 */
+	noticeRenumberedAndResumed: string;
 	noticeClearedVault: (count: number) => string;
 	noticeFrozenVault: (count: number) => string;
 	noticeResumed: string;
@@ -488,6 +492,9 @@ const zh: Messages = {
 	noticeDisabled: "已禁用全局自动编号",
 	noticeNothingToClear: "当前文件无可清除的编号前缀",
 	noticeCleared: "已清除编号",
+	noticeClearedAndPaused:
+		"已清除编号，并暂停本文件的自动编号（属性 obsidian-auto-headings: false）。跑「立即重新编号」即可恢复接管。",
+	noticeRenumberedAndResumed: "已重新编号，并恢复本文件的自动编号",
 	noticeClearedVault: (count) => `已清除全库编号（共修改 ${count} 个文件）`,
 	noticeFrozenVault: (count) =>
 		`已固化编号并交还所有权（共修改 ${count} 个文件）；编号已保留为普通文本，插件停止自动编号`,
@@ -728,6 +735,9 @@ const en: Messages = {
 	noticeDisabled: "Global auto-numbering disabled",
 	noticeNothingToClear: "No numbering prefix to clear in the current file",
 	noticeCleared: "Numbering cleared",
+	noticeClearedAndPaused:
+		"Numbering cleared, and auto-numbering paused for this note (property obsidian-auto-headings: false). Run “Renumber now” to resume.",
+	noticeRenumberedAndResumed: "Renumbered, and auto-numbering resumed for this note",
 	noticeClearedVault: (count) => `Vault numbering cleared (${count} file(s) changed)`,
 	noticeFrozenVault: (count) =>
 		`Numbering frozen and ownership released (${count} file(s) changed); the numbers stay as plain text and automatic numbering is now off`,

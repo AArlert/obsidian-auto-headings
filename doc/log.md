@@ -41,6 +41,75 @@
 
 ---
 
+## 2026-07-25 1.0.15 三处「用户已表态、插件仍自作主张」：清除即暂停 / 不抢键盘 / 迁移守卫误伤
+
+**背景**：用户在真机使用中报了两条体感问题（「清除当前编号是个摆设」「标题后写空格会被自动清掉」），
+本周期把它们连同顺带挖出的第三条一起修掉。三者同源：**插件在用户明确表态之后仍然自作主张**。
+规格集中写在 spec §3.19（新节），入口从 §3.2 / §3.10 指过去。
+
+**做了什么**：
+
+1. **「清除当前文件编号」此前是摆设**（testplan H13–H16 ✅）：`runClearNumbering` 只取消了该文件
+   **当前那一个**待处理防抖计时器，下一次按键即重新 `scheduleRenumber` 把编号编回去——只要「全局
+   自动编号」开着，这条命令**永远不可能产生持久效果**。现在清除时若该文件确实还会被自动重编号
+   （`shouldAutoTrigger` 够格 + 命中模板），把 frontmatter `obsidian-auto-headings: false` **并进同一个
+   `editor.transaction`**，一次撤销整体回退；反之一个字都不写。恢复走「立即重新编号」（顺带移除该键，
+   该键是唯一一项时整个 `---` 块一并移除）。
+   - **复用既有单文件开关而非新造暂停状态**：它写在文件里、用户看得见改得动、跨重启存在，且每条
+     自动触发路径本就尊重它。新造 `pausedPaths` 则是隐形状态，还要挂文件重命名事件重映射路径——
+     正是 1.0.14 离场提示条那条教训（「不能在用户不知情时一声不吭地什么都不做」）所指。
+   - **写入侧只产出「编辑计划」不直接改字符串**（`frontmatter.ts` 的 `planPauseFileSwitch` /
+     `planResumeFileSwitch` → `SwitchEdit`）。因为 `writeLineDiff` 按「整文件重写永不增删行」做逐行
+     索引比对，往顶部插几行会让其后所有行错位；交回 `main.ts` 翻译成一条 `EditorChange` 后，CM6
+     变更集按原文档坐标计算，与行替换天然互不干扰。该模块此前是纯只读的，本次首次有了写入侧。
+
+2. **不在用户正敲字的那一行下手**（testplan J11 ✅）：`stripPrefix` 会把标题文本的行尾空白归一化掉
+   （`strip.ts` 的 `s+$`，幂等所必需），而自动路径此前**没有任何光标守卫** ⇒ 用户在标题末尾敲一个
+   空格、停顿超过防抖时长，空格就被静默吃掉。新增 `preserveLine`：自动路径把光标所在行的改动从本次
+   事务里剔除、**其余行照常重排**，该行在光标移开后的下一次触发补上。
+   - **不整轮顺延**（与 J8 的 IME 分支形状不同）：顺延会在光标停在标题行不动时无限期地重排计时器。
+   - **保护必须发生在折叠自链接之前**——被保护的行标题文本没变就不该产生改名，更不该据此改写指向
+     它的内链（否则链接指向一个文件里并不存在的标题）。快照因此记的始终是真正落盘的内容。
+
+3. **迁移守卫误伤**（testplan J12 ✅，**写 J11 用例时撞出来的既有缺陷**）：
+   `hasUnclaimedForeignNumbering` 拿 `stripForeignNumbering(rawText)` 与 `rawText` **直接**比较，而前者
+   末尾也带一道 `s+$` 归一化 ⇒ 一个全文无 WJ、无任何编号的文件，只要某个标题行尾有空格就被判成
+   「像外来编号」，该文件的自动编号被整个拦下、并弹出误导性的「请先执行『清理非本插件的标题编号』」。
+   修法：比较基准同样去掉行尾空白。**这条是第 2 项的第二个独立成因**——只修光标守卫治不好它。
+
+4. **`fm: false` 的含义收窄为「不自动编号」**（testplan I8 ✅，M22 用例反转）：第 1 项让「清除编号」
+   开始写这个键，而它此前**同时**关掉 backlink 独立触发 ⇒ 清一次编号会连「改名不断链」一起停掉，
+   等于用一次编号清理换掉附录 A 里定位的第一价值。故 `shouldBacklinkStandaloneTrigger` 不再检查该键。
+   **这是对已上架语义的有意收窄**，由用户拍板（理由：backlink 本就是独立的全局功能，任何时候都该 sync）。
+   要彻底静默请关 `updateBacklinks` 总开关。
+
+**没做什么 / 已知遗留**：
+
+- **竞品 auto-heading（gurjar1）的调研只落到了会话里，未进 spec 附录 A**。本次派 subagent 做了源码级
+  核实（真实仓库是 `gurjar1/auto-heading-obsidian`，此前 memory 记的地址 404），拿到设置面板 41 个控件
+  逐项表、三套标题旁可视化 UI（CM6 widget 行内工具条 / gutter 徽标 / 顶部 breadcrumb 条）、24 条命令、
+  状态栏与右键菜单清单。**下一步应把它并进 spec 附录 A.11 并重排 M12 那条「两条借鉴命令」**。
+- **未验证 O5f**（Obsidian 内置「导出为 PDF」是否残留 WJ）——用户表示自己手验，故本周期未推进
+  「自动识别 pandoc 导出并临时清 WJ」那条需求。结论已给：**「清了再放回」这条路应否掉**（Obsidian
+  没有导出开始/结束事件，且崩溃/取消会把库停在被剥光的状态，而剥 WJ 不进撤销历史）；真正的杠杆是
+  `registerMarkdownPostProcessor` 渲染层，且**必须只碰文本节点、不碰 `data-heading` 与链接 href**。
+  等 O5f 结论出来再决定是否值得做。
+- **UVM 激励仍未扩到注释块**（1.0.14 遗留），三颗雷未拆：SAFE_FRAGMENTS/MESSY_FRAGMENTS 投毒、
+  deleteLine 删注释定界行、R3 形态标题进 backlink 往返。
+- 1.0.14 与 1.0.15 **都还没打 tag 发布**。
+
+**下一步**：① 用户手验 H12（固化确认框/离场提示条）、H9（真库内链不断）、O5f（内置导出 PDF）、
+Dataview 样例；② 竞品调研并入 spec 附录 A.11；③ 打 tag 发 1.0.15（release-notes 已备好）。
+
+**验证方式**：`npx tsc --noEmit` / `npm test`（新增 22 条：main 12 + frontmatter 11 - 重合，另反转 M22、
+改 I6 与三条清除路径断言）/ `npm run lint` / `npm run test:fuzz` 全绿；本机唯一红灯是既知的
+`whitelist.test.ts:406` ICU 排序噪音（见 memory `windows-env-quirks`）。
+
+**本周期派发 2 次**（quality-gate × 2；另派 general-purpose × 1 做竞品调研）。主模型亲自做了设计决策、
+frontmatter 写入侧、光标保护接线与全部文档。
+
+---
+
 ## 2026-07-19 1.0.14 M12 两项：注释块跳过（含分区域残留分治）+ 固化编号并交还所有权（全库）
 
 **背景**：本块是「导出 + 离场」四项里的**周期 B**（有行为变化，故 bump 1.0.14 并重建 `release/`）；
@@ -178,70 +247,6 @@ ICU collation 既知假红）；`format:check` 红的 12 个文件**全部是我
 
 **下一步**：周期 B——固化编号并交还所有权（全库）+ 注释块跳过与分区域残留清理，届时 bump 1.0.14
 并重建 `release/`。手验清单交用户：O5f 内置导出、Dataview 查询样例在真库跑通。
-
----
-
-## 2026-07-18 1.0.13（未 bump）UVM 压测框架拆分（1686→9 文件）+ 修 Windows 上失效的 test:fuzz + 订正过期框架文档
-
-**背景**：外部评审给 UVM 压测引擎 8.5/10，指出三条边界 + 一条工程隐患。核查后**三条边界均不动代码**——
-它们都已在仓库内明确记录（参考模型复用 build 路径是刻意取舍、幂等 oracle 的分工见 uvm/README，
-「明确不入 UVM」清单见本文件 testplan §4 尾部），评审是在复述而非发现。重建一套独立编号实现作参考模型
-属高成本低回报（会变成第二处需同步维护且必然漂移的真相源），**不做**。真正落地的是第四条 + 两处评审
-没发现的实缺陷。
-
-**做了什么**：
-
-1. **`framework.ts` 1686 行拆成 9 个文件**（原为全仓库最大文件，超过 `main.ts` 1286，违反 CLAUDE.md §3
-   「~500 行且多职责 = 拆分信号」）：`framework.ts`(533，World 状态 + step/finish/trigger + runSequence，
-   仍是唯一入口并 re-export 公共 API) / `operations.ts`(262) / `config-ops.ts`(317) / `oracles.ts`(246) /
-   `coverage.ts`(191) / `stimulus.ts`(111) / `config.ts`(98) / `model.ts`(61) / `rng.ts`(41)。
-   `World` 的方法体外移为接收 world 句柄的自由函数、类内保留一行委托，故 `step()` 等调用点零改动；
-   三个新模块用 **`import type { World }`** 引入（编译期擦除）保证运行时依赖图单向无环。
-   `random_sequence.test.ts` 一行未改。
-2. **纯搬运的验收方式（可复用）**：RNG 是种子化 mulberry32 ⇒ 序列完全确定。改动前先采集**黄金基线**
-   （DEFAULT_GEN + EXPLORE_GEN 各 500 seeds × 60 ops，dump 每个 seed 的 World 终态全字段 + Coverage
-   累加器指纹，8MB）。Phase 1（外移常量/Coverage）与 Phase 2（拆 World）后各比对一次，**md5 全程一致**
-   （`4b4552b2…`），实锤 rng 调用序列未被扰动。采集用的临时用例已删。
-   > 踩坑记录：`JSON.stringify` 对 `Map`/`Set` 默认产出 `{}`，会**静默掏空指纹**——`Coverage.numerals`
-   > 是 Set、`Coverage.ops` 与 `World.lastResolved` 是 Map，replacer 里必须显式处理。首版漏了 Set，
-   > 54 个 bin 里只有 1 个是真数字，差点拿一张假的安全网去做重构。
-3. **修 `npm run test:fuzz` 在 Windows 上长期失效**：原命令用 POSIX 前缀赋值
-   `AAH_FUZZ_RUNS=5000 … vitest`，而 npm 在 Windows 默认走 `cmd.exe`（`script-shell` 未配置），
-   该语法直接是语法错误 ⇒ CLAUDE.md §4 第 4 步「动核心逻辑后额外跑一遍 test:fuzz」在本机**一直没生效**。
-   新增 `scripts/fuzz.mjs`：以 `process.execPath` 直接拉起 vitest 的 ESM 入口（免 npx / 免 `shell:true`，
-   参数不会被二次拆词），注入 `AAH_FUZZ_*`，**透传退出码**（已实测失败场景返回 1，否则 CI 会把失败当通过），
-   支持 `--runs=/--ops=/--seed=`。超时从 120s 放宽到 600s（`--runs=20000` 时原值不够）。**不引入 cross-env 依赖**。
-4. **订正 `uvm/README.md` 的过期描述**（评审没发现；过期的地图比大文件更坑接手 Agent）：
-   ① explore 标注「进 CI？否（`it.skip`，会撞 U1/U2/U3）」——实际 0.6.7 起已转正、每次 `npm test` 都跑，
-   且 U1/U2（0.6.3）、U3（0.6.6 方案A）、U4（0.6.7）**全部已修**；② 称 explore 由 `AAH_FUZZ_MODE=explore`
-   切换——该变量早已无门控效果；③ 写「默认 400 条 × 40 步」——实际 500×60；④ explore 序号样式漏了
-   roman（黄金基线的 coverage dump 实测为 arabic/circled/cjk + lower/upper-alpha + lower/upper-roman）。
-   另把「参考侧…**不会和 DUT 一起错**」这句过度声明改准确：它不会与 DUT 各自演化出分歧，但对**共因错误**
-   （两侧对同一条规则一起理解错）没有免疫力——这正是 S7 另配独立参考模型 `indepMatch`/`indepSpec` 的原因。
-   新增「文件分工」节。
-5. **下沉 `framework.ts` 顶部历史升级段落**（同批用户追加要求）：顶部设计注释里 0.6.2/0.6.5/0.7.1/0.7.5/
-   0.7.6 五段「升级」叙事经核查**在 `log-archive.md` 对应版本条目已有完整周期块**（做了什么/压测结果/
-   没做什么一应俱全）——原叙事是重复记录而非新信息，违反 CLAUDE.md §3.1 单一事实源纪律。删除四段
-   `0.6.5`/`0.7.1`/`0.7.5`/`0.7.6` 详细叙事（`0.6.2` 一段本就只是「两种模式」现状说明，只去掉版本号
-   标题、留主体），代之以一句「历史演进」指针段落，指向 `log-archive.md` 五个版本条目 + `testplan.md`
-   §3.2（bug 状态权威源）。纯注释删减，零逻辑变化。
-
-**没做什么**：未 bump（按 CLAUDE.md §4.1 上架后策略：只碰 `tests/` `doc/` `scripts/`，`src/` 一行未动、
-无行为与产物变化，故不推送空更新给线上用户），未重建 `release/`。未重建独立参考模型（理由见背景）。
-未动任何 oracle 语义 / 约束表 / 覆盖率 bin 定义。`framework.ts` 现 486 行（< 500），历史升级叙事已下沉。
-
-**验证方式**：黄金基线逐字节比对（Phase 1 / Phase 2 各一次，md5 全程一致）；`npm test` 409/410 通过
-（唯一红灯是 `whitelist.test.ts:406` 的本机 ICU collation 预存噪音，CI 为准）；
-**`npm run test:fuzz` 5000×80 两块记分板全绿（4.7s）**——这条同时实证了新脚本在 Windows 上真能跑；
-`eslint` + `prettier --check` 对 `tests/dev_tests/uvm` 全绿；注释下沉后**重跑一遍同一质量门槛**确认
-纯文档改动未引入回归（仅改 `/** ... */` 注释文本，语义上不可能影响 rng 调用序列，但仍全量复核）。
-
-**本周期派发 4 次（Explore × 2、feature-coder × 2）**。
-
-**下一步**：接 1.0.13 原有待办——用户真机手验 K15/K16、打 tag `1.0.13` 发布、M12 余项。
-UVM 侧 backlog 不变（放开「各模板不同前后缀候选」+ 按活模板动态算剥离并集，探「删含唯一前缀模板 →
-旧文件孤儿残留」）；新增可选项：默认模式样式约束（arabic/cjk/circled）的原因已随方案A失效，
-可专项放开跑一轮，绿了就删约束。
 
 ---
 

@@ -113,11 +113,16 @@ export function clearForeignNumberingContent(content: string): string {
  *
  * **已知风险**：与 {@link stripForeignNumbering} 共享同一误伤面（如 `## API 设计`）——但落在这里
  * 代价是「跳过写入 + 提示」而非「内容被吃」，比清理命令本身更安全，故接受。
+ *
+ * **1.0.15 修**（testplan J12）：比较基准必须先去掉行尾空白。{@link stripForeignNumbering} 末尾带一道
+ * `\s+$` 归一化，于是 `## 标题 `（用户刚在标题末尾敲了个空格、全文一个编号都没有）会因为
+ * 「剥离结果 ≠ 原文」被判成外来编号——该文件的自动编号被整个拦下，还弹一句「请先清理非本插件的
+ * 标题编号」的误导提示。守卫只该对**真的剥掉了编号**的情形生效，不该对空白归一化生效。
  */
 export function hasUnclaimedForeignNumbering(content: string): boolean {
 	if (content.includes(WORD_JOINER)) {
 		return false;
 	}
 	const headings = parseHeadings(content);
-	return headings.some((h) => stripForeignNumbering(h.rawText) !== h.rawText);
+	return headings.some((h) => stripForeignNumbering(h.rawText) !== h.rawText.replace(/\s+$/, ""));
 }

@@ -15,11 +15,19 @@ import { DEFAULT_TEMPLATE, WORD_JOINER, type Template } from "../../src/numberin
 import { NO_NUMBERING_TEMPLATE, type PathRule } from "../../src/pathrules";
 import { Notice, TFile as MockTFile } from "./obsidian-mock";
 
+/** 编辑器坐标。 */
+interface Pos {
+	line: number;
+	ch: number;
+}
+
 /** 假编辑器：持有按行切分的文本，记录 `transaction` 调用次数（用于「单一事务」断言）。 */
 class FakeEditor {
 	private lines: string[];
 	/** `transaction` 被调用的次数。一次完整重排应只产生 **1** 次事务。 */
 	txnCount = 0;
+	/** 光标位置。默认 `-1` 行 = 不在任何行上，使既有用例不触发「光标所在行保护」（J11）。 */
+	private cursor: Pos = { line: -1, ch: 0 };
 
 	constructor(text: string) {
 		this.lines = text.split("\n");
@@ -34,14 +42,36 @@ class FakeEditor {
 		this.lines = text.split("\n");
 	}
 
-	/** main.ts 的整文重排永不增删行，每个 change 都是「整行替换」（from.ch=0 → 旧行长度）。 */
-	transaction(tx: {
-		changes: Array<{ from: { line: number; ch: number }; to: unknown; text: string }>;
-	}): void {
+	getCursor(): Pos {
+		return this.cursor;
+	}
+
+	/** 把光标放到某行（J11：模拟「用户正停在这一行敲字」）。 */
+	setCursor(line: number, ch = 0): void {
+		this.cursor = { line, ch };
+	}
+
+	/**
+	 * 施加一次事务。整文重排的 change 都是「整行替换」，但自 1.0.15 起同一事务里还可能夹带
+	 * **会改变行数**的 frontmatter 增删（清除即暂停 / 重新编号即恢复），逐行赋值已不够用。
+	 * 故按**原文档**坐标折算成绝对偏移、从后往前施加——与 CM6 变更集的语义一致。
+	 */
+	transaction(tx: { changes: Array<{ from: Pos; to?: Pos; text: string }> }): void {
 		this.txnCount++;
-		for (const c of tx.changes) {
-			this.lines[c.from.line] = c.text;
+		const offset = (p: Pos) => {
+			let o = 0;
+			for (let i = 0; i < p.line; i++) {
+				o += this.lines[i].length + 1;
+			}
+			return o + p.ch;
+		};
+		const sorted = [...tx.changes].sort((a, b) => offset(b.from) - offset(a.from));
+		let out = this.getValue();
+		for (const c of sorted) {
+			const from = offset(c.from);
+			out = out.slice(0, from) + c.text + out.slice(c.to ? offset(c.to) : from);
 		}
+		this.lines = out.split("\n");
 	}
 }
 
@@ -66,6 +96,7 @@ interface PluginInternals {
 	vaultClearInProgress: boolean;
 	scheduleRenumber(editor: unknown, info: unknown): void;
 	runImmediateRenumber(editor: unknown, ctx: unknown): void;
+	runClearNumbering(editor: unknown, ctx: unknown): void;
 	batchRenumberRule(rule: PathRule): Promise<void>;
 	strippableAffixes(): { prefixes: string[]; suffixes: string[] };
 	renumberActiveFile(): void;
@@ -400,9 +431,10 @@ describe("runImmediateRenumber：手动路径绕过开关与 OFF、仅受模板�
 			["---", "obsidian-auto-headings: false", "---", "## 章"].join("\n"),
 		);
 		p.runImmediateRenumber(ed, fileInfo("a.md"));
-		expect(ed.getValue()).toContain(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
+		// 1.0.15：本命令顺带移除 fm:false（H15 闭环）——该键是唯一一项，整个块一并移除。
+		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
 		expect(ed.txnCount).toBe(1);
-		expect(Notice.messages).toContain("已重新编号");
+		expect(Notice.messages).toContain("已重新编号，并恢复本文件的自动编号");
 	});
 
 	it("无任何路径规则命中：手动命令弹 Notice、不改动（I7 手动）", () => {
@@ -690,7 +722,10 @@ describe("Backlink 同步（M7，opt-in，见 spec.md §3.12）", () => {
 			fileInfo("a.md"),
 		);
 		await flushPromises();
-		expect(ed.getValue()).toBe("## 简介");
+		// 1.0.15：清除顺带暂停（H13）——链接同步这一半不受影响。
+		expect(ed.getValue()).toBe(
+			["---", "obsidian-auto-headings: false", "---", "## 简介"].join("\n"),
+		);
 		expect(vaultFiles.get("b.md")).toBe("跳到 [[a#简介]]。");
 	});
 
@@ -801,10 +836,12 @@ describe("Backlink 同步（M7，opt-in，见 spec.md §3.12）", () => {
 			fileInfo("a.md"),
 		);
 		await flushPromises();
-		// 标题与自链接在**同一次**事务里一起改写——不依赖任何异步 vault.process 读写。
-		expect(ed.getValue()).toBe(["## 简介", "见 [[#简介]]。"].join("\n"));
+		// 标题、自链接与暂停开关（1.0.15 H13）在**同一次**事务里一起改写——不依赖异步 vault.process。
+		expect(ed.getValue()).toBe(
+			["---", "obsidian-auto-headings: false", "---", "## 简介", "见 [[#简介]]。"].join("\n"),
+		);
 		expect(ed.txnCount).toBe(1);
-		expect(Notice.messages).toContain("已清除编号");
+		expect(Notice.messages.some((m) => m.includes("已清除编号"))).toBe(true);
 	});
 
 	it("同文件内链竞态回归：即便 metadataCache 把本文件自身也列为引用方，也不再走 vault.process（避免读盘覆盖未落盘的编辑器内容）", async () => {
@@ -822,8 +859,10 @@ describe("Backlink 同步（M7，opt-in，见 spec.md §3.12）", () => {
 			fileInfo("a.md"),
 		);
 		await flushPromises();
-		// 编辑器内容正确、原子写回。
-		expect(ed.getValue()).toBe(["## 简介", "见 [[#简介]]。"].join("\n"));
+		// 编辑器内容正确、原子写回（含 1.0.15 的暂停开关，H13）。
+		expect(ed.getValue()).toBe(
+			["---", "obsidian-auto-headings: false", "---", "## 简介", "见 [[#简介]]。"].join("\n"),
+		);
 		expect(ed.txnCount).toBe(1);
 		// 关键断言：本文件自身这一支不再经 vault.process 读改写——vaultFiles 里的「陈旧磁盘内容」
 		// 岿然不动。若回归到旧实现（把自身也交给 vault.process），这里会被改写、且可能覆盖式地
@@ -952,7 +991,10 @@ describe("Backlink 独立于编号模板的触发（CR-18，M20–M25，1.0.9 �
 		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲改]]。"); // 独立路径仍同步链接。
 	});
 
-	it("M22：frontmatter false 优先——显式关闭该文件时不触发", async () => {
+	// M22 原为「fm:false 优先——显式关闭该文件时连链接也不同步」。1.0.15 有意收窄该键的含义为
+	// 「不自动**编号**」（testplan I8）：清除编号命令自此会写 fm:false 来真正止住重编号（H13），
+	// 若链接同步跟着停，等于用一次清除编号换掉了插件的第一价值。要彻底静默改用 updateBacklinks。
+	it("M22（1.0.15 改）：fm:false 只关编号，不关链接同步", async () => {
 		const { p, vaultFiles } = makePlugin({
 			updateBacklinks: true,
 			pathRules: [],
@@ -960,7 +1002,7 @@ describe("Backlink 独立于编号模板的触发（CR-18，M20–M25，1.0.9 �
 		});
 		const fm = "---\nobsidian-auto-headings: false\n---\n## 甲";
 		const ed = new FakeEditor(fm);
-		p.scheduleRenumber(ed, fileInfo("a.md")); // fm:false → 两条路径都不够格，连计时器都不安排。
+		p.scheduleRenumber(ed, fileInfo("a.md")); // 播种快照基线（独立触发路径够格）。
 		vi.advanceTimersByTime(300);
 		await flushPromises();
 
@@ -968,7 +1010,8 @@ describe("Backlink 独立于编号模板的触发（CR-18，M20–M25，1.0.9 �
 		p.scheduleRenumber(ed, fileInfo("a.md"));
 		vi.advanceTimersByTime(300);
 		await flushPromises();
-		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲]]。"); // 未同步。
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#甲改]]。"); // 链接照常同步。
+		expect(ed.getValue()).not.toContain(WORD_JOINER); // 但一个编号也没写进去。
 	});
 
 	it("M23：依赖总开关——updateBacklinks 关时，无模板文件标题改名不触发编号也不同步链接", async () => {
@@ -1231,5 +1274,201 @@ describe("M12：「不编号」伪模板（testplan K15）与多文件批量重�
 		await p.batchRenumberRule({ pattern: "nope/", template: "默认" });
 		expect(vaultFiles.get("a.md")).toBe("## 甲");
 		expect(Notice.messages).toContain("该规则当前未命中任何 Markdown 文件");
+	});
+});
+
+describe("清除即暂停 / 重新编号即恢复（1.0.15，testplan H13–H16、I8）", () => {
+	const numbered = [
+		`## ${WORD_JOINER}1 ${WORD_JOINER}章`,
+		"正文",
+		`### ${WORD_JOINER}1.1 ${WORD_JOINER}节`,
+	].join("\n");
+
+	it("H13：文件仍会被自动重编号时，清除的同时写入 fm:false，且并入同一事务", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(numbered);
+		p.runClearNumbering(ed, fileInfo("a.md"));
+
+		const out = ed.getValue();
+		expect(out).toBe(
+			["---", "obsidian-auto-headings: false", "---", "## 章", "正文", "### 节"].join("\n"),
+		);
+		// 一次撤销即整体回退——暂停开关不能是第二条撤销记录。
+		expect(ed.txnCount).toBe(1);
+		expect(Notice.messages.some((m) => m.includes("暂停"))).toBe(true);
+	});
+
+	it("H13 回归：清除后再编辑，编号不会被编回去（此前本命令是摆设）", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(numbered);
+		p.runClearNumbering(ed, fileInfo("a.md"));
+
+		// 模拟用户继续敲字 → 走自动路径。
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		expect(ed.getValue()).toContain("## 章");
+		expect(ed.getValue()).not.toContain(WORD_JOINER);
+	});
+
+	it("H14：文件本就不会被自动重编号（全局关）时只清除，不往文件里塞属性", () => {
+		const { p } = makePlugin({ autoNumber: false });
+		const ed = new FakeEditor(numbered);
+		p.runClearNumbering(ed, fileInfo("a.md"));
+
+		expect(ed.getValue()).toBe(["## 章", "正文", "### 节"].join("\n"));
+		expect(ed.getValue()).not.toContain("obsidian-auto-headings");
+	});
+
+	it("H14：路径规则解析为「不编号」时同样不写属性", () => {
+		const { p } = makePlugin({
+			autoNumber: true,
+			pathRules: [{ pattern: "/", template: NO_NUMBERING_TEMPLATE }],
+		});
+		const ed = new FakeEditor(numbered);
+		p.runClearNumbering(ed, fileInfo("a.md"));
+		expect(ed.getValue()).not.toContain("obsidian-auto-headings");
+	});
+
+	it("H15：「立即重新编号」移除 fm:false 并恢复接管；该键是唯一一项时整个块一并移除", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(
+			["---", "obsidian-auto-headings: false", "---", "## 章"].join("\n"),
+		);
+		p.runImmediateRenumber(ed, fileInfo("a.md"));
+
+		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
+		expect(ed.txnCount).toBe(1);
+		expect(Notice.messages.some((m) => m.includes("恢复"))).toBe(true);
+	});
+
+	it("H15：frontmatter 还有别的键时只删这一行，保留其余属性", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(
+			["---", "tags: [a]", "obsidian-auto-headings: false", "---", "## 章"].join("\n"),
+		);
+		p.runImmediateRenumber(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toBe(
+			["---", "tags: [a]", "---", `## ${WORD_JOINER}1 ${WORD_JOINER}章`].join("\n"),
+		);
+	});
+
+	it("H15：fm 为 true（用户的文件级强制 opt-in）不在本命令管辖范围，原样保留", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(
+			["---", "obsidian-auto-headings: true", "---", "## 章"].join("\n"),
+		);
+		p.runImmediateRenumber(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toContain("obsidian-auto-headings: true");
+	});
+
+	it("H16：已有 frontmatter 且含其他键 → 在闭合符前插入一行，原有键序不动", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(
+			["---", "tags: [a]", "---", `## ${WORD_JOINER}1 ${WORD_JOINER}章`].join("\n"),
+		);
+		p.runClearNumbering(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toBe(
+			["---", "tags: [a]", "obsidian-auto-headings: false", "---", "## 章"].join("\n"),
+		);
+	});
+
+	it("H16：已经是 false 时不重复写（此时也不该走「已暂停」文案）", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(
+			[
+				"---",
+				"obsidian-auto-headings: false",
+				"---",
+				`## ${WORD_JOINER}1 ${WORD_JOINER}章`,
+			].join("\n"),
+		);
+		p.runClearNumbering(ed, fileInfo("a.md"));
+		const occurrences = ed.getValue().split("obsidian-auto-headings").length - 1;
+		expect(occurrences).toBe(1);
+		expect(ed.getValue()).toContain("## 章");
+	});
+
+	it("H16：frontmatter 未闭合（畸形）时保守跳过，只清除不改属性", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(
+			["---", "tags: [a]", `## ${WORD_JOINER}1 ${WORD_JOINER}章`].join("\n"),
+		);
+		p.runClearNumbering(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toBe(["---", "tags: [a]", "## 章"].join("\n"));
+	});
+
+	it("I8：fm:false 的文件改标题后，内链同步**仍然**进行（1.0.15 放宽）", async () => {
+		const { p, vaultFiles } = makePlugin({
+			autoNumber: true,
+			updateBacklinks: true,
+			vaultFiles: { "b.md": "见 [[a#旧标题]]" },
+		});
+		const ed = new FakeEditor(
+			["---", "obsidian-auto-headings: false", "---", "## 旧标题"].join("\n"),
+		);
+		// 先播种快照基线，再模拟用户改标题文本。
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		await flushPromises();
+		ed.setValue(["---", "obsidian-auto-headings: false", "---", "## 新标题"].join("\n"));
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		await flushPromises();
+
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#新标题]]");
+		// 同时确认「不自动编号」这一半仍然成立：正文没有被写入编号。
+		expect(ed.getValue()).toContain("## 新标题");
+		expect(ed.getValue()).not.toContain(WORD_JOINER);
+	});
+});
+
+describe("光标所在行保护（1.0.15，testplan J11）", () => {
+	it("J11：光标停在刚敲了行尾空格的标题行上 → 该行原样保留，其余行照常重排", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
+		ed.setCursor(0, 5);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		const lines = ed.getValue().split("\n");
+		expect(lines[0]).toBe("## 章一 "); // 行尾空格没被吞，编号也没抢在用户打字中途写入。
+		expect(lines[1]).toBe(`## ${WORD_JOINER}2 ${WORD_JOINER}章二`); // 其余行照常。
+	});
+
+	it("J11：光标移开后的下一次触发把那一行补上", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
+		ed.setCursor(0, 5);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		ed.setCursor(1, 0);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		expect(ed.getValue().split("\n")[0]).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章一`);
+	});
+
+	it("J11：手动「立即重新编号」不受保护，整文重排", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
+		ed.setCursor(0, 5);
+		p.runImmediateRenumber(ed, fileInfo("a.md"));
+		expect(ed.getValue().split("\n")[0]).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章一`);
+	});
+
+	it("J11：保护后的快照按**实际落盘内容**记录，不产生幻影改名", async () => {
+		const { p, vaultFiles } = makePlugin({
+			autoNumber: true,
+			updateBacklinks: true,
+			vaultFiles: { "b.md": "见 [[a#章一]]" },
+		});
+		const ed = new FakeEditor(["## 章一", "## 章二"].join("\n"));
+		ed.setCursor(0, 3);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		await flushPromises();
+
+		// 第 0 行被保护 ⇒ 标题文本没变 ⇒ 指向它的链接不该被改写成带编号的锚点。
+		expect(vaultFiles.get("b.md")).toBe("见 [[a#章一]]");
 	});
 });

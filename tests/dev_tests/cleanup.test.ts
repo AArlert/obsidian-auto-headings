@@ -256,3 +256,18 @@ describe("clearNumberingContent — 跳过区域内的残留（M12，testplan E2
 		expect(hasUnclaimedForeignNumbering("## 1 正文里的")).toBe(true);
 	});
 });
+
+describe("hasUnclaimedForeignNumbering — 行尾空白不该触发迁移守卫（1.0.15，testplan J12）", () => {
+	it("J12：无 WJ、无任何编号，仅标题行尾带空格 → 守卫不命中", () => {
+		// 此前 stripForeignNumbering 末尾的 `\s+$` 归一化让「剥离结果 ≠ 原文」，于是仅仅因为
+		// 一个空格就判定成外来编号，整个文件的自动编号被拦下并弹出误导提示。
+		expect(hasUnclaimedForeignNumbering("## 章一 \n## 章二")).toBe(false);
+		expect(hasUnclaimedForeignNumbering("## 章一\t\n正文")).toBe(false);
+	});
+
+	it("J12 对照：真的带外来编号时仍然命中（修复没有把守卫改瞎）", () => {
+		expect(hasUnclaimedForeignNumbering("## 1 章一\n## 2 章二")).toBe(true);
+		// 行尾空格 + 真外来编号：仍命中。
+		expect(hasUnclaimedForeignNumbering("## 1 章一 ")).toBe(true);
+	});
+});

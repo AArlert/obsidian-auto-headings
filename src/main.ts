@@ -17,7 +17,13 @@ import {
 } from "./settings/model";
 import { AutoHeadingsSettingTab } from "./settings/SettingsTab";
 import { getMessages, type Messages, resolveLang } from "./i18n";
-import { readFileSwitch, SWITCH_KEY } from "./frontmatter";
+import {
+	planPauseFileSwitch,
+	planResumeFileSwitch,
+	readFileSwitch,
+	SWITCH_KEY,
+	type SwitchEdit,
+} from "./frontmatter";
 import { renumberContent, WORD_JOINER, type Template } from "./numbering";
 import { ClipboardOriginalCache, stripWordJoiners, stripWordJoinersFromHtml } from "./clipboard";
 import {
@@ -595,6 +601,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/**
 	 * 「清除当前文件编号」命令（**手动路径**，见 spec.md §3.10）：剥离当前文件所有标题的编号
 	 * 前缀（全样式并集剥离器，独立于模板），以单一事务写回。绕过防抖与开关（与「立即重新编号」对称）。
+	 *
+	 * **1.0.15 起顺带暂停该文件**（spec.md §3.19，testplan H13）：此前本命令只取消当前那一个待处理
+	 * 防抖计时器，下一次按键即重新 `scheduleRenumber` 把编号编回去——只要「全局自动编号」开着，
+	 * 它**永远不可能产生持久效果**。故当该文件仍会被自动重编号时，把 frontmatter
+	 * `obsidian-auto-headings: false` **并进同一事务**（一次撤销整体回退）。反之（全局关且非
+	 * `fm:true`、或路径规则解析为「不编号」）不写——不为一个不存在的问题往用户文件里塞属性。
+	 * 恢复走「立即重新编号」（{@link runImmediateRenumber}）。
 	 */
 	private runClearNumbering(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
 		// 取消该文件的待处理防抖更新，避免清除后立即被重新编号。
@@ -623,11 +636,20 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const fold = this.foldSelfBacklinks(ctx.file, oldContent, newContent);
 		newContent = fold.content;
 
-		if (this.writeLineDiff(editor, oldContent, newContent)) {
+		// 仅当该文件**确实**会被自动重编号时才暂停：门控与自动路径完全一致（够格触发 + 命中模板）。
+		const pause =
+			this.shouldAutoTrigger(newContent) && this.getTemplateForFile(path)
+				? planPauseFileSwitch(newContent)
+				: null;
+		const extra = pause ? [this.switchEditToChange(oldContent, pause)] : [];
+
+		if (this.writeLineDiff(editor, oldContent, newContent, extra)) {
 			// Backlink 同步：清除编号也改写了标题文本（去掉前缀），更新别处指向它的内部链接。
+			// 传 newContent 而非编辑器现值：frontmatter 那几行不含标题，对快照（仅 level+text）无影响。
 			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
 		}
-		new Notice(this.messages().noticeCleared);
+		const m = this.messages();
+		new Notice(pause ? m.noticeClearedAndPaused : m.noticeCleared);
 	}
 
 	/**
@@ -1001,7 +1023,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		const content = editor.getValue();
-		if (!this.shouldAutoTrigger(content) && !this.shouldBacklinkStandaloneTrigger(content)) {
+		if (!this.shouldAutoTrigger(content) && !this.shouldBacklinkStandaloneTrigger()) {
 			return; // 两条路径都不够格：不安排任何更新。
 		}
 
@@ -1024,14 +1046,18 @@ export default class AutoHeadingsPlugin extends Plugin {
 				const template = this.getTemplateForFile(path);
 				if (template) {
 					if (!this.guardForeignNumbering(path, value)) {
-						this.applyRenumber(editor, template, file);
+						// 自动路径**才**保护光标所在行（J11）：手动命令与打开/改模板即时重排都要整文
+						// 重排，否则「立即重新编号」会漏掉光标那一行、打开文件时首行标题永远编不上。
+						this.applyRenumber(editor, template, file, {
+							protectLine: editor.getCursor?.()?.line,
+						});
 					}
 					return; // 常规路径本轮已处理（或命中外来编号守卫暂缓）：不再尝试独立触发。
 				}
 			}
 			// 常规编号路径本轮未处理（无可用模板 / 不够格自动触发编号）：尝试 Backlink 独立触发
 			// （CR-18，见 spec.md §3.12）——只同步链接，从不写入编号前缀。
-			if (this.shouldBacklinkStandaloneTrigger(value)) {
+			if (this.shouldBacklinkStandaloneTrigger()) {
 				this.applyBacklinkStandaloneSync(editor, file);
 			}
 		}, this.settings.debounceDelay);
@@ -1043,21 +1069,21 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * Backlink 独立触发是否应进行（CR-18，见 spec.md §3.12「独立于编号模板的触发」）：**不**要求
 	 * {@link getTemplateForFile} 命中——即便文件无可用模板、或全局自动编号关闭且该文件未 frontmatter
 	 * 强制开启，只要 `updateBacklinks` 开着，仍应检测标题文本改写并同步引用链接（1.0.9 起单开关
-	 * 全局生效，不再需要额外的独立触发 opt-in）。仍尊重一条优先级更高的保护：frontmatter 显式
-	 * `false`——用户对该文件的明确「别碰」表态，覆盖一切自动路径（与 {@link shouldAutoTrigger} 对
-	 * `fm:false` 的处理口径一致）。
+	 * 全局生效，不再需要额外的独立触发 opt-in）。
+	 *
+	 * **1.0.15 起不再因 frontmatter `false` 退出**（testplan I8）：`fm:false` 的含义收窄为「该文件
+	 * 不自动**编号**」，与「改名不断链」正交——后者是全局能力，任何时候都该同步。这条收窄是必要的：
+	 * 自 1.0.15 起「清除当前文件编号」会写 `fm:false` 来真正止住重编号（{@link runClearNumbering}），
+	 * 若链接同步跟着停，等于用一次清除编号换掉了插件的第一价值。要彻底静默请关 `updateBacklinks`。
 	 *
 	 * 清除全库进行中同样压制（`vaultClearInProgress`）：批量写回会触发已打开文件的 `editor-change`，
 	 * 不压制的话每个文件都会被独立触发放大处理一遍。
 	 */
-	private shouldBacklinkStandaloneTrigger(content: string): boolean {
+	private shouldBacklinkStandaloneTrigger(): boolean {
 		if (!this.settings.updateBacklinks) {
 			return false;
 		}
-		if (this.vaultClearInProgress) {
-			return false;
-		}
-		return readFileSwitch(content) !== false;
+		return !this.vaultClearInProgress;
 	}
 
 	/**
@@ -1078,6 +1104,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/**
 	 * 「立即重新编号」命令（**手动路径**，见 spec.md §3.1）：绕过防抖、绕过「全局自动编号」开关
 	 * 与 frontmatter `false`，仅受「能否命中模板」约束；命中不到模板时弹 Notice 反馈。
+	 *
+	 * **1.0.15 起顺带恢复接管**（spec.md §3.19，testplan H15）：若该文件的 frontmatter 开关正是
+	 * `false`，本命令在同一事务里把它移除——与「清除当前文件编号」的暂停构成对称闭环。只认
+	 * `false`，`true`（文件级强制 opt-in）不在本命令管辖范围内。
 	 */
 	private runImmediateRenumber(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
 		// 若有待处理的实时更新，先取消，避免随后重复触发。
@@ -1101,8 +1131,14 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 
 		const m = this.messages();
-		const changed = this.applyRenumber(editor, template, ctx.file);
-		new Notice(changed ? m.noticeRenumbered : m.noticeNoChange);
+		const content = editor.getValue();
+		const resume = planResumeFileSwitch(content);
+		const changed = this.applyRenumber(editor, template, ctx.file, {
+			extraChanges: resume ? [this.switchEditToChange(content, resume)] : [],
+		});
+		new Notice(
+			resume ? m.noticeRenumberedAndResumed : changed ? m.noticeRenumbered : m.noticeNoChange,
+		);
 	}
 
 	/**
@@ -1111,29 +1147,53 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 四处都要「整文件按行 diff 后单一事务写回」，逻辑完全一致，只是触发源不同——整文件重写永不
 	 * 增删行，故按行索引逐行比较即可定位变化，多处行替换合并为一条撤销记录。
 	 *
-	 * @returns 是否实际发生了写入（内容相同或行级 diff 为空时为 `false`，不发起空事务）。
+	 * @param extraChanges 额外并入本次事务的变更（目前仅 frontmatter 单文件开关的增删，见
+	 * {@link switchEditToChange}）。它们**会**改变行数，故不能走上面的逐行比对，只能由调用方按
+	 * 原文档坐标直接给出；CM6 的变更集一律相对原文档计算，与行替换互不干扰。
+	 * @returns 是否实际发生了写入（无任何变更时为 `false`，不发起空事务）。
 	 */
-	private writeLineDiff(editor: Editor, oldContent: string, newContent: string): boolean {
-		if (newContent === oldContent) {
-			return false;
-		}
-		const oldLines = oldContent.split("\n");
-		const newLines = newContent.split("\n");
+	private writeLineDiff(
+		editor: Editor,
+		oldContent: string,
+		newContent: string,
+		extraChanges: EditorChange[] = [],
+	): boolean {
 		const changes: EditorChange[] = [];
-		for (let i = 0; i < newLines.length; i++) {
-			if (oldLines[i] !== newLines[i]) {
-				changes.push({
-					from: { line: i, ch: 0 },
-					to: { line: i, ch: oldLines[i].length },
-					text: newLines[i],
-				});
+		if (newContent !== oldContent) {
+			const oldLines = oldContent.split("\n");
+			const newLines = newContent.split("\n");
+			for (let i = 0; i < newLines.length; i++) {
+				if (oldLines[i] !== newLines[i]) {
+					changes.push({
+						from: { line: i, ch: 0 },
+						to: { line: i, ch: oldLines[i].length },
+						text: newLines[i],
+					});
+				}
 			}
 		}
+		changes.push(...extraChanges);
 		if (changes.length === 0) {
 			return false;
 		}
 		editor.transaction({ changes });
 		return true;
+	}
+
+	/**
+	 * 把 {@link SwitchEdit}（整行级的插入 / 替换 / 删除）翻译成一条编辑器变更。
+	 *
+	 * 删除到文件末尾时无法用「下一行的第 0 列」表示终点（那一行不存在），改用最后一行的行尾坐标夹紧。
+	 */
+	private switchEditToChange(oldContent: string, edit: SwitchEdit): EditorChange {
+		const lines = oldContent.split("\n");
+		const text = edit.lines.length > 0 ? `${edit.lines.join("\n")}\n` : "";
+		const endLine = edit.startLine + edit.removedLines;
+		const to =
+			endLine < lines.length
+				? { line: endLine, ch: 0 }
+				: { line: lines.length - 1, ch: lines[lines.length - 1].length };
+		return { from: { line: edit.startLine, ch: 0 }, to, text };
 	}
 
 	/**
@@ -1143,9 +1203,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * （这些由调用方按自动 / 手动路径分别判定，见 {@link scheduleRenumber} / {@link runImmediateRenumber}）。
 	 *
 	 * @param target 当前文件（用于 Backlink 同步取反向链接 / basename）；缺省则不同步链接。
+	 * @param opts `protectLine` 见 {@link preserveLine}（仅自动路径传）；`extraChanges` 并入同一
+	 * 事务的额外变更（目前仅「立即重新编号」顺带移除 frontmatter 暂停开关）。
 	 * @returns 是否实际写入了改动。
 	 */
-	private applyRenumber(editor: Editor, template: Template, target?: LinkTarget | null): boolean {
+	private applyRenumber(
+		editor: Editor,
+		template: Template,
+		target?: LinkTarget | null,
+		opts: { protectLine?: number; extraChanges?: EditorChange[] } = {},
+	): boolean {
 		const oldContent = editor.getValue();
 
 		const { prefixes, suffixes } = this.strippableAffixes();
@@ -1153,15 +1220,47 @@ export default class AutoHeadingsPlugin extends Plugin {
 			strippablePrefixes: prefixes,
 			strippableSuffixes: suffixes,
 		});
+		// 光标所在行保护**必须在折叠自链接之前**：保护后那一行的标题文本没变，就不该产生改名，
+		// 更不该据此改写指向它的内链（否则链接指向一个文件里并不存在的标题）。
+		if (opts.protectLine !== undefined) {
+			newContent = this.preserveLine(oldContent, newContent, opts.protectLine);
+		}
 		// 同文件内链先折进 newContent，随本次事务一并写回（见 foldSelfBacklinks）；即便编号本身
 		// 未变（M14 纯文本改名）也要折，写回时的行级 diff 会自然识别出这一变化并写回。
 		const fold = this.foldSelfBacklinks(target, oldContent, newContent);
 		newContent = fold.content;
-		const changed = this.writeLineDiff(editor, oldContent, newContent);
+		const changed = this.writeLineDiff(editor, oldContent, newContent, opts.extraChanges);
 		// Backlink 同步 + 快照刷新：**即便本轮编号没改动任何行也要做**（M14）——用户可能在上个
 		// 同步点之后改了标题正文（编号不变），只有对照快照基线才看得见这类改名。
 		this.syncAndSnapshot(target, newContent, fold.renames, fold.selfCount);
 		return changed;
+	}
+
+	/**
+	 * 把 `newContent` 里指定的一行还原成 `oldContent` 的样子——「别在用户正敲字的那一行下手」。
+	 *
+	 * **动机**（testplan J11）：`stripPrefix` 会把标题文本的行尾空白归一化掉（`strip.ts` 的
+	 * `\s+$`，这是幂等所必需的）。但自动路径此前没有任何光标守卫，用户在标题末尾敲一个空格、
+	 * 停顿超过防抖时长，那个空格就被静默吃掉，接着打的字直接贴上去——观感是插件在跟自己抢键盘。
+	 *
+	 * 只剔除这一行，**其余行照常重排**（而不是整轮顺延）：一来别的标题该更新还得更新，二来
+	 * 顺延会在用户光标停在标题行不动时无限期地重排计时器。该行会在光标移开后的下一次触发补上。
+	 *
+	 * 返回值随后被 {@link syncAndSnapshot} 用作快照基线，所以快照记的始终是**真正落盘的内容**，
+	 * 不会因为「算出来改了、实际没写」而在下一轮识别出一个幻影改名。
+	 */
+	private preserveLine(oldContent: string, newContent: string, line: number): string {
+		const oldLines = oldContent.split("\n");
+		const newLines = newContent.split("\n");
+		// 整文重排永不增删行；行数不一致说明前提被打破，此时不做保护（宁可少保护，不可错位）。
+		if (line < 0 || line >= newLines.length || oldLines.length !== newLines.length) {
+			return newContent;
+		}
+		if (oldLines[line] === newLines[line]) {
+			return newContent;
+		}
+		newLines[line] = oldLines[line];
+		return newLines.join("\n");
 	}
 
 	/**

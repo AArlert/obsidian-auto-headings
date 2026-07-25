@@ -112,7 +112,7 @@ The editor itself is built for quick tweaking, not just a flat list:
 ### Cleanup commands, for when you need a clean slate
 
 -   **Renumber now** — force an immediate renumber of the current file (see [Out of the box](#out-of-the-box) — this bypasses every switch)
--   **Clear numbering in current file** — strip every number prefix this plugin ever wrote (or could have written), returning the file to bare headings
+-   **Clear numbering in current file** — strip every number prefix this plugin ever wrote (or could have written), returning the file to bare headings. It also **pauses that one file** (by writing `obsidian-auto-headings: false` into its frontmatter) — otherwise your very next keystroke would put the numbers straight back. To hand the file back to the plugin, run **Renumber now**; it removes that property for you
 -   **Clean foreign numbering** — strip only numbering _not_ written by this plugin (hand-typed `1.` prefixes, imported document numbering, etc.) while leaving the plugin's own numbering untouched — the tool for taking over a document you didn't originate
 -   **Clear numbering across the entire vault** — a settings-panel button, deliberately _not_ a command (so it can't be hotkey- or command-palette-triggered by accident), gated behind a confirmation dialog and tucked in a collapsed "danger zone" section
 
