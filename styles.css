@@ -31,7 +31,7 @@
 	padding: 0.5em 0 0.75em;
 }
 
-/* 五级 × 五列网格 */
+/* 六级 × 九列网格 */
 .ah-grid {
 	display: flex;
 	flex-direction: column;
@@ -41,8 +41,8 @@
 
 .ah-grid-row {
 	display: grid;
-	/* 级别 前缀 序号 后缀 序号间隔符 标题间隔符 继承前级 预览 */
-	grid-template-columns: 48px 1fr 1.4fr 1fr 1fr 1fr 72px 2fr;
+	/* 级别 前缀 序号 序号间隔符 后缀 标题间隔符 继承前级 继承级数 预览 */
+	grid-template-columns: 48px 1fr 1.4fr 1fr 1fr 1fr 72px 86px 2fr;
 	gap: 6px;
 	align-items: center;
 }
@@ -598,7 +598,7 @@ button.ah-tab.ah-tab-active:hover {
 }
 
 .ah-grid .ah-grid-row {
-	min-width: 640px;
+	min-width: 732px;
 }
 
 .ah-path-table .ah-path-row {

@@ -37,6 +37,23 @@ describe("normalizeTemplate", () => {
 		expect(t.levels.h4.inherit).toBe(true);
 	});
 
+	it("inheritDepth 缺失等价于全部，合法值保留并按物理层级收口", () => {
+		const t = normalizeTemplate(
+			{ levels: { h2: {}, h3: { inheritDepth: 2 }, h4: { inheritDepth: 99 } } },
+			"fb",
+		);
+		expect(t.levels.h2.inheritDepth).toBeNull();
+		expect(t.levels.h3.inheritDepth).toBe(2);
+		expect(t.levels.h4.inheritDepth).toBe(3);
+	});
+
+	it("非法 inheritDepth 安全回退为全部", () => {
+		for (const value of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, "2", {}]) {
+			const t = normalizeTemplate({ levels: { h3: { inheritDepth: value } } }, "fb");
+			expect(t.levels.h3.inheritDepth).toBeNull();
+		}
+	});
+
 	it("保留合法字段并过滤损坏的白名单条目", () => {
 		const t = normalizeTemplate(
 			{
@@ -162,6 +179,13 @@ describe("serializeTemplate", () => {
 		const json = serializeTemplate(t);
 		expect(json.endsWith("\n")).toBe(true);
 		expect(JSON.parse(json)).toEqual(t);
+	});
+
+	it("inheritDepth 序列化、反序列化后保持正确", () => {
+		const t = normalizeTemplate({ levels: { h3: { inheritDepth: 1 } } }, "fb");
+		const roundTrip = normalizeTemplate(JSON.parse(serializeTemplate(t)), "fb");
+		expect(roundTrip.levels.h3.inheritDepth).toBe(1);
+		expect(roundTrip.levels.h2.inheritDepth).toBeNull();
 	});
 });
 

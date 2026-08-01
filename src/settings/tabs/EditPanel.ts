@@ -5,6 +5,7 @@ import {
 	type AncestorNumeral,
 	normalizeAncestorNumeral,
 	normalizeBottomLevel,
+	normalizeInheritDepth,
 	normalizeStartIndex,
 	normalizeTopLevel,
 	type NumeralStyle,
@@ -240,7 +241,7 @@ export function renderEditPanel(
 	const gridBox = panel.createDiv({ cls: "ah-subbox" });
 	gridBox.createDiv({ cls: "ah-subbox-title", text: t.levelFormatHeading });
 
-	// 网格表头（列序：级别 → 前缀 → 序号 → 序号间隔符 → 后缀 → 标题间隔符 → 继承前级 → 预览）。
+	// 网格表头（列序：级别 → 前缀 → 序号 → 序号间隔符 → 后缀 → 标题间隔符 → 继承前级 → 继承级数 → 预览）。
 	const grid = gridBox.createDiv({ cls: "ah-grid" });
 	const headRow = grid.createDiv({ cls: "ah-grid-row ah-grid-head" });
 	for (const label of [
@@ -251,6 +252,7 @@ export function renderEditPanel(
 		t.colSuffix,
 		t.colTitleSep,
 		t.colInherit,
+		t.colInheritDepth,
 		t.colPreview,
 	]) {
 		headRow.createDiv({ cls: "ah-grid-cell", text: label });
@@ -312,8 +314,30 @@ export function renderEditPanel(
 		const inheritCell = row.createDiv({ cls: "ah-grid-cell ah-inherit-cell" });
 		const checkbox = inheritCell.createEl("input", { type: "checkbox" });
 		checkbox.checked = fmt.inherit;
+
+		// 继承级数下拉；数值按物理标题层级保存，不随 topLevel 改写。
+		const depthCell = row.createDiv({ cls: "ah-grid-cell" });
+		const depthSelect = depthCell.createEl("select", { cls: "dropdown" });
+		depthSelect.title = t.inheritDepthTooltip;
+		depthSelect.setAttribute("aria-label", t.inheritDepthTooltip);
+		depthSelect.createEl("option", { value: "all", text: t.inheritDepthAll });
+		for (let depth = 1; depth < level; depth++) {
+			depthSelect.createEl("option", { value: String(depth), text: String(depth) });
+		}
+		const inheritDepth = normalizeInheritDepth(fmt.inheritDepth, level - 1);
+		depthSelect.value = inheritDepth === null ? "all" : String(inheritDepth);
+		depthSelect.disabled = level === 1 || !fmt.inherit;
+		depthSelect.addEventListener("change", () => {
+			fmt.inheritDepth =
+				depthSelect.value === "all"
+					? null
+					: normalizeInheritDepth(Number(depthSelect.value), level - 1);
+			void saveAndPreview(tab, template, level, key, previewEls);
+		});
+
 		checkbox.addEventListener("change", () => {
 			fmt.inherit = checkbox.checked;
+			depthSelect.disabled = level === 1 || !fmt.inherit;
 			void saveAndPreview(tab, template, level, key, previewEls);
 		});
 

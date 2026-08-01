@@ -12,6 +12,7 @@ import {
 	getLevelFormat,
 	normalizeAncestorNumeral,
 	normalizeBottomLevel,
+	normalizeInheritDepth,
 	normalizeSkipFill,
 	normalizeStartIndex,
 	normalizeTopLevel,
@@ -212,8 +213,10 @@ export function buildPrefix(template: Template, level: number, counter: HeadingC
 
 	let numberStr: string;
 	if (fmt.inherit) {
-		// 仅取 topLevel..level 的计数段（counter.sequence 返回 c1..cLevel）。
-		const seq = counter.sequence(level).slice(top - 1);
+		const inheritDepth = normalizeInheritDepth(fmt.inheritDepth, level - 1);
+		const startLevel = inheritDepth === null ? top : Math.max(top, level - inheritDepth);
+		// 仅取实际继承范围的计数段（counter.sequence 返回 c1..cLevel）。
+		const seq = counter.sequence(level).slice(startLevel - 1);
 		const skipFill = normalizeSkipFill(template.skipFill);
 		const ancestorNumeral = normalizeAncestorNumeral(template.ancestorNumeral);
 		const lastIndex = seq.length - 1; // 末段下标 = 当前级；其余为祖先段。
@@ -234,15 +237,15 @@ export function buildPrefix(template: Template, level: number, counter: HeadingC
 				parts.push(skipFill.placeholder);
 				return;
 			}
-			// 正常段：seq[i] 对应级别 top + i。
+			// 正常段：seq[i] 对应级别 startLevel + i。
 			// - 末段（当前级）：始终套用本级 numeral 样式。
 			// - 祖先段：按「祖先序号渲染」策略——`self` 用各祖先自身样式（历史行为），
 			//   `arabic` 一律阿拉伯（中文书惯例：H2 标题 `一`、H3 子节 `1.1`）。
-			const segLevel = top + i;
+			const segLevel = startLevel + i;
 			const segFmt = getLevelFormat(template, segLevel) ?? fmt;
 			const style = i < lastIndex && ancestorNumeral === "arabic" ? "arabic" : segFmt.numeral;
-			// 首段（i===0 即 topLevel 段）加起始编号偏移；深层段保持 1 起。
-			parts.push(renderNumeral(style, i === 0 ? value + startOffset : value));
+			// 只有真正的 topLevel 段加起始编号偏移；深层段保持 1 起。
+			parts.push(renderNumeral(style, segLevel === top ? value + startOffset : value));
 		});
 		numberStr = parts.join(fmt.numberSeparator);
 	} else {
