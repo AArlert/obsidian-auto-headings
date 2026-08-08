@@ -14,7 +14,7 @@
  * | 本文件         | 编排：{@link numberHeadings} / {@link renumberContent}       |
  */
 
-import { Heading, parseHeadings } from "./parser";
+import { hasSkipMarker, Heading, parseHeadings } from "./parser";
 import { scanSkipRegions } from "./scan";
 import { HeadingCounter } from "./count";
 import { buildPrefix } from "./render";
@@ -124,10 +124,13 @@ export function numberHeadings(
 		const level = heading.level;
 		const hashes = "#".repeat(level);
 
-		// 白名单命中：完全透明（不计数、不归零），但剥离其已有编号。
-		// 子树块成员额外置位「块后重置」（决策 D1）；exact/partial 豁免不置位、也不清位
-		//（夹在子树块与下一个编号标题之间的单标题豁免不打断重置语义）。
-		if (isWhitelisted(heading)) {
+		// 白名单命中 **或** 行尾带 `<!-- skip -->` 标记（issue #6，spec §3.21）：完全透明
+		//（不计数、不归零），但剥离其已有编号——所以给一个**已编号**的标题补上标记，下一次重排
+		// 就会把那个编号摘掉，而不是把它冻结在原地。
+		// 子树块成员额外置位「块后重置」（决策 D1）；exact/partial 豁免与 skip 标记都不置位、
+		// 也不清位（夹在子树块与下一个编号标题之间的单标题豁免不打断重置语义）。
+		// **skip 标记只作用于本行、不含子树**（phase 1 定案，见 spec §3.21「未定项」）。
+		if (isWhitelisted(heading) || hasSkipMarker(heading.rawText)) {
 			if (isSubtreeMember(heading)) {
 				pendingSubtreeReset = true;
 			}

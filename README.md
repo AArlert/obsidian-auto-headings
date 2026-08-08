@@ -109,6 +109,21 @@ The editor itself is built for quick tweaking, not just a flat list:
 -   A **search box and sort dropdown** (by insertion order / A–Z / match mode) keep long whitelists manageable
 -   A live preview at the bottom of the panel shows exactly which headings in your current file are being exempted, right now
 
+The whitelist matches on **heading text**, so it handles "this kind of word". When what you need is "**this
+one line, in this one note**" — say a "Scratch notes" heading that shouldn't be numbered here, while the same
+word is a real chapter elsewhere — append `<!-- skip -->` to the end of that heading line:
+
+```
+## Scratch notes <!-- skip -->
+```
+
+It's invisible in reading view. A skipped heading **doesn't consume a counter slot**, so the headings after it
+stay consecutive. Add the marker to a heading that already has a number and the next renumber removes that
+number. For now it affects only the line it's on, not the headings nested under it.
+
+> This is a fallback for the occasional one-off line, not the everyday path — use the whitelist to exclude a
+> whole class of words. A one-click toggle next to the heading is planned, so you won't have to type it.
+
 ### Cleanup commands, for when you need a clean slate
 
 -   **Renumber now** — force an immediate renumber of the current file (see [Out of the box](#out-of-the-box) — this bypasses every switch)

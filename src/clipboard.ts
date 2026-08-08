@@ -17,8 +17,14 @@ import { stripWordJoiners } from "./numbering";
  */
 export { stripWordJoiners };
 
-/** LRU 条数上限：超过逐出最旧（spec §2.8「内存映射」）。 */
-export const CLIPBOARD_CACHE_MAX_ENTRIES = 50;
+/**
+ * LRU 条数上限：超过逐出最旧（spec §2.8「内存映射」）。
+ *
+ * 1.0.17 由 50 抬到 200：逐出是「vault 内往返失去哨兵」的三个成因里唯一能靠调参消掉的
+ * （另两个是重启与外部改动）。条目本身受 {@link CLIPBOARD_CACHE_MAX_CHARS} 的总量闸约束，
+ * 抬条数不会让内存失控——真正的上限是字符总量。
+ */
+export const CLIPBOARD_CACHE_MAX_ENTRIES = 200;
 
 /** LRU 总字符量上限（键 + 值合计）：防止巨量复制常驻内存；超限逐最旧，单条超限即不驻留。 */
 export const CLIPBOARD_CACHE_MAX_CHARS = 2_000_000;

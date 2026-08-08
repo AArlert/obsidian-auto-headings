@@ -152,7 +152,12 @@ export function runCheckBacklinkRoundTrip(w: World, before: string, after: strin
 				)} ≠ 新标题锚点 ${JSON.stringify(newAnchor)}`,
 			);
 		}
-		if (linkAnchor(h.text) !== newAnchor) w.cov.backlinkRename = true;
+		if (linkAnchor(h.text) !== newAnchor) {
+			w.cov.backlinkRename = true;
+			// 三颗雷之三：R3 形态标题（含 `%%`/`<!--`/`-->`）也真的走完了这条改名→合成 backlink→
+			// 重写→断言新锚点的往返链路，而不只是被现有 `[[]#|` 过滤放过场。
+			if (/%%|<!--|-->/.test(h.text)) w.cov.backlinkRenameWithComment = true;
+		}
 	});
 }
 

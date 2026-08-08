@@ -3,6 +3,7 @@ import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
 	hasUnclaimedForeignNumbering,
+	previewForeignNumberingCleanup,
 } from "../../src/cleanup";
 import { renumberContent, DEFAULT_TEMPLATE, WORD_JOINER } from "../../src/numbering";
 
@@ -172,6 +173,57 @@ describe("clearForeignNumberingContent（0.6.6「清理非本插件的标题编�
 		expect(numbered).toBe(
 			`## ${WORD_JOINER}1 ${WORD_JOINER}旧概述\n### ${WORD_JOINER}1.1 ${WORD_JOINER}旧背景`,
 		);
+	});
+});
+
+describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，testplan J14）", () => {
+	it("单条外来编号标题：现状→清理后一一对应，含 # 前缀", () => {
+		const items = previewForeignNumberingCleanup("## 1 红米\n### 1.1 工艺");
+		expect(items).toEqual([
+			{ before: "## 1 红米", after: "## 红米" },
+			{ before: "### 1.1 工艺", after: "### 工艺" },
+		]);
+	});
+
+	it("覆盖手写惯例（括号 / 第…章）：预览结果与 clearForeignNumberingContent 逐条一致", () => {
+		const content = "## (1) 概述\n## 第3章 引言";
+		const items = previewForeignNumberingCleanup(content);
+		expect(items).toEqual([
+			{ before: "## (1) 概述", after: "## 概述" },
+			{ before: "## 第3章 引言", after: "## 引言" },
+		]);
+		// 与实际清理命令结果逐条一致：拼回全文应等于 clearForeignNumberingContent 的输出。
+		const cleaned = clearForeignNumberingContent(content);
+		expect(cleaned).toBe(items.map((i) => i.after).join("\n"));
+	});
+
+	it("含 WJ 的标题（本插件已接管）不出现在预览列表里", () => {
+		const input = `## ${WORD_JOINER}1 ${WORD_JOINER}已编号\n### 1.1 疑似外来`;
+		const items = previewForeignNumberingCleanup(input);
+		expect(items).toEqual([{ before: "### 1.1 疑似外来", after: "### 疑似外来" }]);
+	});
+
+	it("裸标题（无任何疑似编号）不出现在预览列表里", () => {
+		expect(previewForeignNumberingCleanup("## 概述\n### 背景与动机")).toEqual([]);
+	});
+
+	it("仅行尾空白（J12 同一误报口径）不出现在预览列表里：不该让用户以为「这条会被改」", () => {
+		expect(previewForeignNumberingCleanup("## 章一 \n## 章二")).toEqual([]);
+	});
+
+	it("无标题的纯文本 → 空预览", () => {
+		expect(previewForeignNumberingCleanup("正文一行\n另一行")).toEqual([]);
+	});
+
+	it("混合：真外来编号 + 仅空白 + 已接管，只有第一种进入预览", () => {
+		const input = [
+			"## 1 外来编号",
+			`## ${WORD_JOINER}2 ${WORD_JOINER}已接管`,
+			"## 裸标题 ",
+		].join("\n");
+		expect(previewForeignNumberingCleanup(input)).toEqual([
+			{ before: "## 1 外来编号", after: "## 外来编号" },
+		]);
 	});
 });
 

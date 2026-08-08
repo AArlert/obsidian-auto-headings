@@ -63,6 +63,7 @@ export type OpKind =
 	| "insertHeading"
 	| "insertRaw"
 	| "insertFence"
+	| "insertComment"
 	| "deleteLine"
 	| "retitle"
 	| "editTitleInPlace"

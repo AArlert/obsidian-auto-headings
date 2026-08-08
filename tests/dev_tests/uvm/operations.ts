@@ -5,7 +5,13 @@
 
 import { clearForeignNumberingContent, clearNumberingContent } from "../../../src/cleanup";
 import { serialize, serializeLine, type Line } from "./model";
-import { LEVEL_POOL, MESSY_FRAGMENTS, SAFE_FRAGMENTS, SELF_EATING } from "./stimulus";
+import {
+	COMMENT_STYLES,
+	LEVEL_POOL,
+	MESSY_FRAGMENTS,
+	SAFE_FRAGMENTS,
+	SELF_EATING,
+} from "./stimulus";
 import type { OpKind } from "./config";
 import { SequenceError } from "./coverage";
 import type { World } from "./framework";
@@ -16,6 +22,7 @@ export function applyEdit(w: World): void {
 		"insertHeading",
 		"insertRaw",
 		"insertFence",
+		"insertComment",
 		"deleteLine",
 		"retitle",
 		"changeLevel",
@@ -59,16 +66,47 @@ export function applyEdit(w: World): void {
 			w.trace.push(`insertFence ${fence}`);
 			break;
 		}
+		case "insertComment": {
+			// 三颗雷之一「SAFE_FRAGMENTS/MESSY_FRAGMENTS 投毒」的第三条腿：插入一个**自包含**的独立
+			// 多行注释块（跨行覆盖），内含一行伪标题（`kind: "raw"`，不进 headingIndices()，与
+			// insertFence 的既有安全模式同构）。小概率在块内再嵌一对围栏（`与围栏交错`覆盖，撞 R5：
+			// 「围栏优先」——若外层是注释、内层围栏会反向抢先开启，属已知限制但不破坏 dut/参考一致性，
+			// 因为整块连同内嵌围栏原样进了 bare 与 rendered 两侧，双方是同一份新文本、并非"事后把已
+			// 存在的真标题包进围栏"那种会让两侧分道扬镳的写法）。
+			const i = w.rng.int(len + 1);
+			const style = w.rng.pick(COMMENT_STYLES);
+			const withFence = w.rng.chance(0.3);
+			const body = withFence
+				? [style.open, "```", "# 注释套围栏内的伪标题", "```", style.close]
+				: [style.open, "# 注释内的伪标题", style.close];
+			for (const t of body.reverse()) {
+				w.insertAt(i, { kind: "raw", text: t });
+			}
+			w.cov.commentPresent = true;
+			if (withFence) w.cov.commentFenceInterleaved = true;
+			w.trace.push(`insertComment ${style.open}${withFence ? "+fence" : ""}`);
+			break;
+		}
 		case "deleteLine": {
 			// 不删**栅栏定界行**：删掉它会让代码块失衡，把"已编号的标题"事后埋进未闭合代码块里——
 			// 那段冻结的前缀插件再也够不着（视作代码、不剥），但参考模型仍按裸文档重算，二者必然不一致。
 			// 这是真实但属边角的行为，非编号 bug；为聚焦状态转移压测，这里始终保持栅栏配平。
+			//
+			// **注释定界行不在此列**（三颗雷之二「deleteLine 删注释定界行」）：删掉 `%%`/`<!--`/`-->`
+			// 会让原本被遮蔽的标题突然暴露、或让原本可见的标题突然被更前面残留的未闭合注释吞掉——
+			// 与围栏不同，实测（见开发记录）这类"暴露/遮蔽反转"在 spec §3.17 分区域分治下两侧仍一致：
+			// 注释区的自动重编号路径本就会主动清掉/重新计入 WJ 残留，不像围栏那样原样冻结，故无需
+			// 像围栏那样排除在 deletable 之外——放开正是本轮要撞的场景，`bare`/`rendered` 同步删同一行
+			// 保证两侧结构永远同构。
 			const deletable: number[] = [];
 			w.bare.forEach((l, idx) => {
 				if (!(l.kind === "raw" && /^ {0,3}(`{3,}|~{3,})/.test(l.text))) deletable.push(idx);
 			});
 			if (w.bare.length > 1 && deletable.length) {
 				const i = w.rng.pick(deletable);
+				const deletedText =
+					w.bare[i].kind === "raw" ? (w.bare[i] as { text: string }).text : "";
+				if (/^(%%|<!--|-->)$/.test(deletedText)) w.cov.commentDelimiterDeleted = true;
 				w.bare.splice(i, 1);
 				w.rendered.splice(i, 1);
 				w.trace.push(`deleteLine #${i}`);

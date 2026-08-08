@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AutoHeadingsPlugin from "../../src/main";
 import { DEFAULT_TEMPLATE, WORD_JOINER, type Template } from "../../src/numbering";
 import { NO_NUMBERING_TEMPLATE, type PathRule } from "../../src/pathrules";
-import { Notice, TFile as MockTFile } from "./obsidian-mock";
+import { Modal, Notice, TFile as MockTFile } from "./obsidian-mock";
 
 /** 编辑器坐标。 */
 interface Pos {
@@ -257,6 +257,9 @@ beforeEach(() => {
 	(globalThis as unknown as { window: unknown }).window = globalThis;
 	vi.useFakeTimers();
 	Notice.messages.length = 0;
+	Notice.lastFragment = null;
+	Notice.instances.length = 0;
+	Modal.instances.length = 0;
 });
 
 afterEach(() => {
@@ -659,6 +662,111 @@ describe("迁移守卫：疑似外来编号且插件从未接触过的文件，�
 		expect(ed.getValue()).toBe(
 			`## ${WORD_JOINER}1 ${WORD_JOINER}红米\n### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`,
 		);
+	});
+});
+
+describe("迁移守卫「每次打开重新允许提示一次」（J13）", () => {
+	it("同一次 file-open 内打字连续命中守卫：只提示一次；再次打开（renumberOnOpen）后允许再提示一次", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 第3章 引言");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+
+		p.renumberOnOpen({ path: "a.md" }); // 首次打开：命中守卫，提示一次。
+		expect(Notice.messages).toHaveLength(1);
+
+		// 同一次打开内继续编辑：仍是疑似外来编号内容，静默跳过、不重复提示。
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(1);
+
+		// 用户切到别的文件再切回来 = 再次触发 file-open：允许再提示一次。
+		p.renumberOnOpen({ path: "a.md" });
+		expect(Notice.messages).toHaveLength(2);
+	});
+
+	it("重新打开后若已清理干净，不再命中守卫、也不再提示", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 红米");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.renumberOnOpen({ path: "a.md" });
+		expect(Notice.messages).toHaveLength(1);
+
+		ed.setValue("## 红米"); // 用户手动清理干净。
+		p.renumberOnOpen({ path: "a.md" });
+		expect(Notice.messages).toHaveLength(1); // 未再命中守卫，无新提示。
+		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}红米`); // 正常接管编号。
+	});
+});
+
+describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () => {
+	it("点击链接：打开确认框，预览「现状→清理后」逐条对照；确认后与「清理非本插件的标题编号」命令结果一致", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.renumberOnOpen({ path: "a.md" });
+		expect(Notice.messages).toHaveLength(1);
+
+		const frag = Notice.lastFragment;
+		expect(frag).not.toBeNull();
+		expect(frag!.children).toHaveLength(1); // 唯一的可点击链接。
+		const link = frag!.children[0];
+		expect(link.tagName).toBe("a");
+
+		link.click();
+
+		// 原 Notice 收起。
+		expect(Notice.instances[0]?.hidden).toBe(true);
+		// 打开了恰好一个确认框，预览与 previewForeignNumberingCleanup 的计算结果一致。
+		expect(Modal.instances).toHaveLength(1);
+		const modal = Modal.instances[0] as unknown as {
+			items: { before: string; after: string }[];
+			onConfirm: () => void;
+		};
+		expect(modal.items).toEqual([
+			{ before: "## 1 红米", after: "## 红米" },
+			{ before: "### 1.1 工艺", after: "### 工艺" },
+		]);
+
+		// 确认清理：结果与「清理非本插件的标题编号」命令一致（同一套底层逻辑）。
+		modal.onConfirm();
+		expect(ed.getValue()).toBe("## 红米\n### 工艺");
+	});
+
+	it("不确认（相当于点「取消」/直接关闭）不改动文件内容", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 红米");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.renumberOnOpen({ path: "a.md" });
+		Notice.lastFragment!.children[0].click();
+		expect(Modal.instances).toHaveLength(1);
+		// 不调用 onConfirm：内容原封不动。
+		expect(ed.getValue()).toBe("## 1 红米");
+	});
+
+	it("点击时该文件已不在任何已打开的标签页：提示改为重新打开，不抛错、不开确认框", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 红米");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.renumberOnOpen({ path: "a.md" });
+		const link = Notice.lastFragment!.children[0];
+
+		setActiveView(null); // 模拟该文件的标签页已关闭。
+		expect(() => link.click()).not.toThrow();
+		expect(Modal.instances).toHaveLength(0);
+		expect(Notice.messages).toContain("该文件已不在任何标签页中，请重新打开后再清理");
+	});
+
+	it("点击时内容已不含外来编号（用户已自行清理）：提示无可清理，不开确认框", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 红米");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.renumberOnOpen({ path: "a.md" });
+		const link = Notice.lastFragment!.children[0];
+
+		ed.setValue("## 红米"); // 点击前用户已手动清理干净。
+		link.click();
+		expect(Modal.instances).toHaveLength(0);
+		expect(Notice.messages).toContain("当前文件无可清理的外来编号");
 	});
 });
 

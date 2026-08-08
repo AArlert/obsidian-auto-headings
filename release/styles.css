@@ -569,6 +569,41 @@ button.ah-tab.ah-tab-active:hover {
 	margin: 4px 0 12px;
 }
 
+/* 迁移守卫可点击 Notice 里的链接（testplan J14）：与说明文字区分开，看起来可点击。 */
+.ah-foreign-guard-link {
+	color: var(--text-accent);
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+/* 疑似外来编号清理预览确认框：逐条「现状 → 清理后」对照列表。 */
+.ah-foreign-guard-list {
+	max-height: 40vh;
+	overflow-y: auto;
+	margin: 0 0 12px;
+	padding-left: 0;
+	list-style: none;
+}
+
+.ah-foreign-guard-item {
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding: 6px 0;
+	font-size: var(--font-ui-small);
+}
+
+.ah-foreign-guard-item:last-child {
+	border-bottom: none;
+}
+
+.ah-foreign-guard-before {
+	color: var(--text-muted);
+	text-decoration: line-through;
+}
+
+.ah-foreign-guard-after {
+	color: var(--text-normal);
+}
+
 /* 已交还所有权（M12 离场）时全局设置 TAB 顶部的提示条：
    离场后下面的开关全部失效，必须显眼到用户不会误以为插件坏了。 */
 .ah-retired-banner {

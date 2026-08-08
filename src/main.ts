@@ -16,6 +16,7 @@ import {
 	defaultPathRules,
 } from "./settings/model";
 import { AutoHeadingsSettingTab } from "./settings/SettingsTab";
+import { ForeignNumberingCleanupModal } from "./settings/ForeignNumberingCleanupModal";
 import { getMessages, type Messages, resolveLang } from "./i18n";
 import {
 	planPauseFileSwitch,
@@ -30,6 +31,7 @@ import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
 	hasUnclaimedForeignNumbering,
+	previewForeignNumberingCleanup,
 } from "./cleanup";
 import {
 	computeHeadingRenames,
@@ -102,9 +104,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private readonly headingSnapshots = new Map<string, HeadingSnapshot[]>();
 
 	/**
-	 * 已提示过「疑似外来编号」的文件路径集合（迁移守卫，testplan J10）：仅内存标志，用于把
-	 * {@link guardForeignNumbering} 的 Notice 限制为每文件每会话一次——命中后仍持续跳过自动写入，
-	 * 但不重复打扰。随文件改名迁移键、随删除清除，插件卸载时整体清空。
+	 * 已提示过「疑似外来编号」的文件路径集合（迁移守卫，testplan J10/J13）：仅内存标志，用于把
+	 * {@link guardForeignNumbering} 的 Notice 限制为**同一次 file-open 内至多一次**——命中后仍
+	 * 持续跳过自动写入，但打字连续触发不刷屏。**每次 {@link renumberOnOpen}（即每次 file-open）
+	 * 都会先清空该文件的记录**（此前是「每会话一次」永久静默，用户视角像插件在这个文件里坏了、
+	 * 且没有任何线索）——重新打开该文件即可再收到一次提示。随文件改名迁移键、随删除
+	 * 清除，插件卸载时整体清空。
 	 */
 	private readonly foreignNumberingWarned = new Set<string>();
 
@@ -554,8 +559,15 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 走与实时编辑一致的**自动路径**门控（{@link shouldAutoTrigger} + 按路径解析模板）——全局
 	 * 开关关且非 fm:true、或 fm:false 时不动；无可用模板时静默跳过。`applyRenumber` 内容未变时
 	 * 不发起事务，故已是最新格式的文件打开时是静默 no-op，不会给每次打开都添一条撤销记录。
+	 *
+	 * **迁移守卫「每次打开重新允许提示一次」**（testplan J13）：函数最前面先清空本文件在
+	 * {@link foreignNumberingWarned} 里的记录——不管本次打开后面几步是否会提前 return（全局开关
+	 * 关 / 无模板等），「文件被重新打开」这件事本身就该重置提示状态，否则守卫命中后用户切走再切
+	 * 回来仍拿不到任何线索。本方法是「file-open」事件在自动编号路径上的唯一入口，故此处清空即
+	 * 等价于「每次 file-open 后重置」。
 	 */
 	private renumberOnOpen(file: { path: string }): void {
+		this.foreignNumberingWarned.delete(file.path);
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view || view.file?.path !== file.path) {
 			return; // 活动视图与本次打开的文件不一致（如后台/快速切换）时不强行处理。
@@ -575,12 +587,17 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
-	 * 迁移守卫（**仅自动路径**，testplan J10，见 spec.md §3.10 相邻讨论）：若本文件疑似含外来编号
-	 * 且插件从未接触过它（{@link hasUnclaimedForeignNumbering}），跳过本次自动写入并提示用户先清理
-	 * ——否则会在外来编号前叠加本插件自己的编号（`## 1 红米` → `## 1 1 红米`），观感上与 bug 无异。
-	 * 同一文件本次会话只提示一次（{@link foreignNumberingWarned}），此后静默持续跳过直至用户清理
-	 * 或重载插件。**手动命令**（立即重新编号 / 清除编号 / 清理外来编号）不查此函数，绕过一切开关
-	 * 照常执行，与既有「Renumber now 绕过一切开关」原则一致。
+	 * 迁移守卫（**仅自动路径**，testplan J10/J13/J14，见 spec.md §3.10 相邻讨论）：若本文件疑似含
+	 * 外来编号且插件从未接触过它（{@link hasUnclaimedForeignNumbering}），跳过本次自动写入并提示
+	 * 用户——否则会在外来编号前叠加本插件自己的编号（`## 1 红米` → `## 1 1 红米`），观感上与 bug
+	 * 无异。同一次 file-open 内只提示一次（{@link foreignNumberingWarned}，由 {@link renumberOnOpen}
+	 * 在每次打开时清空）——避免打字连续触发刷屏；重新打开该文件后会再提示一次（J13）。**手动命令**
+	 * （立即重新编号 / 清除编号 / 清理外来编号）不查此函数，绕过一切开关照常执行，与既有「Renumber
+	 * now 绕过一切开关」原则一致。
+	 *
+	 * Notice 可点击（{@link showForeignNumberingGuardNotice}）：打开预览确认框逐条列出「现状 →
+	 * 清理后」对照（J14）——清理命令与本守卫共享同一误伤面（如 `## API 设计`），无预览的一键执行
+	 * 等于吃用户内容，不能做。
 	 *
 	 * @returns 是否命中守卫（命中即调用方应跳过本次 {@link applyRenumber}）。
 	 */
@@ -590,9 +607,69 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		if (!this.foreignNumberingWarned.has(path)) {
 			this.foreignNumberingWarned.add(path);
-			new Notice(this.messages().noticeForeignNumberingGuard);
+			this.showForeignNumberingGuardNotice(path);
 		}
 		return true;
+	}
+
+	/**
+	 * 迁移守卫命中时弹出的可点击 Notice（testplan J14）：正文之外附一段可点击文字，点击后打开
+	 * {@link openForeignNumberingCleanupModal} 的清理预览确认框。
+	 *
+	 * 用 `createFragment` 构造消息体——`Notice` 的 `message` 参数原生支持 `DocumentFragment`
+	 * （Obsidian 官方 API），无需依赖 `noticeEl` 内部结构拼按钮。`duration` 传 0（不自动消失，
+	 * 停留到用户点击或手动关闭）：默认几秒钟的自动消失时间不够用户看清并点击。
+	 *
+	 * `createFragment` 是 Obsidian 运行时注入的**全局函数**（`obsidian.d.ts` 声明在
+	 * `declare global` 里，不是模块具名导出），故不出现在文件顶部的 `from "obsidian"` 导入列表——
+	 * 与 `createEl`/`createDiv`/`createSpan` 同类，直接按全局标识符调用。`tests/dev_tests/obsidian-mock.ts`
+	 * 在加载时把同名替身挂到 `globalThis`，供单测环境（无真实 Obsidian/DOM 运行时）下使用。
+	 */
+	private showForeignNumberingGuardNotice(path: string): void {
+		const t = this.messages();
+		let link!: HTMLAnchorElement;
+		const frag = createFragment((el) => {
+			el.appendText(`${t.noticeForeignNumberingGuard} `);
+			link = el.createEl("a", {
+				text: t.noticeForeignNumberingGuardAction,
+				href: "#",
+				cls: "ah-foreign-guard-link",
+			});
+		});
+		const notice = new Notice(frag, 0);
+		link.addEventListener("click", (evt) => {
+			evt.preventDefault();
+			notice.hide();
+			this.openForeignNumberingCleanupModal(path);
+		});
+	}
+
+	/**
+	 * 打开「疑似外来编号」清理预览确认框（testplan J14，迁移守卫 Notice 的点击入口）：按 `path`
+	 * 在当前打开的 Markdown 叶子里重新定位实时编辑器与内容——不复用告警那一刻捕获的引用，因为
+	 * Notice 常驻到用户点击（{@link showForeignNumberingGuardNotice} 的 `duration: 0`），期间内容
+	 * 可能已变化，该叶子也可能已切换到别的文件。找不到（文件已不在任何标签页）则提示改为重新打开。
+	 *
+	 * 预览与「确认清理」执行的是**同一份内容、同一套逻辑**（{@link previewForeignNumberingCleanup}
+	 * 与 {@link runClearForeignNumbering} 都基于 `stripForeignNumbering`），保证「用户看到的」与
+	 * 「实际发生的」逐条一致。
+	 */
+	private openForeignNumberingCleanupModal(path: string): void {
+		const found = this.markdownContextForPath(path);
+		if (!found) {
+			new Notice(this.messages().noticeForeignGuardFileNotOpen);
+			return;
+		}
+		const { editor, ctx } = found;
+		const items = previewForeignNumberingCleanup(editor.getValue());
+		if (items.length === 0) {
+			// 告警之后、点击之前用户已自行清理或改动内容，已无可清理项。
+			new Notice(this.messages().noticeNoForeign);
+			return;
+		}
+		new ForeignNumberingCleanupModal(this.app, this.messages(), items, () => {
+			this.runClearForeignNumbering(editor, ctx);
+		}).open();
 	}
 
 	/**
@@ -922,7 +999,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/**
 	 * 取「当前活动 Markdown 文件」的编辑器与上下文，供设置面板**敏感操作 TAB** 的两个单文件清除
 	 * 入口使用。设置面板是模态层，`getActiveViewOfType(MarkdownView)` 可能返回 `null`（N1 同源），
-	 * 故回退到「按 `getActiveFile()` 在打开的 markdown 叶子里找同路径视图」。找不到返回 `null`。
+	 * 故回退到「按 `getActiveFile()` 在打开的 markdown 叶子里找同路径视图」（{@link markdownContextForPath}）。
+	 * 找不到返回 `null`。
 	 */
 	private activeMarkdownContext(): { editor: Editor; ctx: MarkdownFileInfo } | null {
 		const direct = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -933,9 +1011,19 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (!active) {
 			return null;
 		}
+		return this.markdownContextForPath(active.path);
+	}
+
+	/**
+	 * 在当前打开的全部 Markdown 叶子中按**路径**（而非「当前活动文件」）查找编辑器与上下文
+	 * （testplan J14，供迁移守卫 Notice 点击时重新定位实时内容）。与 {@link activeMarkdownContext}
+	 * 的区别：后者只关心「活动」文件，本函数不要求该文件处于活动标签页，只要它在任意已打开的
+	 * 叶子里即可命中——Notice 常驻到用户点击，点击时活动标签页很可能已经切换到别的文件。
+	 */
+	private markdownContextForPath(path: string): { editor: Editor; ctx: MarkdownFileInfo } | null {
 		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
 			const view = leaf.view as unknown as MarkdownFileInfo & { editor?: Editor };
-			if (view.editor && view.file?.path === active.path) {
+			if (view.editor && view.file?.path === path) {
 				return { editor: view.editor, ctx: view };
 			}
 		}

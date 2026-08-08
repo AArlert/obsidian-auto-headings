@@ -1441,3 +1441,66 @@ describe("renumberContent — 注释块跳过与分区域残留清理（M12，te
 		expect(out[3]).toBe("普通正文");
 	});
 });
+
+describe("renumberContent — 单标题跳过标记 <!-- skip -->（issue #6，testplan E30–E35）", () => {
+	const num = (content: string): string => renumberContent(content, DEFAULT_TEMPLATE);
+	/** 双哨兵编号前缀。 */
+	const p = (n: string): string => `${WORD_JOINER}${n} ${WORD_JOINER}`;
+
+	it("E30：带标记的标题不编号，且不占计数器槽位（其后同级编号连续）", () => {
+		const input = ["## 甲", "## 临时讨论 <!-- skip -->", "## 乙"].join("\n");
+		const out = num(input).split("\n");
+		expect(out[0]).toBe(`## ${p("1")}甲`);
+		expect(out[1]).toBe("## 临时讨论 <!-- skip -->");
+		// 跳过的标题不推进计数器：乙 应当是 2 而不是 3
+		expect(out[2]).toBe(`## ${p("2")}乙`);
+	});
+
+	it("E31：给已编号的标题补标记 → 下次重排摘掉它的编号（而非冻结在原地）", () => {
+		const already = ["## 甲", "## 临时讨论", "## 乙"].join("\n");
+		const numbered = num(already).split("\n");
+		expect(numbered[1]).toBe(`## ${p("2")}临时讨论`);
+
+		// 用户事后在该行尾补上标记
+		const patched = [numbered[0], `${numbered[1]} <!-- skip -->`, numbered[2]].join("\n");
+		const out = num(patched).split("\n");
+		expect(out[1]).toBe("## 临时讨论 <!-- skip -->"); // 编号已被摘掉
+		expect(out[2]).toBe(`## ${p("2")}乙`); // 槽位随之让出
+	});
+
+	it("E32：大小写不敏感、容忍内部空白", () => {
+		const input = ["## a <!--skip-->", "## b <!--   SKIP   -->", "## c <!-- Skip -->"].join(
+			"\n",
+		);
+		const out = num(input).split("\n");
+		expect(out[0]).toBe("## a <!--skip-->");
+		expect(out[1]).toBe("## b <!--   SKIP   -->");
+		expect(out[2]).toBe("## c <!-- Skip -->");
+	});
+
+	it("E33：标记必须在行尾——出现在标题中间不生效，照常编号", () => {
+		const input = ["## <!-- skip --> 甲", "## 乙"].join("\n");
+		const out = num(input).split("\n");
+		expect(out[0]).toBe(`## ${p("1")}<!-- skip --> 甲`);
+		expect(out[1]).toBe(`## ${p("2")}乙`);
+	});
+
+	it("E34：phase 1 只跳过本行、不含子树——被跳过标题下的子标题照常编号", () => {
+		const input = ["## 甲", "## 临时讨论 <!-- skip -->", "### 子项", "## 乙"].join("\n");
+		const out = num(input).split("\n");
+		expect(out[1]).toBe("## 临时讨论 <!-- skip -->");
+		// 子项挂在「甲」这个 H2 槽位下（跳过的标题未推进计数器）
+		expect(out[2]).toBe(`### ${p("1.1")}子项`);
+		expect(out[3]).toBe(`## ${p("2")}乙`);
+	});
+
+	it("E35：幂等——连跑两次结果一致；正文里的同形字符串不受影响", () => {
+		const input = ["## 甲 <!-- skip -->", "正文里提到 <!-- skip --> 这个写法", "## 乙"].join(
+			"\n",
+		);
+		const once = num(input);
+		expect(once).toBe(num(once));
+		expect(once.split("\n")[1]).toBe("正文里提到 <!-- skip --> 这个写法");
+		expect(once.split("\n")[2]).toBe(`## ${p("1")}乙`);
+	});
+});

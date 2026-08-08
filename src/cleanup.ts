@@ -6,7 +6,8 @@
  * - 「清除全库编号」按钮（SettingsTab.ts）：对每个 .md 文件读取 → 清除 → 写回。
  *
  * 另暴露只读探测 {@link hasUnclaimedForeignNumbering}，供 main.ts 自动路径在写入前判断是否为
- * 「插件从未接触过 + 疑似外来编号」的迁移场景（testplan J10）。
+ * 「插件从未接触过 + 疑似外来编号」的迁移场景（testplan J10）；以及 {@link previewForeignNumberingCleanup}，
+ * 供迁移守卫 Notice 点击后的清理预览确认框计算「现状 → 清理后」逐条对照（testplan J14）。
  */
 
 import { parseHeadings } from "./parser";
@@ -125,4 +126,45 @@ export function hasUnclaimedForeignNumbering(content: string): boolean {
 	}
 	const headings = parseHeadings(content);
 	return headings.some((h) => stripForeignNumbering(h.rawText) !== h.rawText.replace(/\s+$/, ""));
+}
+
+/** {@link previewForeignNumberingCleanup} 单条对照项：某标题清理前后的完整行文本。 */
+export interface ForeignNumberingPreviewItem {
+	/** 清理前的完整标题行（`#` 组 + 原始文本）。 */
+	before: string;
+	/** {@link stripForeignNumbering} 处理后的完整标题行。 */
+	after: string;
+}
+
+/**
+ * 预览 {@link clearForeignNumberingContent} 会实际改动哪些标题（迁移守卫 Notice 点击后的清理预览
+ * 确认框用，testplan J14）：只收录**真的会被剥掉编号**的标题——
+ * - 含 WJ（本插件自己写的编号）跳过，与 {@link clearForeignNumberingContent} 同一「非本插件」语义；
+ * - 剥离结果与原文本无实质差异（仅行尾空白被 {@link stripForeignNumbering} 的归一化步骤吃掉，
+ *   同 {@link hasUnclaimedForeignNumbering} J12 修复的比较口径）的也跳过，避免预览列表里出现
+ *   「看起来什么都没变」的对照，误导用户以为会有改动。
+ *
+ * 与 {@link clearForeignNumberingContent} 共享同一剥离逻辑 {@link stripForeignNumbering}，保证
+ * 预览与「确认清理」后的实际结果逐条一致——绝不能出现预览说改 A、实际却改了 B 的落差，这正是本
+ * 对话框存在的意义：清理命令带与守卫同源的误伤面（如 `## API 设计`），无预览的一键执行等于吃
+ * 用户内容。
+ *
+ * @param content 待预览的文件全文（通常取自实时编辑器 `editor.getValue()`）。
+ * @returns 会被改动的标题「现状 → 清理后」对照列表，按标题在文中出现的顺序排列；无改动返回空数组。
+ */
+export function previewForeignNumberingCleanup(content: string): ForeignNumberingPreviewItem[] {
+	const headings = parseHeadings(content);
+	const items: ForeignNumberingPreviewItem[] = [];
+	for (const h of headings) {
+		if (h.rawText.includes(WORD_JOINER)) {
+			continue;
+		}
+		const stripped = stripForeignNumbering(h.rawText);
+		if (stripped === h.rawText.replace(/\s+$/, "")) {
+			continue;
+		}
+		const hashes = "#".repeat(h.level);
+		items.push({ before: `${hashes} ${h.rawText}`, after: `${hashes} ${stripped}` });
+	}
+	return items;
 }
