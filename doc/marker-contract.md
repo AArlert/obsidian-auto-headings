@@ -48,6 +48,23 @@ Properties you can rely on:
   the numbering back. Downstream code should treat such text as user content, which is
   exactly what it now is.
 
+### Per-heading skip marker (v1.0.17+)
+
+A heading whose line **ends with** an HTML comment `<!-- skip -->` (case-insensitive, inner
+whitespace tolerant — `<!--skip-->`, `<!--  SKIP  -->` both count) is treated by the plugin as
+**exempt from numbering**: it is not numbered, does not advance the counter, and any prior
+plugin numbering on it is stripped on the next renumber. This is plain, visible text (not a
+Unicode marker) — the string is meaningful to Auto Headings but otherwise an ordinary HTML
+comment, invisible in reading view like any other. Downstream code that walks a vault's
+headings and wants to reproduce the plugin's numbering should treat a heading matching
+`/<!--\s*skip\s*-->\s*$/i` as excluded from the count.
+
+As of v1.0.17 the marker only exempts the single line it's on — headings nested under a
+skipped heading are numbered normally. This is a **v1.x behavior, not yet a stability
+guarantee**: a future release may add an opt-in subtree variant. The trigger string and its
+"exempt from numbering" meaning are stable; whether it *additionally* exempts descendants is
+not yet fixed.
+
 ## 2. Stability guarantees
 
 1. The marker character stays **U+2060**, and the double-sentinel positions stay as
