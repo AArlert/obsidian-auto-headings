@@ -109,7 +109,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private readonly foreignNumberingWarned = new Set<string>();
 
 	/**
-	 * 剪贴板净化的会话级「净化文本 → 原文」LRU（M11「复制净化开关」，spec.md §2.8「内存映射
+	 * 剪贴板净化的会话级「净化文本 → 原文」LRU（M11，spec.md §2.8「内存映射
 	 * 双通道」）：copy/cut 出口净化时记录，editor-paste 命中时还原原文避免双重编号（O9）。
 	 * 只存内存、不持久化，随插件卸载丢弃。
 	 */
@@ -205,7 +205,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			this.imeComposing = false;
 		});
 
-		// 剪贴板净化（M11「复制净化开关」，spec.md §2.8）：copy/cut 出口剥 WJ + editor-paste
+		// 剪贴板净化（M11，spec.md §2.8；1.0.16 起恒开无开关）：copy/cut 出口剥 WJ + editor-paste
 		// 命中还原。主窗口挂一份，弹出窗口在 window-open 时各挂一份（registerDomEvent 随插件
 		// 卸载自动清理，重复打开同一弹窗会重新注册、旧监听随窗口销毁）。
 		this.registerClipboardSanitizer(activeDocument);
@@ -377,9 +377,6 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 降级默认值：任一步缺失 / 抛错一律不介入，剪贴板维持现状（等于本功能不存在）。
 	 */
 	private sanitizeClipboardEvent(evt: ClipboardEvent, doc: Document): void {
-		if (!this.settings.sanitizeClipboard) {
-			return;
-		}
 		const data = evt.clipboardData;
 		if (!data) {
 			return;
@@ -426,7 +423,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		editor: Editor,
 		info: MarkdownView | MarkdownFileInfo,
 	): void {
-		if (!this.settings.sanitizeClipboard || evt.defaultPrevented) {
+		if (evt.defaultPrevented) {
 			return;
 		}
 		try {
@@ -994,14 +991,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (typeof merged.backlinksIntroShown !== "boolean") {
 			merged.backlinksIntroShown = false;
 		}
-		// sanitizeClipboard 缺失 / 非布尔（含 1.0.10 之前的旧数据）时回退到默认 **true**
-		// （M11 信任包：默认主动消解 WJ 外泄；显式设过 false 的用户不受影响）。
-		if (typeof merged.sanitizeClipboard !== "boolean") {
-			merged.sanitizeClipboard = true;
-		}
 		// 迁移：历史独立开关 `backlinkStandaloneTrigger`（0.7.8–1.0.8，CR-18）已并入 `updateBacklinks`
 		// （1.0.9 起单开关全局生效，与是否命中编号模板无关）；旧字段不再读取，随迁移一并清理。
 		delete merged.backlinkStandaloneTrigger;
+		// 迁移：历史开关 `sanitizeClipboard`（1.0.10–1.0.15）自 1.0.16 移除——净化是插件的固有承诺
+		// 而非可选项（spec §2.8「无开关」）。旧值一律不再读取：曾显式关掉的用户升级后同样恒净化，
+		// 键随迁移删除，下次 saveSettings 即从 data.json 消失。
+		delete merged.sanitizeClipboard;
 		this.settings = merged as unknown as AutoHeadingsSettings;
 		this.settings.debounceDelay = clampDebounceDelay(this.settings.debounceDelay);
 	}

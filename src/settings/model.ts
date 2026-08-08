@@ -47,13 +47,6 @@ export interface AutoHeadingsSettings {
 	 */
 	backlinksIntroShown: boolean;
 	/**
-	 * 复制净化（M11「复制净化开关」，1.0.10，见 spec.md §2.8）：copy/cut 时把插件写入的 WJ 哨兵
-	 * 从剪贴板出口剥净（外部应用不再收到隐形字符），同会话内粘贴回本库时自动还原原文避免双重
-	 * 编号。**默认开**（M11 信任包：把 WJ 风险从「披露」升级到「主动消解」；WJ 守卫保证不含
-	 * 编号的复制粘贴零介入）。单开关同时门控 copy/cut 净化与 paste 还原两端。
-	 */
-	sanitizeClipboard: boolean;
-	/**
 	 * **已交还所有权 / 插件离场**（M12「固化编号并交还所有权」，见 spec.md §3.18）。
 	 *
 	 * `true` 时插件**停止一切自动编号**。这是一道**硬闸**，位置在 `shouldAutoTrigger` 首行、
@@ -86,7 +79,6 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	language: DEFAULT_LANG_SETTING,
 	updateBacklinks: true,
 	backlinksIntroShown: false,
-	sanitizeClipboard: true,
 	retired: false,
 };
 

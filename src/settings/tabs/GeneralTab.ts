@@ -66,17 +66,6 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 			}),
 		);
 
-	// —— 复制净化开关（M11，默认开：copy/cut 出口剥 WJ + 同会话粘贴回还原，见 spec.md §2.8）——
-	new Setting(containerEl)
-		.setName(t.sanitizeClipboardName)
-		.setDesc(t.sanitizeClipboardDesc)
-		.addToggle((toggle) =>
-			toggle.setValue(plugin.settings.sanitizeClipboard).onChange(async (value) => {
-				plugin.settings.sanitizeClipboard = value;
-				await plugin.saveSettings();
-			}),
-		);
-
 	// —— 防抖延迟（滑块，M6，见 spec.md §3.9）——
 	new Setting(containerEl)
 		.setName(t.debounceName)
