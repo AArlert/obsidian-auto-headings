@@ -104,26 +104,23 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private readonly headingSnapshots = new Map<string, HeadingSnapshot[]>();
 
 	/**
-	 * 迁移守卫（testplan J10/J13/J14）最近一次被检查的文件路径：用于判断「这次检查是不是刚从
-	 * 别的文件切过来」（{@link guardForeignNumbering} 用它决定要不要重新弹提示）。
+	 * 屏幕上那条迁移守卫 Notice（至多一条）及其对应文件（testplan J10/J13/J14）。
 	 *
-	 * **1.0.18 改为按「检查序列」推导，不再依赖 `file-open` 事件**（原实现是按文件路径存一个
-	 * `Set<string>`「已提示过」标志，每次 `file-open` 触发的 {@link renumberOnOpen} 清空当前文件
-	 * 的记录）。真机验证发现 `file-open` 在标签页切走再切回时**不保证每次都触发**——按旧机制，
-	 * 只要它没触发，用户切回一个仍命中守卫的文件就完全拿不到新提示，退化回 1.0.15 之前「静默
-	 * 永久跳过」的老问题，只是概率性发生而非必然。
+	 * **为什么要记住它**（1.0.19 真机反馈的根因）：守卫检查的发起方**不保证是用户正看着的那个
+	 * 文件**——{@link scheduleRenumber} 的防抖计时器捕获的是**安排那一刻**的路径，用户在 A 里
+	 * 敲了字、300ms 还没到就切走，计时器会在**切换之后**才到期；{@link renumberActiveFile} 更是
+	 * 直接遍历**全部**打开的叶子。1.0.18 之前没有这道校验，于是出现「打开外来编号文件时不弹、
+	 * 切到另一个文件反而弹出来、点进去又说没什么可清理」——那条提示说的其实是上一个文件。
 	 *
-	 * 新机制不依赖任何特定事件：只要**这一次**要检查的路径和**上一次**检查的路径不同，就判定
-	 * 「刚从别处过来」。触发守卫检查的不止 `file-open`（{@link renumberOnOpen}），编辑防抖到期
-	 * （{@link scheduleRenumber}）与打开设置面板改模板后的批量刷新同样会调用
-	 * {@link guardForeignNumbering}——这意味着即便 `file-open` 真的没触发，只要用户在别的文件里
-	 * 打了字（触发那个文件的防抖检查），本字段也会被更新，回到原文件继续编辑时同样能正确识别
-	 * 「已经离开过」。**同一文件内连续多次检查**（用户持续打字、防抖反复到期）路径不变，
-	 * 天然不重复提示，不需要额外的节流逻辑。
-	 *
-	 * `null` 表示插件本次会话还未检查过任何文件（或刚被 {@link onunload} 清空）。
+	 * 三条约束由此而来（全部落在 {@link showForeignNumberingGuardNotice}）：
+	 * 1. **只为当前活动文件发声**：`path` 不是 `getActiveFile()` 时直接不弹——为看不见的文件弹
+	 *    提示，用户只会把它读成在说眼前这篇。
+	 * 2. **同一文件至多一条**：已有一条在屏幕上就不重建，避免用户持续打字时防抖反复到期造成
+	 *    闪烁 / 堆叠（Notice 是 `duration: 0` 不自动消失的）。
+	 * 3. **失效即收起**：切到别的文件、或该文件已被清理干净时主动 `hide()`，不留下一条指向别处
+	 *    的孤儿提示。
 	 */
-	private lastGuardedPath: string | null = null;
+	private activeGuardNotice: { path: string; notice: Notice } | null = null;
 
 	/**
 	 * 剪贴板净化的会话级「净化文本 → 原文」LRU（M11，spec.md §2.8「内存映射
@@ -270,17 +267,15 @@ export default class AutoHeadingsPlugin extends Plugin {
 					this.headingSnapshots.delete(oldPath);
 					this.headingSnapshots.set(file.path, snap);
 				}
-				if (this.lastGuardedPath === oldPath) {
-					this.lastGuardedPath = file.path;
+				if (this.activeGuardNotice?.path === oldPath) {
+					this.activeGuardNotice.path = file.path;
 				}
 			}),
 		);
 		this.registerEvent(
 			this.app.vault.on("delete", (file) => {
 				this.headingSnapshots.delete(file.path);
-				if (this.lastGuardedPath === file.path) {
-					this.lastGuardedPath = null;
-				}
+				this.dismissGuardNotice(file.path);
 			}),
 		);
 	}
@@ -292,7 +287,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		this.debounceTimers.clear();
 		this.headingSnapshots.clear();
-		this.lastGuardedPath = null;
+		this.activeGuardNotice?.notice.hide();
+		this.activeGuardNotice = null;
 	}
 
 	/**
@@ -573,12 +569,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 开关关且非 fm:true、或 fm:false 时不动；无可用模板时静默跳过。`applyRenumber` 内容未变时
 	 * 不发起事务，故已是最新格式的文件打开时是静默 no-op，不会给每次打开都添一条撤销记录。
 	 *
-	 * **迁移守卫「换到别的文件再回来即可再提示一次」**（testplan J13）：本方法是最常见的一条
-	 * 「用户回到这个文件」信号，但不是唯一一条——`file-open` 之外，编辑防抖到期同样参与
-	 * {@link lastGuardedPath} 的推导（见其注释：不依赖任何单一事件，靠「这次检查的路径是否
-	 * 与上次不同」判断，即便本方法这里因故未触发，回来后一打字照样能正确识别）。
+	 * **迁移守卫提示的收起时机**（testplan J13）：函数最前面**无条件**收起「不是本次打开这个
+	 * 文件」的守卫提示——不管后面几步是否提前 return（全局开关关 / 无模板等），用户已经切到别的
+	 * 文件这件事本身就该让上一条提示消失，否则屏幕上会留一条指向另一篇笔记的孤儿提示，被读成
+	 * 在说眼前这篇（1.0.19 真机反馈的症状之一）。
 	 */
 	private renumberOnOpen(file: { path: string }): void {
+		this.dismissGuardNoticeUnlessFor(file.path);
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view || view.file?.path !== file.path) {
 			return; // 活动视图与本次打开的文件不一致（如后台/快速切换）时不强行处理。
@@ -604,10 +601,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 无异。**手动命令**（立即重新编号 / 清除编号 / 清理外来编号）不查此函数，绕过一切开关照常
 	 * 执行，与既有「Renumber now 绕过一切开关」原则一致。
 	 *
-	 * **提示节流**：连续检查同一路径（用户在同一文件里持续打字，防抖反复到期）只提示一次；
-	 * 检查的路径与 {@link lastGuardedPath} 不同（用户刚从别的文件切过来/切回来）则重新提示——
-	 * 判断逻辑与「是否真弹 Notice」无关的路径更新写在**函数最前面、无条件执行**，就算内容其实
-	 * 干净（不含外来编号）也照样刷新，这样切去一个干净文件再切回来同样会被正确识别为「离开过」。
+	 * **提示的可见性由 {@link showForeignNumberingGuardNotice} 统一裁决**（只为当前活动文件弹、
+	 * 同一文件至多一条）——本函数每次命中都调用它，不在这里做「上次是不是同一个文件」之类的
+	 * 推断：那种推断依赖调用方是谁（`file-open` / 防抖 / 批量刷新），而调用方恰恰不保证对应
+	 * 用户眼前那篇。
+	 *
+	 * 内容已不再命中（用户自己清理干净、或跑过清理命令）时**主动收起**该文件那条提示，避免留下
+	 * 一条已经不成立的告警。
 	 *
 	 * Notice 可点击（{@link showForeignNumberingGuardNotice}）：打开预览确认框逐条列出「现状 →
 	 * 清理后」对照（J14）——清理命令与本守卫共享同一误伤面（如 `## API 设计`），无预览的一键执行
@@ -616,15 +616,28 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * @returns 是否命中守卫（命中即调用方应跳过本次 {@link applyRenumber}）。
 	 */
 	private guardForeignNumbering(path: string, content: string): boolean {
-		const cameFromElsewhere = this.lastGuardedPath !== path;
-		this.lastGuardedPath = path;
 		if (!hasUnclaimedForeignNumbering(content)) {
+			this.dismissGuardNotice(path);
 			return false;
 		}
-		if (cameFromElsewhere) {
-			this.showForeignNumberingGuardNotice(path);
-		}
+		this.showForeignNumberingGuardNotice(path);
 		return true;
+	}
+
+	/** 收起指定文件的守卫提示（若屏幕上那条正是它）。 */
+	private dismissGuardNotice(path: string): void {
+		if (this.activeGuardNotice?.path === path) {
+			this.activeGuardNotice.notice.hide();
+			this.activeGuardNotice = null;
+		}
+	}
+
+	/** 收起守卫提示，除非它说的正是 `path`（用户切到别的文件时用）。 */
+	private dismissGuardNoticeUnlessFor(path: string): void {
+		if (this.activeGuardNotice && this.activeGuardNotice.path !== path) {
+			this.activeGuardNotice.notice.hide();
+			this.activeGuardNotice = null;
+		}
 	}
 
 	/**
@@ -641,6 +654,19 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 在加载时把同名替身挂到 `globalThis`，供单测环境（无真实 Obsidian/DOM 运行时）下使用。
 	 */
 	private showForeignNumberingGuardNotice(path: string): void {
+		// ① 只为用户当前正看着的文件发声（见 activeGuardNotice 注释）：防抖计时器可能在用户已经
+		//    切走之后才到期，批量刷新更是遍历全部叶子——为看不见的文件弹提示，用户只会把它读成
+		//    在说眼前这篇，点进去又发现「没什么可清理」（1.0.19 真机反馈的正是这条链路）。
+		if (this.app.workspace.getActiveFile?.()?.path !== path) {
+			return;
+		}
+		// ② 同一文件已有一条在屏幕上：不重建。Notice 是 duration:0 不自动消失的，用户在这个文件里
+		//    持续打字会让防抖反复到期，每次都重建会闪烁、且把用户正要点的那条抽掉。
+		if (this.activeGuardNotice?.path === path) {
+			return;
+		}
+		this.activeGuardNotice?.notice.hide();
+
 		const t = this.messages();
 		let link!: HTMLAnchorElement;
 		const frag = createFragment((el) => {
@@ -654,9 +680,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const notice = new Notice(frag, 0);
 		link.addEventListener("click", (evt) => {
 			evt.preventDefault();
-			notice.hide();
+			this.dismissGuardNotice(path);
 			this.openForeignNumberingCleanupModal(path);
 		});
+		this.activeGuardNotice = { path, notice };
 	}
 
 	/**

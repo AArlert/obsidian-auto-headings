@@ -164,6 +164,11 @@ function makePlugin(
 	let activeView: { editor: FakeEditor; file?: { path: string } } | null = null;
 	// renumberActiveFile 现遍历 getLeavesOfType("markdown")（修设置面板打开时活动视图为 null 的 bug）。
 	let leaves: Array<{ view: { editor: FakeEditor; file?: { path: string } } }> = [];
+	/**
+	 * 「当前活动文件」的显式覆盖：用于模拟**活动文件与被检查文件不一致**的真实场景——防抖计时器
+	 * 在用户已经切走之后才到期、批量刷新遍历后台叶子。不设时回落到活动视图的文件（J13/J14）。
+	 */
+	let activeFileOverride: { path: string } | null = null;
 	const templates = () => opts.allTemplates ?? [tplBox.current];
 	// 假 vault：getAbstractFileByPath 返回 mock TFile 实例（main.ts 用 instanceof TFile 收窄，
 	// 对象字面量会被判为「非文件」跳过），process 读改写回内存。
@@ -203,6 +208,10 @@ function makePlugin(
 				_cls: unknown,
 			): { editor: FakeEditor; file?: { path: string } } | null => activeView,
 			getLeavesOfType: (_type: string) => leaves,
+			// 「用户当前正看着哪个文件」——迁移守卫据此决定要不要弹提示（J13：只为活动文件发声）。
+			// 由 setActiveView / setActiveFile 驱动；两者都没设过时返回 null（= 无活动文件）。
+			getActiveFile: (): { path: string } | null =>
+				activeFileOverride ?? activeView?.file ?? null,
 		},
 		vault,
 		metadataCache,
@@ -239,6 +248,10 @@ function makePlugin(
 			activeView = v;
 			// 设置面板的「改模板即时重排」走 getLeavesOfType；单文件场景下叶子即活动视图。
 			leaves = v ? [{ view: v }] : [];
+		},
+		/** 显式指定「用户当前正看着哪个文件」，与被检查的文件解耦（J13：跨文件误弹的回归）。 */
+		setActiveFile: (f: { path: string } | null) => {
+			activeFileOverride = f;
 		},
 		setLeaves: (vs: Array<{ editor: FakeEditor; file?: { path: string } }>) => {
 			leaves = vs.map((view) => ({ view }));
@@ -589,8 +602,9 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 
 describe("迁移守卫：疑似外来编号且插件从未接触过的文件，自动路径跳过写入（J10）", () => {
 	it("scheduleRenumber 命中守卫：不写回、Notice 提示一次，重复触发不再重复提示", () => {
-		const { p } = makePlugin();
+		const { p, setActiveFile } = makePlugin();
 		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
+		setActiveFile({ path: "a.md" }); // 用户正看着这个文件（提示只为活动文件发声，J13）。
 		p.scheduleRenumber(ed, fileInfo("a.md"));
 		vi.advanceTimersByTime(300);
 		expect(ed.getValue()).toBe("## 1 红米\n### 1.1 工艺");
@@ -665,75 +679,104 @@ describe("迁移守卫：疑似外来编号且插件从未接触过的文件，�
 	});
 });
 
-describe("迁移守卫「换到别的文件再回来即可再提示一次」（J13，1.0.18 改为按检查序列推导）", () => {
-	it("同一文件内连续打字命中守卫：只提示一次；中途切去别的文件、再切回来：提示一次", () => {
-		const { p } = makePlugin();
-		const a = new FakeEditor("## 第3章 引言");
-		const b = new FakeEditor("## 普通标题"); // 不含外来编号，仅用于模拟「切到别的文件」。
-
-		p.scheduleRenumber(a, fileInfo("a.md")); // 首次检查 a.md：命中守卫，提示一次。
-		vi.advanceTimersByTime(300);
-		expect(Notice.messages).toHaveLength(1);
-
-		// 同一文件内继续编辑：仍是疑似外来编号内容，静默跳过、不重复提示。
-		p.scheduleRenumber(a, fileInfo("a.md"));
-		vi.advanceTimersByTime(300);
-		expect(Notice.messages).toHaveLength(1);
-
-		// 用户切到别的文件里打了字（b.md 本身不含外来编号，不会自己触发提示，
-		// 但会更新「最近检查路径」——这正是不依赖 file-open 事件的关键）。
-		p.scheduleRenumber(b, fileInfo("b.md"));
-		vi.advanceTimersByTime(300);
-		expect(Notice.messages).toHaveLength(1); // b.md 干净，未新增提示。
-
-		// 切回 a.md 继续编辑：检查路径与上次（b.md）不同 ⇒ 重新提示一次。
-		p.scheduleRenumber(a, fileInfo("a.md"));
-		vi.advanceTimersByTime(300);
-		expect(Notice.messages).toHaveLength(2);
-	});
-
-	it("不依赖 file-open：即便只靠打字触发（file-open 未触发或被真机环境吞掉），切走再切回同样能重新识别", () => {
-		// 对应用户真机反馈：切到别的标签页再切回来，提示不一定弹出——因为旧实现依赖
-		// file-open 事件重置状态，而该事件在标签页切换时不保证每次都触发。新实现改为
-		// 从「本次检查路径是否与上次不同」推导，完全不调用 renumberOnOpen 也应当成立。
-		const { p } = makePlugin();
+describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真机跨文件误弹）", () => {
+	it("**真机复现**：防抖计时器在用户切走之后才到期 → 不为已经看不见的文件弹提示", () => {
+		// 用户报告的链路：在 a.md（外来编号）里敲了字 → 300ms 还没到就切到 b.md →
+		// 计时器在切换之后才到期。旧实现此时会弹出一条「说的是 a.md」的提示，而用户眼前是
+		// b.md，于是读成「b.md 有问题」，点进去又发现没什么可清理。
+		const { p, setActiveFile } = makePlugin();
 		const a = new FakeEditor("## 1 红米");
-		const b = new FakeEditor("## 2 工艺"); // 也是疑似外来编号，模拟另一篇待迁移笔记。
 
-		p.scheduleRenumber(a, fileInfo("a.md"));
+		setActiveFile({ path: "a.md" });
+		p.scheduleRenumber(a, fileInfo("a.md")); // 在 a.md 里打字，安排计时器。
+		setActiveFile({ path: "b.md" }); // 计时器到期前切走。
 		vi.advanceTimersByTime(300);
-		expect(Notice.messages).toHaveLength(1);
 
-		p.scheduleRenumber(b, fileInfo("b.md"));
-		vi.advanceTimersByTime(300);
-		expect(Notice.messages).toHaveLength(2); // 换了文件，b.md 首次检查同样提示。
-
-		p.scheduleRenumber(a, fileInfo("a.md"));
-		vi.advanceTimersByTime(300);
-		expect(Notice.messages).toHaveLength(3); // 回到 a.md：与上次检查的路径（b.md）不同，重新提示。
+		expect(Notice.messages).toHaveLength(0); // 不为看不见的 a.md 弹提示。
 	});
 
-	it("renumberOnOpen 触发的检查同样参与「路径是否变化」的判断（file-open 确实触发时也正确）", () => {
-		const { p, setActiveView } = makePlugin();
-		const ed = new FakeEditor("## 第3章 引言");
-		const other = new FakeEditor("## 普通标题");
-		setActiveView({ editor: ed, file: { path: "a.md" } });
+	it("批量刷新遍历全部叶子时，只有当前活动的那个疑似文件会弹提示", () => {
+		// renumberActiveFile（改模板后即时重排）遍历所有打开的叶子，后台文件同样会过守卫检查——
+		// 若不加活动文件校验，改一次模板就会为每个后台脏文件各弹一条。
+		const { p, setLeaves, setActiveFile } = makePlugin();
+		const front = new FakeEditor("## 1 红米");
+		const back = new FakeEditor("## 2 工艺");
+		setLeaves([
+			{ editor: front, file: { path: "front.md" } },
+			{ editor: back, file: { path: "back.md" } },
+		]);
+		setActiveFile({ path: "front.md" });
 
-		p.renumberOnOpen({ path: "a.md" }); // 首次打开：命中守卫，提示一次。
-		expect(Notice.messages).toHaveLength(1);
+		p.renumberActiveFile();
 
-		// 同一次打开内继续编辑：仍是疑似外来编号内容，静默跳过、不重复提示。
-		p.scheduleRenumber(ed, fileInfo("a.md"));
-		vi.advanceTimersByTime(300);
-		expect(Notice.messages).toHaveLength(1);
+		expect(Notice.messages).toHaveLength(1); // 只有 front.md 那条。
+	});
 
-		// 中途真的切到了别的文件（活动视图随之切换，模拟真实 file-open 场景），
-		// 再切回 a.md：重新提示。
-		setActiveView({ editor: other, file: { path: "other.md" } });
-		p.renumberOnOpen({ path: "other.md" });
-		setActiveView({ editor: ed, file: { path: "a.md" } });
+	it("同一文件内连续打字：屏幕上始终只有一条提示，不堆叠也不闪烁", () => {
+		const { p, setActiveFile } = makePlugin();
+		const a = new FakeEditor("## 1 红米");
+		setActiveFile({ path: "a.md" });
+
+		for (let i = 0; i < 3; i++) {
+			p.scheduleRenumber(a, fileInfo("a.md"));
+			vi.advanceTimersByTime(300);
+		}
+
+		expect(Notice.messages).toHaveLength(1); // 已有一条就不重建。
+		expect(Notice.instances.filter((n) => !n.hidden)).toHaveLength(1);
+	});
+
+	it("切到别的文件：上一条提示被收起（不留下指向另一篇笔记的孤儿提示）", () => {
+		const { p, setActiveView, setActiveFile } = makePlugin();
+		const a = new FakeEditor("## 1 红米");
+		const b = new FakeEditor("## 普通标题");
+
+		setActiveView({ editor: a, file: { path: "a.md" } });
+		setActiveFile({ path: "a.md" });
 		p.renumberOnOpen({ path: "a.md" });
-		expect(Notice.messages).toHaveLength(2);
+		expect(Notice.messages).toHaveLength(1);
+		expect(Notice.instances[0].hidden).toBe(false);
+
+		// 切到 b.md：file-open 触发，a.md 那条提示应当被收起。
+		setActiveView({ editor: b, file: { path: "b.md" } });
+		setActiveFile({ path: "b.md" });
+		p.renumberOnOpen({ path: "b.md" });
+		expect(Notice.instances[0].hidden).toBe(true);
+	});
+
+	it("切走再切回仍命中守卫：重新提示（这是 1.0.17 反馈要修的原始诉求）", () => {
+		const { p, setActiveView, setActiveFile } = makePlugin();
+		const a = new FakeEditor("## 1 红米");
+		const b = new FakeEditor("## 普通标题");
+
+		setActiveView({ editor: a, file: { path: "a.md" } });
+		setActiveFile({ path: "a.md" });
+		p.renumberOnOpen({ path: "a.md" });
+		expect(Notice.messages).toHaveLength(1);
+
+		setActiveView({ editor: b, file: { path: "b.md" } });
+		setActiveFile({ path: "b.md" });
+		p.renumberOnOpen({ path: "b.md" });
+
+		setActiveView({ editor: a, file: { path: "a.md" } });
+		setActiveFile({ path: "a.md" });
+		p.renumberOnOpen({ path: "a.md" });
+		expect(Notice.messages).toHaveLength(2); // 回来后重新提示。
+	});
+
+	it("文件被清理干净后：那条提示主动收起（告警已不成立）", () => {
+		const { p, setActiveFile } = makePlugin();
+		const a = new FakeEditor("## 1 红米");
+		setActiveFile({ path: "a.md" });
+
+		p.scheduleRenumber(a, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.instances[0].hidden).toBe(false);
+
+		a.setValue("## 红米"); // 用户自己清理干净。
+		p.scheduleRenumber(a, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.instances[0].hidden).toBe(true);
 	});
 
 	it("重新打开后若已清理干净，不再命中守卫、也不再提示", () => {
