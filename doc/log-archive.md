@@ -5,6 +5,66 @@
 
 ---
 
+## 2026-07-19 1.0.13（未 bump）M11 导出验证矩阵实测落地 + 订正两处已上架的错误承诺（Pandoc filter / Dataview `file.headers`）
+
+**背景**：接手做 M11/M12 的「导出 + 离场」四项，本块是其中的**周期 A（导出与 Dataview，纯文档 + 一个
+资源文件）**；周期 B（固化离场命令、注释块跳过）另起一块。探索阶段发现**两处已随商店版本发出去的错误
+承诺**，于是本周期从「补验证」变成「补验证 + 修错」：
+
+1. **`file.headers` 根本不存在**。README 两版 + `marker-contract.md` §3 + `spec.md` §2.6 都在教用户写
+   `WHERE file.headers = "1 模块设计"`，并把查不到归因于 WJ。核对 Dataview 官方 metadata-pages 文档：
+   页面隐式字段表里**没有任何标题类字段**——那条查询去掉 WJ 也一样查不到，旧建议在教一个不存在的 API。
+2. **`marker-contract.md` §3 的 Lua filter 从未实测**，且自带注释承认会压平标题内联格式
+   （`pandoc.utils.stringify`），而 README 已把它作为双重编号的推荐解法。
+
+**做了什么**：
+
+1. **装 pandoc 3.10 + typst 0.15.1**（winget；typst 作 PDF 引擎，避开 MiKTeX 500MB+），跑完整矩阵，
+   testplan `O5` 拆为 **O5a–O5g**、其中 a–e 全部 ✅：
+   - **O5b 复现双重编号**取证：pandoc 的 `1.1` 叠在插件烧入的 `1.1` 上 ⇒ `1.1 1.1 纯文本标题`。
+   - **O5e 此前未知的定论**：`##` 起头的文档 pandoc 按**嵌套深度**而非绝对层级编号（首个 `##` = `1`），
+     与插件默认 `topLevel=H2` **恰好吻合**，不产生层级错位——这条以前没人验过，属实测新增信息。
+   - **PDF 文本层无 WJ 残留**（O5a）：四份 PDF 的 `ToUnicode` CMap 均不含 `2060`；**配了阳性对照**
+     （同批标题里的汉字码位 U+5F15 正常命中）确认探针有效——只会报「没找到」的探针等于没探。
+2. **重写 filter → `assets/pandoc/strip-autoheadings.lua`**（新增，不进插件产物）。关键点：WJ 对在
+   pandoc AST 里被 `Space` 拆到**不同的 `Str`** 里（`Str"⁠1.2"`/`Space`/`Str"⁠标题"`），所以逐 `Str`
+   正则与 stringify 重建**都不可能**正确处理富文本标题——必须遍历 inline 列表。双模式
+   （`strip-prefix` 默认 / `-M autoheadings=strip-marker`），兼容旧单哨兵，实测 `<strong>`/`<code>`/
+   链接全部存活。**刻意不碰 `Code`/`CodeBlock`**：代码是字面内容，且插件从不往代码里写标记。
+3. **Dataview 适配方案**（`marker-contract.md` §3 新增「Dataview」节，英文，受众正确）：列出 WJ 实际
+   露头的**三个**入口（`TASK`/`LIST` 的 `section`、链接 subpath、DataviewJS 的 `metadataCache`），
+   首推**零转义路线**——编号恒为前缀 ⇒ `endswith()`/`contains()` 天然不受影响。需归一时用
+   `regexreplace(x, "\u2060", "")`，**逐环验证过**：Dataview 字符串解析器对 `\u` 原样透传
+   （`parse.ts` 的 escapeChar 只特判 `\"` 与 `\\`）→ `regexreplace` 走 `new RegExp(pat,"g")`
+   （`functions.ts`）→ 那 6 个字符被正则引擎当 Unicode 转义编译。三环缺一条这个配方就是错的。
+4. **顺手修掉一类文档陷阱**：把**可执行配方**里的字面 U+2060 一律改成可见转义文本 `\u2060`
+   （`marker-contract.md` 两处旧配方 + 本次新增三处、README 两版的剪贴板配方、夹具自检命令）。
+   不可见字符写在「让用户复制」的代码块里，等于给用户一段看不见也验不了的东西。
+   **「字节格式图示」行刻意保留字面字符**（`marker-contract.md` 26/29/38、README 121、spec 叙事若干），
+   两类用途不同，不要一刀切。
+5. 新增夹具 `tests/user_tests/10-导出与Pandoc兼容.md`（双哨兵 / 含内联格式的标题 / 旧单哨兵 /
+   `##` 起头 / 未编号对照组），兼作 O5f 内置导出手验样例。
+
+**没做什么**：未 bump（`src/` 一行未动，无行为与产物变化，按 §4.1 上架后策略不推空更新给线上用户），
+未重建 `release/`。**O5f（Obsidian 内置「导出为 PDF」）与 O5g（Publish 锚点）没做也不能做**——前者是
+Electron 对阅读视图 print-to-PDF、与 pandoc+typst 是**两条不同链路，结论不可外推**，需真机手验；
+后者无 Publish 订阅。两格保持 🔲，README 也照实写「仍未验证」，**没有拿 pandoc 的绿去糊内置导出的格**。
+
+**验证方式**：矩阵五格实跑并留存真实输出（PDF 文本层探针配阳性对照）；DQL 转义链条三环逐环查证
+（两环读 Dataview 源码、一环本地 node 复算——**第一次本地复算因 bash/JS 双层转义把反斜杠吃掉，
+测的是「WJ 匹配 WJ」这种恒真命题，改用脚本文件重测才拿到真结果**，同类翻车本周期共两次，
+另一次是往 spec 里写配方时又写成了字面字符，均已用「落盘后重读校验」的脚本兜住）；
+`npm run lint` ✅ / `docs --check` ✅；`npm test` 408/409（唯一红灯是 `whitelist.test.ts:406` 的本机
+ICU collation 既知假红）；`format:check` 红的 12 个文件**全部是我没碰过的**、且 `git diff` 证实
+零内容差异（纯 CRLF 工作副本噪音，CI 以 LF 检出为准）。
+
+**本周期派发 5 次（Explore × 3、Plan × 1、quality-gate × 1）**。
+
+**下一步**：周期 B——固化编号并交还所有权（全库）+ 注释块跳过与分区域残留清理，届时 bump 1.0.14
+并重建 `release/`。手验清单交用户：O5f 内置导出、Dataview 查询样例在真库跑通。
+
+---
+
 ## 2026-07-18 1.0.13（未 bump）UVM 压测框架拆分（1686→9 文件）+ 修 Windows 上失效的 test:fuzz + 订正过期框架文档
 
 **背景**：外部评审给 UVM 压测引擎 8.5/10，指出三条边界 + 一条工程隐患。核查后**三条边界均不动代码**——

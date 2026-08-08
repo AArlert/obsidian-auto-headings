@@ -41,7 +41,42 @@
 
 ---
 
-## 2026-07-25 1.0.15 三处「用户已表态、插件仍自作主张」：清除即暂停 / 不抢键盘 / 迁移守卫误伤
+## 2026-08-09 1.0.15 CLAUDE.md 瘦身：开发周期正文下沉为 `dev-cycle` 技能
+
+**背景**：根 `CLAUDE.md` 每次会话全量进上下文，而「十步清单 + 版本号规则 + 钩子/CI 细节」只在真正
+动手改代码时才用得上——常驻成本高、使用频率低。技能（skill）按需加载，正好承接这类「用时才读」的
+流程正文。本周期只搬运不改语义。
+
+**做了什么**（分支 `feat/m11-export-m12-retire`）：
+
+1. 新建 `.claude/skills/dev-cycle/SKILL.md`：原 §4 十步清单 + §4.1 版本号规则（`0.M.*` 格式、
+   `npm run bump` 三形态、上架后仅行为改动才 bump）原样搬入，`description` 写明触发时机
+   （开工做实质改动 / 准备收尾提交）。
+2. 根 `CLAUDE.md` 减 46 行：§4 只留「一句话流程 + 读技能」指针，并强调 **bump 与 preflight 一步都不能省**
+   （最容易被省的正是这两步，故留在常驻文件里）；删 §1 仓库结构（目录树的单一事实源是本文件
+   「目录结构约定」块）、§7 钩子/CI 细节压成三行、两段 monorepo 迁移历史备注（迁移早已完成）。
+3. `.claude/agents/feature-coder.md` 的「按 CLAUDE.md §4 流程干活」改指 `dev-cycle` 技能——§4 已无正文，
+   子 agent 照旧引用会读到一句话流程而漏掉 testplan-first。
+4. 本文件「目录结构约定」块登记 `.claude/skills/dev-cycle/`；订正上一周期块与 `status.jsonl` 首行日期
+   （07-25 → 07-29）。
+
+**没做什么**：
+
+- **未 bump**（上架后策略：只碰 `doc/` 与 `.claude/`，`src/` 一行未动，不向线上用户推空更新）。
+- `AGENTS.md` 与 `.codex/`（Codex 镜像）按既定约定不改不删不提交——其中的 §4.1 引用因此与
+  `CLAUDE.md` 现状不同步，**属预期**，需要时由用户侧自行重生成。
+
+**下一步**：仍是上一周期块那三条 —— ① 用户手验 H12（固化确认框）/ H9（真库内链）/ O5f（内置导出
+PDF）/ Dataview 样例；② 竞品 auto-heading(gurjar1) 源码级调研并入 spec 附录 A.11；③ 打 tag 发
+1.0.14 / 1.0.15（tag 最新仍停在 1.0.13，release-notes 均已备好）。
+
+**验证方式**：`npm run preflight`（docs 归档 + release 重建 + test + lint + format:check）。
+
+**本周期派发 1 次**（quality-gate × 1）。
+
+---
+
+## 2026-07-29 1.0.15 三处「用户已表态、插件仍自作主张」：清除即暂停 / 不抢键盘 / 迁移守卫误伤
 
 **背景**：用户在真机使用中报了两条体感问题（「清除当前编号是个摆设」「标题后写空格会被自动清掉」），
 本周期把它们连同顺带挖出的第三条一起修掉。三者同源：**插件在用户明确表态之后仍然自作主张**。
@@ -190,66 +225,6 @@ UVM 注释块激励（含上面三颗雷）另起一轮。
 
 ---
 
-## 2026-07-19 1.0.13（未 bump）M11 导出验证矩阵实测落地 + 订正两处已上架的错误承诺（Pandoc filter / Dataview `file.headers`）
-
-**背景**：接手做 M11/M12 的「导出 + 离场」四项，本块是其中的**周期 A（导出与 Dataview，纯文档 + 一个
-资源文件）**；周期 B（固化离场命令、注释块跳过）另起一块。探索阶段发现**两处已随商店版本发出去的错误
-承诺**，于是本周期从「补验证」变成「补验证 + 修错」：
-
-1. **`file.headers` 根本不存在**。README 两版 + `marker-contract.md` §3 + `spec.md` §2.6 都在教用户写
-   `WHERE file.headers = "1 模块设计"`，并把查不到归因于 WJ。核对 Dataview 官方 metadata-pages 文档：
-   页面隐式字段表里**没有任何标题类字段**——那条查询去掉 WJ 也一样查不到，旧建议在教一个不存在的 API。
-2. **`marker-contract.md` §3 的 Lua filter 从未实测**，且自带注释承认会压平标题内联格式
-   （`pandoc.utils.stringify`），而 README 已把它作为双重编号的推荐解法。
-
-**做了什么**：
-
-1. **装 pandoc 3.10 + typst 0.15.1**（winget；typst 作 PDF 引擎，避开 MiKTeX 500MB+），跑完整矩阵，
-   testplan `O5` 拆为 **O5a–O5g**、其中 a–e 全部 ✅：
-   - **O5b 复现双重编号**取证：pandoc 的 `1.1` 叠在插件烧入的 `1.1` 上 ⇒ `1.1 1.1 纯文本标题`。
-   - **O5e 此前未知的定论**：`##` 起头的文档 pandoc 按**嵌套深度**而非绝对层级编号（首个 `##` = `1`），
-     与插件默认 `topLevel=H2` **恰好吻合**，不产生层级错位——这条以前没人验过，属实测新增信息。
-   - **PDF 文本层无 WJ 残留**（O5a）：四份 PDF 的 `ToUnicode` CMap 均不含 `2060`；**配了阳性对照**
-     （同批标题里的汉字码位 U+5F15 正常命中）确认探针有效——只会报「没找到」的探针等于没探。
-2. **重写 filter → `assets/pandoc/strip-autoheadings.lua`**（新增，不进插件产物）。关键点：WJ 对在
-   pandoc AST 里被 `Space` 拆到**不同的 `Str`** 里（`Str"⁠1.2"`/`Space`/`Str"⁠标题"`），所以逐 `Str`
-   正则与 stringify 重建**都不可能**正确处理富文本标题——必须遍历 inline 列表。双模式
-   （`strip-prefix` 默认 / `-M autoheadings=strip-marker`），兼容旧单哨兵，实测 `<strong>`/`<code>`/
-   链接全部存活。**刻意不碰 `Code`/`CodeBlock`**：代码是字面内容，且插件从不往代码里写标记。
-3. **Dataview 适配方案**（`marker-contract.md` §3 新增「Dataview」节，英文，受众正确）：列出 WJ 实际
-   露头的**三个**入口（`TASK`/`LIST` 的 `section`、链接 subpath、DataviewJS 的 `metadataCache`），
-   首推**零转义路线**——编号恒为前缀 ⇒ `endswith()`/`contains()` 天然不受影响。需归一时用
-   `regexreplace(x, "\u2060", "")`，**逐环验证过**：Dataview 字符串解析器对 `\u` 原样透传
-   （`parse.ts` 的 escapeChar 只特判 `\"` 与 `\\`）→ `regexreplace` 走 `new RegExp(pat,"g")`
-   （`functions.ts`）→ 那 6 个字符被正则引擎当 Unicode 转义编译。三环缺一条这个配方就是错的。
-4. **顺手修掉一类文档陷阱**：把**可执行配方**里的字面 U+2060 一律改成可见转义文本 `\u2060`
-   （`marker-contract.md` 两处旧配方 + 本次新增三处、README 两版的剪贴板配方、夹具自检命令）。
-   不可见字符写在「让用户复制」的代码块里，等于给用户一段看不见也验不了的东西。
-   **「字节格式图示」行刻意保留字面字符**（`marker-contract.md` 26/29/38、README 121、spec 叙事若干），
-   两类用途不同，不要一刀切。
-5. 新增夹具 `tests/user_tests/10-导出与Pandoc兼容.md`（双哨兵 / 含内联格式的标题 / 旧单哨兵 /
-   `##` 起头 / 未编号对照组），兼作 O5f 内置导出手验样例。
-
-**没做什么**：未 bump（`src/` 一行未动，无行为与产物变化，按 §4.1 上架后策略不推空更新给线上用户），
-未重建 `release/`。**O5f（Obsidian 内置「导出为 PDF」）与 O5g（Publish 锚点）没做也不能做**——前者是
-Electron 对阅读视图 print-to-PDF、与 pandoc+typst 是**两条不同链路，结论不可外推**，需真机手验；
-后者无 Publish 订阅。两格保持 🔲，README 也照实写「仍未验证」，**没有拿 pandoc 的绿去糊内置导出的格**。
-
-**验证方式**：矩阵五格实跑并留存真实输出（PDF 文本层探针配阳性对照）；DQL 转义链条三环逐环查证
-（两环读 Dataview 源码、一环本地 node 复算——**第一次本地复算因 bash/JS 双层转义把反斜杠吃掉，
-测的是「WJ 匹配 WJ」这种恒真命题，改用脚本文件重测才拿到真结果**，同类翻车本周期共两次，
-另一次是往 spec 里写配方时又写成了字面字符，均已用「落盘后重读校验」的脚本兜住）；
-`npm run lint` ✅ / `docs --check` ✅；`npm test` 408/409（唯一红灯是 `whitelist.test.ts:406` 的本机
-ICU collation 既知假红）；`format:check` 红的 12 个文件**全部是我没碰过的**、且 `git diff` 证实
-零内容差异（纯 CRLF 工作副本噪音，CI 以 LF 检出为准）。
-
-**本周期派发 5 次（Explore × 3、Plan × 1、quality-gate × 1）**。
-
-**下一步**：周期 B——固化编号并交还所有权（全库）+ 注释块跳过与分区域残留清理，届时 bump 1.0.14
-并重建 `release/`。手验清单交用户：O5f 内置导出、Dataview 查询样例在真库跑通。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -296,7 +271,9 @@ obsidian-auto-headings/
 │   ├── bump.mjs            一键版本号同步（npm run bump）
 │   ├── fuzz.mjs            跨平台跑重型随机压测（npm run test:fuzz [-- --runs=/--ops=/--seed=]）
 │   └── docs.mjs            文档维护：归档/滚动/摘要/守卫/交接（npm run docs [-- --handover|--check]）
-├── .claude/agents/       ← SubAgent 定义（quality-gate / repo-scout / mech-editor / feature-coder）
+├── .claude/
+│   ├── agents/             SubAgent 定义（quality-gate / repo-scout / mech-editor / feature-coder）
+│   └── skills/dev-cycle/   开发周期完整清单（十步 + 版本号规则；根 CLAUDE.md §4 只留一句话流程 + 指针）
 ├── manifest.json         ← 插件清单（Obsidian 约定须在插件根目录）
 ├── versions.json         ← 版本 → 最低 Obsidian 版本映射
 ├── styles.css            ← 面板样式源（构建时随插件加载，并复制入 release/）
