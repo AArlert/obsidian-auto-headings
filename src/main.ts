@@ -104,14 +104,26 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private readonly headingSnapshots = new Map<string, HeadingSnapshot[]>();
 
 	/**
-	 * 已提示过「疑似外来编号」的文件路径集合（迁移守卫，testplan J10/J13）：仅内存标志，用于把
-	 * {@link guardForeignNumbering} 的 Notice 限制为**同一次 file-open 内至多一次**——命中后仍
-	 * 持续跳过自动写入，但打字连续触发不刷屏。**每次 {@link renumberOnOpen}（即每次 file-open）
-	 * 都会先清空该文件的记录**（此前是「每会话一次」永久静默，用户视角像插件在这个文件里坏了、
-	 * 且没有任何线索）——重新打开该文件即可再收到一次提示。随文件改名迁移键、随删除
-	 * 清除，插件卸载时整体清空。
+	 * 迁移守卫（testplan J10/J13/J14）最近一次被检查的文件路径：用于判断「这次检查是不是刚从
+	 * 别的文件切过来」（{@link guardForeignNumbering} 用它决定要不要重新弹提示）。
+	 *
+	 * **1.0.18 改为按「检查序列」推导，不再依赖 `file-open` 事件**（原实现是按文件路径存一个
+	 * `Set<string>`「已提示过」标志，每次 `file-open` 触发的 {@link renumberOnOpen} 清空当前文件
+	 * 的记录）。真机验证发现 `file-open` 在标签页切走再切回时**不保证每次都触发**——按旧机制，
+	 * 只要它没触发，用户切回一个仍命中守卫的文件就完全拿不到新提示，退化回 1.0.15 之前「静默
+	 * 永久跳过」的老问题，只是概率性发生而非必然。
+	 *
+	 * 新机制不依赖任何特定事件：只要**这一次**要检查的路径和**上一次**检查的路径不同，就判定
+	 * 「刚从别处过来」。触发守卫检查的不止 `file-open`（{@link renumberOnOpen}），编辑防抖到期
+	 * （{@link scheduleRenumber}）与打开设置面板改模板后的批量刷新同样会调用
+	 * {@link guardForeignNumbering}——这意味着即便 `file-open` 真的没触发，只要用户在别的文件里
+	 * 打了字（触发那个文件的防抖检查），本字段也会被更新，回到原文件继续编辑时同样能正确识别
+	 * 「已经离开过」。**同一文件内连续多次检查**（用户持续打字、防抖反复到期）路径不变，
+	 * 天然不重复提示，不需要额外的节流逻辑。
+	 *
+	 * `null` 表示插件本次会话还未检查过任何文件（或刚被 {@link onunload} 清空）。
 	 */
-	private readonly foreignNumberingWarned = new Set<string>();
+	private lastGuardedPath: string | null = null;
 
 	/**
 	 * 剪贴板净化的会话级「净化文本 → 原文」LRU（M11，spec.md §2.8「内存映射
@@ -258,16 +270,17 @@ export default class AutoHeadingsPlugin extends Plugin {
 					this.headingSnapshots.delete(oldPath);
 					this.headingSnapshots.set(file.path, snap);
 				}
-				if (this.foreignNumberingWarned.has(oldPath)) {
-					this.foreignNumberingWarned.delete(oldPath);
-					this.foreignNumberingWarned.add(file.path);
+				if (this.lastGuardedPath === oldPath) {
+					this.lastGuardedPath = file.path;
 				}
 			}),
 		);
 		this.registerEvent(
 			this.app.vault.on("delete", (file) => {
 				this.headingSnapshots.delete(file.path);
-				this.foreignNumberingWarned.delete(file.path);
+				if (this.lastGuardedPath === file.path) {
+					this.lastGuardedPath = null;
+				}
 			}),
 		);
 	}
@@ -279,7 +292,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		this.debounceTimers.clear();
 		this.headingSnapshots.clear();
-		this.foreignNumberingWarned.clear();
+		this.lastGuardedPath = null;
 	}
 
 	/**
@@ -560,14 +573,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 开关关且非 fm:true、或 fm:false 时不动；无可用模板时静默跳过。`applyRenumber` 内容未变时
 	 * 不发起事务，故已是最新格式的文件打开时是静默 no-op，不会给每次打开都添一条撤销记录。
 	 *
-	 * **迁移守卫「每次打开重新允许提示一次」**（testplan J13）：函数最前面先清空本文件在
-	 * {@link foreignNumberingWarned} 里的记录——不管本次打开后面几步是否会提前 return（全局开关
-	 * 关 / 无模板等），「文件被重新打开」这件事本身就该重置提示状态，否则守卫命中后用户切走再切
-	 * 回来仍拿不到任何线索。本方法是「file-open」事件在自动编号路径上的唯一入口，故此处清空即
-	 * 等价于「每次 file-open 后重置」。
+	 * **迁移守卫「换到别的文件再回来即可再提示一次」**（testplan J13）：本方法是最常见的一条
+	 * 「用户回到这个文件」信号，但不是唯一一条——`file-open` 之外，编辑防抖到期同样参与
+	 * {@link lastGuardedPath} 的推导（见其注释：不依赖任何单一事件，靠「这次检查的路径是否
+	 * 与上次不同」判断，即便本方法这里因故未触发，回来后一打字照样能正确识别）。
 	 */
 	private renumberOnOpen(file: { path: string }): void {
-		this.foreignNumberingWarned.delete(file.path);
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view || view.file?.path !== file.path) {
 			return; // 活动视图与本次打开的文件不一致（如后台/快速切换）时不强行处理。
@@ -590,10 +601,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 迁移守卫（**仅自动路径**，testplan J10/J13/J14，见 spec.md §3.10 相邻讨论）：若本文件疑似含
 	 * 外来编号且插件从未接触过它（{@link hasUnclaimedForeignNumbering}），跳过本次自动写入并提示
 	 * 用户——否则会在外来编号前叠加本插件自己的编号（`## 1 红米` → `## 1 1 红米`），观感上与 bug
-	 * 无异。同一次 file-open 内只提示一次（{@link foreignNumberingWarned}，由 {@link renumberOnOpen}
-	 * 在每次打开时清空）——避免打字连续触发刷屏；重新打开该文件后会再提示一次（J13）。**手动命令**
-	 * （立即重新编号 / 清除编号 / 清理外来编号）不查此函数，绕过一切开关照常执行，与既有「Renumber
-	 * now 绕过一切开关」原则一致。
+	 * 无异。**手动命令**（立即重新编号 / 清除编号 / 清理外来编号）不查此函数，绕过一切开关照常
+	 * 执行，与既有「Renumber now 绕过一切开关」原则一致。
+	 *
+	 * **提示节流**：连续检查同一路径（用户在同一文件里持续打字，防抖反复到期）只提示一次；
+	 * 检查的路径与 {@link lastGuardedPath} 不同（用户刚从别的文件切过来/切回来）则重新提示——
+	 * 判断逻辑与「是否真弹 Notice」无关的路径更新写在**函数最前面、无条件执行**，就算内容其实
+	 * 干净（不含外来编号）也照样刷新，这样切去一个干净文件再切回来同样会被正确识别为「离开过」。
 	 *
 	 * Notice 可点击（{@link showForeignNumberingGuardNotice}）：打开预览确认框逐条列出「现状 →
 	 * 清理后」对照（J14）——清理命令与本守卫共享同一误伤面（如 `## API 设计`），无预览的一键执行
@@ -602,11 +616,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * @returns 是否命中守卫（命中即调用方应跳过本次 {@link applyRenumber}）。
 	 */
 	private guardForeignNumbering(path: string, content: string): boolean {
+		const cameFromElsewhere = this.lastGuardedPath !== path;
+		this.lastGuardedPath = path;
 		if (!hasUnclaimedForeignNumbering(content)) {
 			return false;
 		}
-		if (!this.foreignNumberingWarned.has(path)) {
-			this.foreignNumberingWarned.add(path);
+		if (cameFromElsewhere) {
 			this.showForeignNumberingGuardNotice(path);
 		}
 		return true;

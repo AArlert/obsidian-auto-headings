@@ -665,10 +665,58 @@ describe("迁移守卫：疑似外来编号且插件从未接触过的文件，�
 	});
 });
 
-describe("迁移守卫「每次打开重新允许提示一次」（J13）", () => {
-	it("同一次 file-open 内打字连续命中守卫：只提示一次；再次打开（renumberOnOpen）后允许再提示一次", () => {
+describe("迁移守卫「换到别的文件再回来即可再提示一次」（J13，1.0.18 改为按检查序列推导）", () => {
+	it("同一文件内连续打字命中守卫：只提示一次；中途切去别的文件、再切回来：提示一次", () => {
+		const { p } = makePlugin();
+		const a = new FakeEditor("## 第3章 引言");
+		const b = new FakeEditor("## 普通标题"); // 不含外来编号，仅用于模拟「切到别的文件」。
+
+		p.scheduleRenumber(a, fileInfo("a.md")); // 首次检查 a.md：命中守卫，提示一次。
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(1);
+
+		// 同一文件内继续编辑：仍是疑似外来编号内容，静默跳过、不重复提示。
+		p.scheduleRenumber(a, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(1);
+
+		// 用户切到别的文件里打了字（b.md 本身不含外来编号，不会自己触发提示，
+		// 但会更新「最近检查路径」——这正是不依赖 file-open 事件的关键）。
+		p.scheduleRenumber(b, fileInfo("b.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(1); // b.md 干净，未新增提示。
+
+		// 切回 a.md 继续编辑：检查路径与上次（b.md）不同 ⇒ 重新提示一次。
+		p.scheduleRenumber(a, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(2);
+	});
+
+	it("不依赖 file-open：即便只靠打字触发（file-open 未触发或被真机环境吞掉），切走再切回同样能重新识别", () => {
+		// 对应用户真机反馈：切到别的标签页再切回来，提示不一定弹出——因为旧实现依赖
+		// file-open 事件重置状态，而该事件在标签页切换时不保证每次都触发。新实现改为
+		// 从「本次检查路径是否与上次不同」推导，完全不调用 renumberOnOpen 也应当成立。
+		const { p } = makePlugin();
+		const a = new FakeEditor("## 1 红米");
+		const b = new FakeEditor("## 2 工艺"); // 也是疑似外来编号，模拟另一篇待迁移笔记。
+
+		p.scheduleRenumber(a, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(1);
+
+		p.scheduleRenumber(b, fileInfo("b.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(2); // 换了文件，b.md 首次检查同样提示。
+
+		p.scheduleRenumber(a, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(3); // 回到 a.md：与上次检查的路径（b.md）不同，重新提示。
+	});
+
+	it("renumberOnOpen 触发的检查同样参与「路径是否变化」的判断（file-open 确实触发时也正确）", () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 第3章 引言");
+		const other = new FakeEditor("## 普通标题");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 
 		p.renumberOnOpen({ path: "a.md" }); // 首次打开：命中守卫，提示一次。
@@ -679,7 +727,11 @@ describe("迁移守卫「每次打开重新允许提示一次」（J13）", () =
 		vi.advanceTimersByTime(300);
 		expect(Notice.messages).toHaveLength(1);
 
-		// 用户切到别的文件再切回来 = 再次触发 file-open：允许再提示一次。
+		// 中途真的切到了别的文件（活动视图随之切换，模拟真实 file-open 场景），
+		// 再切回 a.md：重新提示。
+		setActiveView({ editor: other, file: { path: "other.md" } });
+		p.renumberOnOpen({ path: "other.md" });
+		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
 		expect(Notice.messages).toHaveLength(2);
 	});
