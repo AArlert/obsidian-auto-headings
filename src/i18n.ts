@@ -251,6 +251,10 @@ export interface Messages {
 	foreignGuardModalTitle: string;
 	foreignGuardModalBody: (count: number) => string;
 	foreignGuardModalConfirm: string;
+	/** 逐条勾选框的可见文案（J17）。 */
+	foreignGuardItemToggleLabel: string;
+	/** 逐条勾选框的 aria-label，携带该标题现状文本以便读屏区分（J17）。 */
+	foreignGuardItemToggle: (before: string) => string;
 
 	// —— 命令名（main.ts）——
 	cmdToggle: string;
@@ -280,6 +284,8 @@ export interface Messages {
 	noticeNoChange: string;
 	noticeNoForeign: string;
 	noticeForeignCleared: string;
+	/** 清理预览确认框「确认清理」后的结果汇总（J17：按勾选分别统计清理/保留条数）。 */
+	noticeForeignCleanupApplied: (cleaned: number, kept: number) => string;
 	noticeBacklinksUpdated: (count: number) => string;
 	noticeBacklinksIntro: string;
 	noticeNoActiveFile: string;
@@ -492,8 +498,10 @@ const zh: Messages = {
 
 	foreignGuardModalTitle: "疑似非本插件的编号",
 	foreignGuardModalBody: (count) =>
-		`以下 ${count} 处标题看起来带编号，但插件不确定是不是你自己写的（如「API 设计」「TODO 清单」这类标题也可能被误判）。确认清理会去掉这些编号，之后插件会正常接管本文件的自动编号：`,
+		`以下 ${count} 处标题看起来带编号，但插件不确定是不是你自己写的（如「API 设计」「TODO 清单」这类标题也可能被误判）。默认全部勾选清理；取消勾选的会保留原文，插件仍会照常在前面按模板加上自己的编号：`,
 	foreignGuardModalConfirm: "确认清理",
+	foreignGuardItemToggleLabel: "清理",
+	foreignGuardItemToggle: (before) => `清理「${before}」的外来编号`,
 
 	cmdToggle: "切换全局自动编号（全局）",
 	cmdRenumber: "立即重新编号（当前文件）",
@@ -520,6 +528,10 @@ const zh: Messages = {
 	noticeNoChange: "无需改动",
 	noticeNoForeign: "当前文件无可清理的外来编号",
 	noticeForeignCleared: "已清理非本插件的标题编号",
+	noticeForeignCleanupApplied: (cleaned, kept) =>
+		kept > 0
+			? `已处理：清理 ${cleaned} 条，保留原文并加上编号 ${kept} 条`
+			: `已清理非本插件的标题编号（${cleaned} 条）`,
 	noticeBacklinksUpdated: (count) => `已更新 ${count} 处内部链接`,
 	noticeBacklinksIntro:
 		"Auto Headings 已自动更新了其它文件里指向本文件标题的内部链接（避免断链）。这些改动不在被改文件的撤销历史内；不需要此功能可在 设置 → 全局设置 关闭「同步内部链接」。本提示只出现一次。",
@@ -742,8 +754,10 @@ const en: Messages = {
 
 	foreignGuardModalTitle: "Possible non-plugin numbering",
 	foreignGuardModalBody: (count) =>
-		`The following ${count} heading(s) look numbered, but the plugin isn't sure you wrote that yourself (headings like "API design" or "TODO list" can trigger a false positive too). Confirming will remove these numbers; the plugin will then resume auto-numbering this file:`,
+		`The following ${count} heading(s) look numbered, but the plugin isn't sure you wrote that yourself (headings like "API design" or "TODO list" can trigger a false positive too). All are checked to clean up by default; unchecking one keeps its original text as-is — the plugin will still add its own numbering in front of it using the current template:`,
 	foreignGuardModalConfirm: "Confirm cleanup",
+	foreignGuardItemToggleLabel: "Clean up",
+	foreignGuardItemToggle: (before) => `Clean up foreign numbering in "${before}"`,
 
 	cmdToggle: "Toggle global auto-numbering (global)",
 	cmdRenumber: "Renumber now (current file)",
@@ -771,6 +785,10 @@ const en: Messages = {
 	noticeNoChange: "No change needed",
 	noticeNoForeign: "No foreign (non-plugin) numbering to clear in the current file",
 	noticeForeignCleared: "Cleared non-plugin heading numbering",
+	noticeForeignCleanupApplied: (cleaned, kept) =>
+		kept > 0
+			? `Done: cleaned ${cleaned}, kept ${kept} as-is with numbering added`
+			: `Cleared non-plugin heading numbering (${cleaned})`,
 	noticeBacklinksUpdated: (count) => `Updated ${count} internal link(s)`,
 	noticeBacklinksIntro:
 		"Auto Headings just updated internal links in other files that point to headings in this file (so they don't break). Those edits are NOT in the modified files' undo history; you can turn off \"Sync internal links\" under Settings → General. This notice appears only once.",

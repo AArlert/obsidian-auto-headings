@@ -32,6 +32,7 @@ import {
 	clearNumberingContent,
 	hasUnclaimedForeignNumbering,
 	previewForeignNumberingCleanup,
+	type ForeignNumberingPreviewItem,
 } from "./cleanup";
 import {
 	computeHeadingRenames,
@@ -732,9 +733,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * Notice 常驻到用户点击（{@link showForeignNumberingGuardNotice} 的 `duration: 0`），期间内容
 	 * 可能已变化，该叶子也可能已切换到别的文件。找不到（文件已不在任何标签页）则提示改为重新打开。
 	 *
-	 * 预览与「确认清理」执行的是**同一份内容、同一套逻辑**（{@link previewForeignNumberingCleanup}
-	 * 与 {@link runClearForeignNumbering} 都基于 `stripForeignNumbering`），保证「用户看到的」与
-	 * 「实际发生的」逐条一致。
+	 * 确认框逐条可勾选（testplan J17）：预览与「确认清理」执行复用同一份计算
+	 * （{@link computeForeignCleanupPreview}），保证「用户看到的」与「实际发生的」逐条一致。
 	 */
 	private openForeignNumberingCleanupModal(path: string): void {
 		const found = this.markdownContextForPath(path);
@@ -743,15 +743,57 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		const { editor, ctx } = found;
-		const items = previewForeignNumberingCleanup(editor.getValue());
-		if (items.length === 0) {
+		const content = editor.getValue();
+		const candidates = previewForeignNumberingCleanup(content);
+		if (candidates.length === 0) {
 			// 告警之后、点击之前用户已自行清理或改动内容，已无可清理项。
 			new Notice(this.messages().noticeNoForeign);
 			return;
 		}
-		new ForeignNumberingCleanupModal(this.app, this.messages(), items, () => {
-			this.runClearForeignNumbering(editor, ctx);
-		}).open();
+		new ForeignNumberingCleanupModal(
+			this.app,
+			this.messages(),
+			candidates.map((c) => ({ lineIndex: c.lineIndex, before: c.before })),
+			(keepLines) => this.computeForeignCleanupPreview(content, path, keepLines)?.items ?? [],
+			(keepLines) => this.applyForeignCleanupSelection(editor, ctx, path, keepLines),
+		).open();
+	}
+
+	/**
+	 * 计算「清理外来编号」确认框在给定勾选状态下的完整结果（testplan J17）：勾选（默认）的标题
+	 * 剥掉外来编号后套用当前模板全新编号；取消勾选的保留原文，模板编号仍会照常叠加在前面（WJ +
+	 * 前缀，观感为双重编号，与插件对"未接管标题"的既有语义一致，见 {@link hasUnclaimedForeignNumbering}
+	 * 相邻讨论）。
+	 *
+	 * 确认框每次勾选变化、以及点击"确认清理"执行时都调用本函数——**同一份计算**，不会出现预览说
+	 * 改 A、实际却改了 B 的落差。之所以要整份重算而不是零散拼接两种预先算好的文本，是因为白名单
+	 * `subtree` 匹配依据标题文本判豁免：某条外来编号是否被清理会改变它自身乃至子孙标题是否被套用
+	 * 编号，静态缓存两个变体没法正确反映这种联动。
+	 *
+	 * @returns 模板未命中（理论不可达——能打开确认框说明当时已经命中过模板）时返回 `null`。
+	 */
+	private computeForeignCleanupPreview(
+		content: string,
+		path: string,
+		keepLines: ReadonlySet<number>,
+	): { items: ForeignNumberingPreviewItem[]; finalContent: string } | null {
+		const template = this.getTemplateForFile(path);
+		if (!template) {
+			return null;
+		}
+		const stripped = clearForeignNumberingContent(content, { keepLines });
+		const { prefixes, suffixes } = this.strippableAffixes();
+		const finalContent = renumberContent(stripped, template, {
+			strippablePrefixes: prefixes,
+			strippableSuffixes: suffixes,
+		});
+		const finalLines = finalContent.split("\n");
+		const items = previewForeignNumberingCleanup(content).map((c) => ({
+			lineIndex: c.lineIndex,
+			before: c.before,
+			after: finalLines[c.lineIndex],
+		}));
+		return { items, finalContent };
 	}
 
 	/**
@@ -840,6 +882,51 @@ export default class AutoHeadingsPlugin extends Plugin {
 			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
 		}
 		new Notice(this.messages().noticeForeignCleared);
+	}
+
+	/**
+	 * 「清理外来编号」确认框点击「确认清理」后的执行路径（testplan J17，逐条勾选驱动，见
+	 * {@link ForeignNumberingCleanupModal}）：勾选的标题剥掉外来编号、取消勾选的原样保留原文——
+	 * 两者随后都在**同一次点击、同一事务**里立即套用当前模板编号（{@link computeForeignCleanupPreview}），
+	 * 不必等下一次防抖触发。
+	 *
+	 * 与既有全量命令 {@link runClearForeignNumbering} 是两条独立路径，互不影响：后者只剥离、不立即
+	 * 套模板（留给下一次防抖自动补上），本方法是确认框专属的"立即生效"语义——写入后全文必含至少
+	 * 一个 WJ，迁移守卫此后不会再对本文件命中（见 {@link hasUnclaimedForeignNumbering} 判定条件①），
+	 * 不存在"取消勾选的几条下一轮又被拦一次"的问题。
+	 */
+	private applyForeignCleanupSelection(
+		editor: Editor,
+		ctx: MarkdownView | MarkdownFileInfo,
+		path: string,
+		keepLines: ReadonlySet<number>,
+	): void {
+		const existing = this.debounceTimers.get(path);
+		if (existing !== undefined) {
+			window.clearTimeout(existing);
+			this.debounceTimers.delete(path);
+		}
+
+		const oldContent = editor.getValue();
+		const preview = this.computeForeignCleanupPreview(oldContent, path, keepLines);
+		if (!preview) {
+			return; // 理论不可达：能打开确认框说明当时已经命中过模板。
+		}
+		let newContent = preview.finalContent;
+		if (newContent === oldContent) {
+			new Notice(this.messages().noticeNoForeign);
+			return;
+		}
+
+		const fold = this.foldSelfBacklinks(ctx.file, oldContent, newContent);
+		newContent = fold.content;
+
+		if (this.writeLineDiff(editor, oldContent, newContent)) {
+			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
+		}
+		const cleanedCount = preview.items.filter((i) => !keepLines.has(i.lineIndex)).length;
+		const keptCount = preview.items.length - cleanedCount;
+		new Notice(this.messages().noticeForeignCleanupApplied(cleanedCount, keptCount));
 	}
 
 	/**
@@ -1395,7 +1482,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		// 光标所在行保护**必须在折叠自链接之前**：保护后那一行的标题文本没变，就不该产生改名，
 		// 更不该据此改写指向它的内链（否则链接指向一个文件里并不存在的标题）。
 		if (opts.protectLine !== undefined) {
-			newContent = this.preserveLine(oldContent, newContent, opts.protectLine);
+			const snapshot = target?.path ? this.headingSnapshots.get(target.path) : undefined;
+			newContent = this.preserveLine(oldContent, newContent, opts.protectLine, snapshot);
 		}
 		// 同文件内链先折进 newContent，随本次事务一并写回（见 foldSelfBacklinks）；即便编号本身
 		// 未变（M14 纯文本改名）也要折，写回时的行级 diff 会自然识别出这一变化并写回。
@@ -1418,10 +1506,22 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 只剔除这一行，**其余行照常重排**（而不是整轮顺延）：一来别的标题该更新还得更新，二来
 	 * 顺延会在用户光标停在标题行不动时无限期地重排计时器。该行会在光标移开后的下一次触发补上。
 	 *
+	 * **保护范围精确化**（testplan J16，2026-08-09 用户体验反馈）：此前不问缘由地整行冻结，
+	 * 导致改了标题层级（如敲 `#` 升/降级）后前缀也一并冻结在旧值，必须等光标移开、且等到下一次
+	 * 编辑触发才补上，观感是"卡顿"。现借助 {@link headingSnapshots}（上一次成功写入的层级基线）
+	 * 判断：这一行的标题层级相对基线**没变**，才当作纯打字场景保护；层级已经变了，说明用户刚做了
+	 * 一次结构性改动，本轮就该照常写入新前缀，不必等待。无基线（如文件从未写入过）时无法判断，
+	 * 沿用原保守策略（保护）。
+	 *
 	 * 返回值随后被 {@link syncAndSnapshot} 用作快照基线，所以快照记的始终是**真正落盘的内容**，
 	 * 不会因为「算出来改了、实际没写」而在下一轮识别出一个幻影改名。
 	 */
-	private preserveLine(oldContent: string, newContent: string, line: number): string {
+	private preserveLine(
+		oldContent: string,
+		newContent: string,
+		line: number,
+		snapshot: readonly HeadingSnapshot[] | undefined,
+	): string {
 		const oldLines = oldContent.split("\n");
 		const newLines = newContent.split("\n");
 		// 整文重排永不增删行；行数不一致说明前提被打破，此时不做保护（宁可少保护，不可错位）。
@@ -1431,8 +1531,38 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (oldLines[line] === newLines[line]) {
 			return newContent;
 		}
+		if (this.levelChangedSinceSnapshot(oldContent, line, snapshot)) {
+			return newContent;
+		}
 		newLines[line] = oldLines[line];
 		return newLines.join("\n");
+	}
+
+	/**
+	 * 光标所在行的标题层级，相对 {@link headingSnapshots} 记录的上一次成功写入基线是否发生了变化
+	 * （见 {@link preserveLine} J16）。用层级（而非文本）判断：层级从不受任何剥离/归一化影响，
+	 * 变了就一定是用户刚敲 `#` 做的结构性改动，不可能是行尾空白之类的打字噪音。
+	 *
+	 * 无基线、或标题数量相对基线已变化（逐位对照的前提被打破，同 {@link computeSnapshotRenames}
+	 * 的保守策略）时返回 `false`——保守起见，无法判断就当作"没变"，交由既有整行保护兜底。
+	 */
+	private levelChangedSinceSnapshot(
+		oldContent: string,
+		line: number,
+		snapshot: readonly HeadingSnapshot[] | undefined,
+	): boolean {
+		if (!snapshot) {
+			return false;
+		}
+		const headings = parseHeadings(oldContent);
+		if (headings.length !== snapshot.length) {
+			return false;
+		}
+		const index = headings.findIndex((h) => h.lineIndex === line);
+		if (index === -1) {
+			return false;
+		}
+		return headings[index].level !== snapshot[index].level;
 	}
 
 	/**

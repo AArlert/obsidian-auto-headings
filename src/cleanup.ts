@@ -80,7 +80,10 @@ export function clearNumberingContent(content: string, options: CleanupOptions =
  * @param content 待清理的 Markdown 文件全文。
  * @returns 剥除外来编号前缀后的全文；无标题则原样返回。
  */
-export function clearForeignNumberingContent(content: string): string {
+export function clearForeignNumberingContent(
+	content: string,
+	options: { keepLines?: ReadonlySet<number> } = {},
+): string {
 	const headings = parseHeadings(content);
 	if (headings.length === 0) {
 		return content;
@@ -89,6 +92,11 @@ export function clearForeignNumberingContent(content: string): string {
 	for (const h of headings) {
 		// 含 WJ = 本插件写的编号 → 不动（「非本插件」语义）。
 		if (h.rawText.includes(WORD_JOINER)) {
+			continue;
+		}
+		// 用户在清理预览确认框里取消勾选的行：保留原文不剥离（testplan J17），插件仍会在下一步
+		// 套用模板时把自己的编号叠在原文前面——由调用方（main.ts）紧接着调用 renumberContent 完成。
+		if (options.keepLines?.has(h.lineIndex)) {
 			continue;
 		}
 		const hashes = "#".repeat(h.level);
@@ -130,9 +138,11 @@ export function hasUnclaimedForeignNumbering(content: string): boolean {
 
 /** {@link previewForeignNumberingCleanup} 单条对照项：某标题清理前后的完整行文本。 */
 export interface ForeignNumberingPreviewItem {
+	/** 该标题所在行号（0-based），用于清理预览确认框关联逐条勾选状态（testplan J17）。 */
+	lineIndex: number;
 	/** 清理前的完整标题行（`#` 组 + 原始文本）。 */
 	before: string;
-	/** {@link stripForeignNumbering} 处理后的完整标题行。 */
+	/** {@link stripForeignNumbering} 处理后的完整标题行（不含模板前缀，仅剥离外来编号后的中间态）。 */
 	after: string;
 }
 
@@ -164,7 +174,11 @@ export function previewForeignNumberingCleanup(content: string): ForeignNumberin
 			continue;
 		}
 		const hashes = "#".repeat(h.level);
-		items.push({ before: `${hashes} ${h.rawText}`, after: `${hashes} ${stripped}` });
+		items.push({
+			lineIndex: h.lineIndex,
+			before: `${hashes} ${h.rawText}`,
+			after: `${hashes} ${stripped}`,
+		});
 	}
 	return items;
 }

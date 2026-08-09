@@ -576,32 +576,129 @@ button.ah-tab.ah-tab-active:hover {
 	cursor: pointer;
 }
 
-/* 疑似外来编号清理预览确认框：逐条「现状 → 清理后」对照列表。 */
+/* 疑似外来编号清理预览确认框（testplan J14/J17）：逐条勾选 + git 风格 diff 对照。
+   桌面稍微放宽弹窗宽度，长标题也能舒展开；卡片式留白、不紧凑。 */
+.modal.ah-foreign-guard-modal {
+	width: min(640px, 92vw);
+}
+
 .ah-foreign-guard-list {
-	max-height: 40vh;
+	max-height: 50vh;
 	overflow-y: auto;
-	margin: 0 0 12px;
+	margin: 0 0 16px;
 	padding-left: 0;
 	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 .ah-foreign-guard-item {
-	border-bottom: 1px solid var(--background-modifier-border);
-	padding: 6px 0;
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 12px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-secondary);
+}
+
+/* 逐条勾选（默认勾选=清理，J17）：checkbox + 短文案竖排，点哪都能切换。 */
+.ah-foreign-guard-toggle {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 auto;
+	padding-top: 2px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.ah-foreign-guard-checkbox {
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	accent-color: var(--interactive-accent);
+	cursor: pointer;
+}
+
+.ah-foreign-guard-toggle-text {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+/* git 风格 −/+ 两行对照：现状（红）在上，套模板后的效果（绿）在下。 */
+.ah-foreign-guard-diff {
+	flex: 1 1 auto;
+	min-width: 0; /* 允许长标题在 flex 容器里正常换行，不撑破卡片 */
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-family: var(--font-monospace);
 	font-size: var(--font-ui-small);
 }
 
-.ah-foreign-guard-item:last-child {
-	border-bottom: none;
+.ah-foreign-guard-line {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 4px 8px;
+	border-radius: var(--radius-s, 4px);
+}
+
+.ah-foreign-guard-marker {
+	flex: 0 0 auto;
+	font-weight: 600;
+	opacity: 0.75;
+}
+
+.ah-foreign-guard-text {
+	min-width: 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 
 .ah-foreign-guard-before {
+	background: rgba(var(--color-red-rgb, 220, 38, 38), 0.08);
 	color: var(--text-muted);
-	text-decoration: line-through;
+}
+
+.ah-foreign-guard-before .ah-foreign-guard-marker {
+	color: var(--color-red, #e93147);
 }
 
 .ah-foreign-guard-after {
+	background: rgba(var(--color-green-rgb, 34, 197, 94), 0.08);
 	color: var(--text-normal);
+}
+
+.ah-foreign-guard-after .ah-foreign-guard-marker {
+	color: var(--color-green, #08b94e);
+}
+
+/* 窄屏（含移动端）：勾选框从"左侧竖排"改为顶部横排，diff 块独占一行；勾选可点触区域加大。 */
+@media (max-width: 480px) {
+	.modal.ah-foreign-guard-modal {
+		width: 100vw;
+	}
+
+	.ah-foreign-guard-item {
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.ah-foreign-guard-toggle {
+		flex-direction: row;
+		align-self: flex-start;
+		padding-top: 0;
+	}
+
+	.ah-foreign-guard-checkbox {
+		width: 22px;
+		height: 22px;
+	}
 }
 
 /* 已交还所有权（M12 离场）时全局设置 TAB 顶部的提示条：

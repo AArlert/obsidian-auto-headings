@@ -180,8 +180,8 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 	it("单条外来编号标题：现状→清理后一一对应，含 # 前缀", () => {
 		const items = previewForeignNumberingCleanup("## 1 红米\n### 1.1 工艺");
 		expect(items).toEqual([
-			{ before: "## 1 红米", after: "## 红米" },
-			{ before: "### 1.1 工艺", after: "### 工艺" },
+			{ lineIndex: 0, before: "## 1 红米", after: "## 红米" },
+			{ lineIndex: 1, before: "### 1.1 工艺", after: "### 工艺" },
 		]);
 	});
 
@@ -189,8 +189,8 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 		const content = "## (1) 概述\n## 第3章 引言";
 		const items = previewForeignNumberingCleanup(content);
 		expect(items).toEqual([
-			{ before: "## (1) 概述", after: "## 概述" },
-			{ before: "## 第3章 引言", after: "## 引言" },
+			{ lineIndex: 0, before: "## (1) 概述", after: "## 概述" },
+			{ lineIndex: 1, before: "## 第3章 引言", after: "## 引言" },
 		]);
 		// 与实际清理命令结果逐条一致：拼回全文应等于 clearForeignNumberingContent 的输出。
 		const cleaned = clearForeignNumberingContent(content);
@@ -200,7 +200,9 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 	it("含 WJ 的标题（本插件已接管）不出现在预览列表里", () => {
 		const input = `## ${WORD_JOINER}1 ${WORD_JOINER}已编号\n### 1.1 疑似外来`;
 		const items = previewForeignNumberingCleanup(input);
-		expect(items).toEqual([{ before: "### 1.1 疑似外来", after: "### 疑似外来" }]);
+		expect(items).toEqual([
+			{ lineIndex: 1, before: "### 1.1 疑似外来", after: "### 疑似外来" },
+		]);
 	});
 
 	it("裸标题（无任何疑似编号）不出现在预览列表里", () => {
@@ -222,8 +224,18 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 			"## 裸标题 ",
 		].join("\n");
 		expect(previewForeignNumberingCleanup(input)).toEqual([
-			{ before: "## 1 外来编号", after: "## 外来编号" },
+			{ lineIndex: 0, before: "## 1 外来编号", after: "## 外来编号" },
 		]);
+	});
+
+	it("keepLines：clearForeignNumberingContent 跳过指定行，其余行照常剥离（testplan J17）", () => {
+		const content = "## 1 外来编号\n## 2 另一条外来编号";
+		// 只保留第 0 行不剥离，第 1 行照常剥离。
+		expect(clearForeignNumberingContent(content, { keepLines: new Set([0]) })).toBe(
+			"## 1 外来编号\n## 另一条外来编号",
+		);
+		// 不传 keepLines 时行为与此前完全一致（全部剥离）。
+		expect(clearForeignNumberingContent(content)).toBe("## 外来编号\n## 另一条外来编号");
 	});
 });
 

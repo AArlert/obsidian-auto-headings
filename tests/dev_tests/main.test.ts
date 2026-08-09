@@ -930,8 +930,8 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 	});
 });
 
-describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () => {
-	it("点击链接：打开确认框，预览「现状→清理后」逐条对照；确认后与「清理非本插件的标题编号」命令结果一致", async () => {
+describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14/J17）", () => {
+	it("点击链接：打开确认框，预览已套用模板（非仅剥离中间态）；全部勾选时确认后一步到位、不必等下一次防抖", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
@@ -949,20 +949,68 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () 
 
 		// 原 Notice 收起。
 		expect(Notice.instances[0]?.hidden).toBe(true);
-		// 打开了恰好一个确认框，预览与 previewForeignNumberingCleanup 的计算结果一致。
+		// 打开了恰好一个确认框，候选与 previewForeignNumberingCleanup 的计算结果一致。
 		expect(Modal.instances).toHaveLength(1);
 		const modal = Modal.instances[0] as unknown as {
-			items: { before: string; after: string }[];
-			onConfirm: () => void;
+			candidates: { lineIndex: number; before: string }[];
+			computePreview: (
+				keepLines: ReadonlySet<number>,
+			) => { lineIndex: number; before: string; after: string }[];
+			onConfirm: (keepLines: ReadonlySet<number>) => void;
 		};
-		expect(modal.items).toEqual([
-			{ before: "## 1 红米", after: "## 红米" },
-			{ before: "### 1.1 工艺", after: "### 工艺" },
+		expect(modal.candidates).toEqual([
+			{ lineIndex: 0, before: "## 1 红米" },
+			{ lineIndex: 1, before: "### 1.1 工艺" },
 		]);
 
-		// 确认清理：结果与「清理非本插件的标题编号」命令一致（同一套底层逻辑）。
-		modal.onConfirm();
-		expect(ed.getValue()).toBe("## 红米\n### 工艺");
+		// 默认全部勾选（keepLines 为空集）时的预览：已套模板，不是仅剥离外来编号的中间态。
+		expect(modal.computePreview(new Set())).toEqual([
+			{ lineIndex: 0, before: "## 1 红米", after: `## ${WORD_JOINER}1 ${WORD_JOINER}红米` },
+			{
+				lineIndex: 1,
+				before: "### 1.1 工艺",
+				after: `### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`,
+			},
+		]);
+
+		// 确认清理（全部勾选）：一步到位立即套模板，与手动「清理非本插件的标题编号」+ 等一轮防抖的
+		// 最终效果一致，但不必等待（J17）。
+		modal.onConfirm(new Set());
+		expect(ed.getValue()).toBe(
+			`## ${WORD_JOINER}1 ${WORD_JOINER}红米\n### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`,
+		);
+	});
+
+	it("取消勾选某条：保留原文，模板编号仍照常叠加在前面，且此后不再触发迁移守卫（J17）", async () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.renumberOnOpen({ path: "a.md" });
+		await flushPromises();
+		Notice.lastFragment!.children[0].click();
+
+		const modal = Modal.instances[0] as unknown as {
+			computePreview: (
+				keepLines: ReadonlySet<number>,
+			) => { lineIndex: number; before: string; after: string }[];
+			onConfirm: (keepLines: ReadonlySet<number>) => void;
+		};
+
+		// 取消勾选第 0 行（保留「1 红米」原文，不剥离）。
+		const preview = modal.computePreview(new Set([0]));
+		expect(preview[0].after).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}1 红米`); // 模板前缀 + 原文，双重编号观感（既有语义）。
+		expect(preview[1].after).toBe(`### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`); // 勾选的仍正常剥离 + 套模板。
+
+		modal.onConfirm(new Set([0]));
+		expect(ed.getValue()).toBe(
+			`## ${WORD_JOINER}1 ${WORD_JOINER}1 红米\n### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`,
+		);
+
+		// 写入后全文已含 WJ，迁移守卫此后不会再对本文件命中——不存在「保留的那条下一轮又被拦」的问题。
+		Notice.messages.length = 0;
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(Notice.messages).toHaveLength(0);
 	});
 
 	it("不确认（相当于点「取消」/直接关闭）不改动文件内容", async () => {
@@ -1814,5 +1862,51 @@ describe("光标所在行保护（1.0.15，testplan J11）", () => {
 
 		// 第 0 行被保护 ⇒ 标题文本没变 ⇒ 指向它的链接不该被改写成带编号的锚点。
 		expect(vaultFiles.get("b.md")).toBe("见 [[a#章一]]");
+	});
+});
+
+describe("光标所在行保护精确化（2026-08-09 用户体验反馈，testplan J16）", () => {
+	it("J16：光标所在行标题层级变化时立即生效，不必等光标移开", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一", "## 章二"].join("\n"));
+		// 先在光标不在该行时跑一轮，建立快照基线（「章一」在 H2 层级已编号）。
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		const numbered = ed.getValue().split("\n");
+
+		// 模拟用户把「章一」从 H2 升级为 H3（多敲一个 #），光标仍停在该行。
+		const staleLine0 = `#${numbered[0]}`;
+		ed.setValue([staleLine0, numbered[1]].join("\n"));
+		ed.setCursor(0, 4);
+
+		// 用另一份相同内容的编辑器跑「立即重新编号」（不受任何保护）取期望的 ground truth——
+		// 必须用**不同的路径**：同一个插件实例的 headingSnapshots 按路径存储，用 "a.md" 会把
+		// 刚建立的基线快照覆盖成这次 ground truth 的结果，污染下面真正要测的那次自动路径判断。
+		const expectedEd = new FakeEditor(ed.getValue());
+		p.runImmediateRenumber(expectedEd, fileInfo("ground-truth.md"));
+
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		// 层级相对基线已变 ⇒ 不再整行冻结：自动路径本轮应与「立即重新编号」结果一致。
+		expect(ed.getValue()).toBe(expectedEd.getValue());
+		expect(ed.getValue().split("\n")[0]).not.toBe(staleLine0);
+		expect(ed.getValue().split("\n")[0].startsWith("### ")).toBe(true);
+	});
+
+	it("J16：已编号标题仅追加行尾空格（层级未变）时仍受保护，不吞空格", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一", "## 章二"].join("\n"));
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500); // 建立快照基线。
+		const numbered = ed.getValue().split("\n");
+
+		// 章一标题末尾追加一个空格，准备继续输入；层级不变，仍是 H2。
+		ed.setValue([`${numbered[0]} `, numbered[1]].join("\n"));
+		ed.setCursor(0, numbered[0].length + 1);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		expect(ed.getValue().split("\n")[0]).toBe(`${numbered[0]} `); // 行尾空格原样保留，未被吃掉。
 	});
 });
