@@ -408,6 +408,30 @@
 | O11 | **复制净化不再有开关**（1.0.16）：① 打开设置 → 全局设置；② 旧 `data.json` 里带 `sanitizeClipboard: false` 的用户升级后复制含编号标题 | ① 面板中**不存在**「复制净化」开关（净化是插件的固有承诺，不是可选项）；② 旧值**不再生效**——升级即随迁移删除该键，复制照常净化，`data.json` 回写后不再含此键 | ⚠️（1.0.16：②已 dev 单测——`clipboard.test.ts` 三条，净化端 / 还原端残留旧键均不门控 + `loadSettings` 迁移删键；①面板缺席为纯 UI，待手验）|
 | O12 | vault 内往返（同会话、单光标、目标文件编号生效）：从 A 文件复制含编号标题段落 → 粘贴进 B 文件 | LRU 命中 → 还原含 WJ 原文 → 防抖重排按 B 的模板重新编号，**不留裸序号、不触发外来编号守卫**；连续粘贴两次同样命中（`lookup` 刷新新旧序而非消费掉） | ✅（1.0.16 dev 单测；实机重排链路复用 O9 已验路径）|
 
+### P. 继承级数 inheritDepth（1.0.22，社区 PR #7） — dev + user
+
+> 每级新增的**可选**字段：`inherit=true` 时最多往上继承多少个祖先段。缺省 / `null` = 继承到
+> `topLevel`（= 1.0.21 及以前的唯一行为，**全部老模板零迁移**）。截取起点
+> `startLevel = max(topLevel, level - inheritDepth)`——**永不越过 `topLevel`**，深度填多大都只是被夹住。
+> 数值按**物理层级**存储、不随 `topLevel` 改写：改了起始层级再改回来，用户填的深度还在。
+> 与 `inherit=false` 正交：关了继承就整段不看 depth（值仍保留在模板里，重新打开即恢复）。
+> 详见 [`spec.md` §3.6](./spec.md#36-模板系统)。全部 dev 断言在 `dev_tests/inherit-depth.test.ts`。
+
+| ID | 操作 | 预期 | 状态 |
+|----|------|------|------|
+| P1 | **向后兼容**：字段缺失（老 `data.json`）/ 显式 `null` / 老模板三者对同一文档编号 | 三者输出**逐字节相同**，均为继承到 `topLevel` 的完整段（H3 得 `1.1.1`） | ✅（`inherit-depth.test.ts`）|
+| P2 | `topLevel=H1`，H3 设 depth=1 / depth=2；H4 设 depth=1 / depth=2 | 分别得 `1.1` / `1.1.1`、`1.1` / `1.1.1`——段数 = depth+1，只含最近的 depth 个祖先 | ✅ |
+| P3 | **上限夹紧**：`topLevel=H2`，H4 设 depth=5（超过实际可继承的 2 级） | 在 `topLevel` 截断得 `1.1.1`，**绝不**把 H1 段拼进来；不报错、不回退成"不继承" | ✅ |
+| P4 | `inherit=false` 且 `inheritDepth=1` | depth 完全被忽略，只输出本级序号（`1`）；**字段值仍保留**在模板对象里 | ✅ |
+| P5 | **起始编号偏移**：`startIndex=5`，H3 分别 depth=2（含 topLevel 段）/ depth=1（不含） | depth=2 得 `5.1.1`（偏移落在真正的 topLevel 段）；depth=1 得 `1.1`——**截掉 topLevel 段后偏移不再乱加到首段上**（此前 `i===0` 的写法会误加） | ✅ |
+| P6 | **祖先样式**：H1 `cjk` / H2 `lower-alpha` / H3 `circled` / H4 `upper-roman`，H4 depth=2，`ancestorNumeral` 取 `self` 与 `arabic` | `self` 得 `a.①.I`、`arabic` 得 `1.1.I`；两者都**不含**被截掉的 H1 的 `一` | ✅ |
+| P7 | **skipFill=fill/drop**：`topLevel=H1`，H4 depth=1，文档 `H1→H2→H4`（缺 H3） | fill 得 `0.1`、drop 得 `1`——占位 / 丢弃只作用于**截取后**的序列，不受被截掉的祖先影响 | ✅ |
+| P8 | **skipFill=none**：H4 depth=1，① 直接父级 H3 在场（`H2→H3→H4`）② 直接父级缺失（`H2→H4`） | ① 照常编号 `1.1`——继承范围外的浅层缺失**不再**否决本级；② 仍拒绝编号（裸标题）——范围内缺父级依旧不编号 | ✅ |
+| P9 | skipFill=none 且 depth=null / `inherit=false` | 检查范围回到 `topLevel`，与 1.0.21 行为逐字节一致（`H2→H3→H4` 之外的跳级仍不编号） | ✅ |
+| P10 | **幂等与往返**：全继承编号 → 切 depth=1 重排 → 再切回全继承 | 每步都剥净旧前缀重编、连续触发幂等；切回全继承后与最初输出**逐字节相同**，无叠加、无残留 | ✅ |
+| P11 | **白名单回归**：`partial` 命中的「附录…」标题 + depth 生效 | 白名单照常透明（不编号、不占计数），depth 不影响豁免语义 | ✅ |
+| P12 | GUI：编辑面板新增「继承级数」列（下拉：全部 / 1…level-1） | 选项数随级别递增（H1 无可选、置灰）；「继承前级」取消勾选时该下拉同步置灰；改动即写回模板并刷新本级实时预览 | ✅ 逻辑（`previewLevel` 走同一 `buildPrefix`）/ 🔲 DOM 手验 |
+
 ---
 
 ## 3. 已知 bug 汇总

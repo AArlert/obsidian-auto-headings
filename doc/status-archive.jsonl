@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-07-18","version":"1.0.13","summary":"UVM 压测框架拆分：framework.ts 1686 行拆成 9 文件（486 行，World 方法体外移为自由函数，import type 保证无环），黄金基线逐字节比对验收；顶部与 log-archive.md 重复的历史叙事已删、改指针；新增 scripts/fuzz.mjs 修好 Windows 上失效的 test:fuzz；订正 uvm/README.md 过期描述。未 bump。"}
 {"type":"log","date":"2026-07-18","version":"1.0.13","summary":"M12 两项：「不编号」伪模板（哨兵 $none，参与具体度解析可胜出）+ 按规则批量重编号（行内按钮+确认框，跳过 fm false/外来编号/不编号）。K14/K14b 手验回填 ✅。细节见 log-archive.md。"}
 {"type": "log", "date": "2026-07-18", "version": "1.0.12", "summary": "路径建议弹窗统一 re-click 外观（K14b）：1.0.11 模式判断只看「是否为空」，导致配好 / 或 A/ 的行再次点击回落扁平「匹配一堆」列表；改由 browseDirForInput 决定——空/根/真实文件夹均进分层浏览（A/ 浏览进 A），仅打字片段/文件规则/不存在文件夹走扁平搜索。pathrules.test.ts 新增 14 例。"}
 {"type": "log", "date": "2026-07-18", "version": "1.0.11", "summary": "路径规则建议弹窗：空输入进分层浏览（点文字选中/文件夹小箭头下钻/⬅返回上一级），有输入沿用扁平模糊搜索；修复合成根候选导致 needle=\"/\" 时顶层文件夹被排除的诡异过滤（K14，前导 / 剥离）；调研 numeroflip 源码确认其为扁平模糊+排除根目录，据此推翻分层方案初稿。pathrules.test.ts 新增 38 例。"}

@@ -75,6 +75,7 @@ Obsidian 社区呼声第一的痛点是**改标题断链**：`[[file#heading]]` 
 | CR-12 | 支持通过 frontmatter 键 `obsidian-auto-headings`（类型：Obsidian 复选框；值 `true`/`false`）对单个文件局部控制；非法值（含旧版 `ON`/`OFF` 文本、大小写不符者）忽略 |
 | CR-13 | 界面**中英双语**（0.6.5 落地）：自动跟随 Obsidian 语言 / 可手动锁定，文案集中于 `src/i18n.ts`（见 [3.11](#311-国际化中英双语m6)） |
 | CR-14 | 模板中每级标题可单独配置**继承前级**（布尔，默认开启）；关闭时该级不继承父级序号，编号前缀仅为「前缀 + 本级序号 + 标题间隔符」 |
+| CR-14b | 继承前级开启时，还可单独配置**继承级数**（正整数或"全部"，默认全部）：限定最多往上拼几个祖先段，起点永不越过 `topLevel`。用于「H1 独立成章、H3 只带 H2 父级」这类中间态——此前只能靠调深 `topLevel` 绕，代价是连带取消浅层编号（1.0.22，社区 PR #7） |
 | CR-15 | 提供侧栏大纲面板，实时展示当前文件的编号后标题树，支持按层级筛选、按文本/编号搜索并保留树形结构、点击跳转编辑器（M8a，规划中，见 [3.14](#314-侧栏大纲导航m8a)） |
 | CR-16 | 支持在大纲面板中拖放调整标题的层级与顺序，操作后一次性完成重新编号与 backlink 同步；支持在面板内直接编辑标题文本（M8b，规划中，见 [3.15](#315-拖放重排与结构编辑m8b)） |
 | CR-17 | 提供单文件内的目录生成能力：专属围栏代码块内自动生成、并随标题结构持续同步当前文件的目录，写入真实 Markdown 文本（而非渲染层展示）；更新联动编号引擎的防抖触发路径，且不得扰动用户当前光标/视图位置（M10，规划中，见 [3.16](#316-原生风格-toc-burn-inm10)） |
@@ -541,7 +542,7 @@ H3                →  c3=1            →    2.1 标题   ← 未跳号
 
 **模板**是一个具名配置对象，为 H1–H6 各级定义编号的显示格式与该模板的白名单。模板的创建、编辑、删除**完全在插件设置 GUI 中进行**，不涉及任何 YAML 或 frontmatter。
 
-每一级的格式由六个**结构化字段**组成（GUI 列序：前缀 → 序号 → 序号间隔符 → 后缀 → 标题间隔符 → 继承前级）：
+每一级的格式由七个**结构化字段**组成（GUI 列序：前缀 → 序号 → 序号间隔符 → 后缀 → 标题间隔符 → 继承前级 → 继承级数）：
 
 | 字段 | 含义 | 示例 |
 |------|------|------|
@@ -551,6 +552,7 @@ H3                →  c3=1            →    2.1 标题   ← 未跳号
 | 后缀（`suffix`） | **完整序号之后、标题间隔符之前**的自定义文本，可为空；与前缀配合实现「第1章」式编号。作用于本级完整序号（含继承的父级序号），即 `第1.1章` 而非每段都带后缀 | `章`、`节`、`）`、空 |
 | 标题间隔符（`titleSeparator`） | 完整序号与标题文本之间的文本，由用户自行输入（含可能的尾随 `.` 或空格） | `、`、` `（空格）、`. `（点+空格） |
 | 继承前级（`inherit`） | 是否拼接父级序号，布尔，**默认开启**；关闭后该级仅呈现本级序号，不拼父级 | `true`（得 `1.1.1`）、`false`（H5 得 `a)`、`b)`） |
+| 继承级数（`inheritDepth`） | 继承前级=开时**最多往上拼几个祖先段**，正整数或 `null`。**`null` / 字段缺失 = 继承到 `topLevel`**（1.0.21 及以前的唯一行为）。截取起点 `max(topLevel, 本级 - inheritDepth)`——**永不越过 `topLevel`**，填过大只是被夹住。见下方「继承级数用途」 | `null`（默认，H4 得 `1.1.1`）、`1`（H4 得 `1.1`，只带一个祖先） |
 
 此外，每个模板还有若干**模板级**字段（不分级，作用于整模板）：
 
@@ -581,6 +583,31 @@ H3                →  c3=1            →    2.1 标题   ← 未跳号
 > H5  →  a)           （继承前级=关，仅本级字母序号）
 > H5  →  b)           （继承前级=关）
 > ```
+
+> **继承级数用途（`inheritDepth`，1.0.22，社区 PR [#7](https://github.com/AArlert/obsidian-auto-headings/pull/7)）：**
+> 「继承前级」此前是**全有或全无**——要么一路拼到 `topLevel`，要么只剩本级。真实排版常要中间态：
+> H1 当大标题独立成「一、二、」，H2 起另开一套 `1 / 1.1`，H3 只想带上它的 H2 父级、不想把 H1 拖进来。
+> 此前唯一的绕法是把 `topLevel` 调深，但那会**连带取消 H1 的编号**，得不偿失。
+>
+> ```
+> topLevel=H1，H2「继承前级=关」，H3「继承前级=开 + 继承级数=1」：
+>
+> # UI美化        →  二、UI美化       （H1：cjk，本级）
+> ## 富文本       →  2、富文本        （H2：inherit=false，仅本级）
+> ### 换行        →  2.1换行          （H3：只往上取 1 级 = H2，不含 H1）
+> ```
+>
+> 三条边界，与其余字段**正交**：
+>
+> - **不越过 `topLevel`**：起点恒为 `max(topLevel, 本级 - inheritDepth)`。深度填多大都只是被夹住，
+>   绝不会把编号区间外的浅层标题拼进前缀。
+> - **`inherit=false` 时整段不看它**，但值**仍保留**在模板里——重新勾上「继承前级」即恢复原来的深度。
+> - **按物理层级存储**，不随 `topLevel` 改写。改深起始层级再改回来，用户填的深度还在原处。
+>
+> 与其他字段的交互一律「**只作用于截取后的那一段**」：`ancestorNumeral` 只转换实际继承的祖先段；
+> `skipFill` 的补位 / 丢弃只发生在截取后的序列内；`startIndex` 的偏移**仅落在真正的 `topLevel` 段**上——
+> 若该段已被截掉，则本级前缀不带任何偏移（见 testplan P5）。`skipFill=none` 的「跳级不编号」判定
+> 同步收窄到继承范围内：继承范围**之外**的浅层缺失不再否决本级编号，范围**之内**缺父级仍不编号（P8/P9）。
 
 通过组合这些字段即可覆盖常见排版需求，例如：
 
@@ -627,7 +654,7 @@ H3                →  c3=1            →    2.1 标题   ← 未跳号
     "h1": { "prefix": "", "numeral": "arabic", "suffix": "", "numberSeparator": ".", "titleSeparator": " ",  "inherit": true },
     "h2": { "prefix": "", "numeral": "cjk",    "suffix": "", "numberSeparator": ".", "titleSeparator": "、", "inherit": true },
     "h3": { "prefix": "", "numeral": "arabic", "suffix": "", "numberSeparator": ".", "titleSeparator": " ",  "inherit": true },
-    "h4": { "prefix": "", "numeral": "lower-alpha", "suffix": "", "numberSeparator": ".", "titleSeparator": ") ", "inherit": true },
+    "h4": { "prefix": "", "numeral": "lower-alpha", "suffix": "", "numberSeparator": ".", "titleSeparator": ") ", "inherit": true, "inheritDepth": 1 },
     "h5": { "prefix": "", "numeral": "lower-alpha", "suffix": "", "numberSeparator": ".", "titleSeparator": ") ", "inherit": false },
     "h6": { "prefix": "", "numeral": "arabic", "suffix": "", "numberSeparator": ".", "titleSeparator": ". ", "inherit": true }
   },
@@ -645,7 +672,7 @@ H3                →  c3=1            →    2.1 标题   ← 未跳号
 字段说明（字段顺序与磁盘上 `serializeTemplate` 的输出一致）：
 
 - `name`：模板显示名（`default.json` 固定显示为"默认"）。
-- `levels.h1`…`levels.h6`：H1–H6 各级，每级六个结构化字段——`prefix`、`numeral`、`suffix`、`numberSeparator`、`titleSeparator`、`inherit`（含义见上表；`suffix` 缺省为空、`inherit` 缺省视为 `true`）。`h1` 始终存在，是否对其编号由 `topLevel` 决定。
+- `levels.h1`…`levels.h6`：H1–H6 各级，每级七个结构化字段——`prefix`、`numeral`、`suffix`、`numberSeparator`、`titleSeparator`、`inherit`、`inheritDepth`（含义见上表；`suffix` 缺省为空、`inherit` 缺省视为 `true`、`inheritDepth` 缺省 / `null` 视为「继承到 `topLevel`」）。`h1` 始终存在，是否对其编号由 `topLevel` 决定。上例中 `h4` 的 `"inheritDepth": 1` 表示 H4 只往上带一个祖先（得 `a) `，而非 `1.1.a) `）。
 - `numeral` 合法枚举：`arabic`、`cjk`、`circled`、`lower-alpha`、`upper-alpha`、`lower-roman`、`upper-roman`（0.6.3 起含罗马数字）。
 - `whitelist`：本模板生效时使用的白名单条目数组；每个条目含 `text`（词语）与 `match`（匹配方式，枚举 `exact`/`partial`/`subtree`，缺省视为 `exact`）（见 [3.7](#37-白名单系统)）。
 - `skipFill`：**模板级**跳级策略——`{ "mode": "fill", "placeholder": "0" }`（补位，占位仅限数字）、`{ "mode": "drop" }`（不补位）或 `{ "mode": "none" }`（跳级标题完全不编号，0.7.15）；缺失/非法回退默认补 `0`（见上表与 [3.6 模板级字段](#36-模板系统)）。

@@ -41,6 +41,78 @@
 
 ---
 
+## 2026-08-09 社区 PR #7 审核并入：继承级数 inheritDepth（1.0.22）
+
+> **接手者从这里开始读。** 本块是**第一次合入外部贡献**的完整记录——含「PR 基于旧版本该怎么核」的
+> 复用姿势，以及本仓库要求而 PR 不可能自带的那部分收尾（文档 / testplan / 版本 / 产物）。
+
+### 做了什么
+
+合入 GitHub PR [#7](https://github.com/AArlert/obsidian-auto-headings/pull/7)「feat: add configurable heading
+inheritance depth」，新增每级可选字段 `inheritDepth`：`inherit=true` 时**最多往上拼几个祖先段**。
+缺省 / `null` = 继承到 `topLevel`（= 1.0.21 及以前的唯一行为，**老模板零迁移**）。
+截取起点 `max(topLevel, level - inheritDepth)`，**永不越过 `topLevel`**。规格见 `spec.md` §3.6
+「继承级数用途」，场景真值表见 `testplan.md` §P（P1–P12）。
+
+**PR 作者交付的部分**（原样采纳，未改一行逻辑）：`template.ts` 的 `normalizeInheritDepth` +
+`render.ts` `buildPrefix` 截取 + `numbering.ts` skipFill=none 检查范围收窄 + `schema.ts` 按物理层级
+夹紧（h1→0…h6→5）+ `EditPanel.ts` 新增「继承级数」下拉 + i18n 中英文案 + `styles.css` 九列网格 +
+`inherit-depth.test.ts`（220 行，13 例）+ `schema.test.ts` 补 24 行。
+
+**本次补齐的部分**（PR 不可能自带）：`spec.md` §3.6 字段表 + 用途小节 + JSON 示例 + CR-14b；
+`testplan.md` §P 十二行场景；README 中英各一条；`release-notes/1.0.22.md`；bump 1.0.21→1.0.22；
+`release/` 重建；本块 + `status.jsonl`。
+
+### 合并风险怎么核的（可复用姿势）★
+
+PR 基于 `1ff21f8`（**1.0.13**），master 已到 1.0.21，中间隔 **14 个提交**。核查顺序：
+
+1. `git fetch origin refs/pull/7/head:pr-7` → `git merge-base master pr-7` 定位基线。
+2. **只比对 PR 触碰的那几个文件在 master 上的分叉**（`git diff --stat <base> master -- <files>`），
+   而不是看 master 整体改了多少——本次 8 个源文件里 **4 个在 master 上一行没动**
+   （`render.ts` / `template.ts` / `templates/schema.ts` / `EditPanel.ts`），风险面立刻收敛到 3 个。
+3. 分叉的 3 个（`i18n.ts` / `numbering.ts` / `styles.css`）**全部自动合并无冲突**，但
+   **`numbering.ts` 必须手工复核**——master 侧 1.0.17 的 `<!-- skip -->` 分支（issue #6）就落在
+   PR 插入点的**紧邻下方**，自动合并「文本干净」不等于「语义正确」。复核结论：PR 的
+   `skipCheckStart` 计算在 map 回调开头、skip 标记分支在其后，互不干扰，`slice(skipCheckStart - 1, -1)`
+   落在正确的 skipFill=none 分支里。
+4. 门槛：`tsc -noEmit` 干净；`vitest` 516 条 515 绿（唯一红是 `whitelist.test.ts` 的 ICU 排序，
+   **Windows 本地老假红**，与本 PR 无关，master 上同样红）。
+
+### 顺带修掉的一个既有缺陷
+
+`buildPrefix` 里起始编号偏移原本判 `i === 0`（序列首段）。截取起点可变后，首段不再必然是
+`topLevel` 段，PR 改判 `segLevel === top`——**这同时修正了原代码的语义**：偏移本就该跟着
+「真正的 `topLevel` 段」走，而非「序列第一段」。testplan P5 锁住该行为。
+
+### 没做什么
+
+- **PR 分支未在 GitHub 上关闭**——本地合并后需推 master，GitHub 会自行识别；若不自动关闭需手动
+  关并致谢（本机无 `gh` CLI）。
+- **P12 的 DOM 手验没做**：「继承级数」下拉的置灰联动（H1 恒灰、取消「继承前级」时同步灰）
+  是纯 UI，需真机。逻辑侧走同一 `buildPrefix`、已被 P1–P11 覆盖。
+- **UVM 未纳入 `inheritDepth` 随机化**：`uvm/stimulus.ts` 目前根本不随机化任何**级内**格式字段
+  （`inherit` / `numeral` / 分隔符都不动），不是本 PR 的遗漏，是压测框架既有的覆盖缺口。
+- **tag 未推**：发版仍等用户指令，见下方发版状态。
+
+### 下一步
+
+1. **发版状态有变，注意**：现在该取用的是 `doc/release-notes/1.0.22.md`——工作流按
+   `doc/release-notes/<tag>.md` **精确取名**，故 1.0.22.md 已把 1.0.14–1.0.21 的全部用户可见改动
+   **连同**本次新功能合并成一份（线上商店仍是 1.0.13，直接写一份只讲 inheritDepth 的说明会把
+   前八个版本的改动全丢掉）。`1.0.21.md` 及更早均成为历史草稿、不再被任何流程读取。
+   发布姿势不变：确认 `manifest.json` = `1.0.22` → `git tag -a 1.0.22 -m "1.0.22"`（**不带 `v`**）
+   → `git push origin 1.0.22`。
+2. 待手验清单在上一块基础上**新增 P12**：E36 / O11① / O5f / H12 / H9 / Dataview / P12。
+3. 未解决问题总账与竞品调研采纳清单见下一块与 `spec.md` Roadmap M9，未受本次影响。
+
+### 本周期派发
+
+派发 0 次（主模型全程自持）——本次是**外部代码审核**，判断合并风险与语义正确性需要完整持有
+master 与 PR 两侧的上下文，拆给子 agent 反而要把上下文重述一遍，不划算。
+
+---
+
 ## 2026-08-09 会话收尾：未解决问题总账 + 竞品调研路线调整（无版本变化，纯文档）
 
 > **接手者从这里开始读。** 本块是 2026-08-09 那次长会话（1.0.15 → 1.0.21，七个版本）的收尾总账，
@@ -186,62 +258,6 @@
 全绿；J15 新用例经「去掉修复 → ①② 变红 → 恢复 → 转绿」实测确认有效。
 
 **本周期派发 0 次**。
-
----
-
-## 2026-08-09 1.0.20 `file-open` 时编辑器内容尚未换到位（真机反馈第三轮；**方向对、药量不够**——见 1.0.21）
-
-**背景**：1.0.19 发出去后第三轮真机反馈：「在外来编号的文件里敲个字、立刻切去**已经由本插件
-接管**的文件，弹出，但点击后还是显示没有什么可以清理——提示依然是过时的。切回来也不弹出。」
-1.0.19 加的「只为当前活动文件发声」那道门**确实生效了**（提示挂在了 b.md 上、`getActiveFile()`
-也确实是 b.md，所以门放行了），但它挡不住真正的毛病：**内容是错的**。
-
-**根因**：`renumberOnOpen` 同步跑在 `file-open` 处理器里，而**那一刻 Obsidian 已经把
-`view.file` 换成了新文件、编辑器里的内容却还是上一篇的**。于是：
-
-- `view.file?.path === "b.md"` ✅ 通过 → `editor.getValue()` 返回的却是 **a.md 的内容** →
-  `hasUnclaimedForeignNumbering(a 的内容)` = true → 提示**挂在 b.md 的路径上**弹出。
-- 点击时 `markdownContextForPath("b.md")` 重新读 b.md 的**真实**内容（此时已换到位、带 WJ）
-  → 预览为空 → 「没有什么可以清理」。
-- 切回 a.md 时同理：编辑器又还停在 b.md 的内容上 → 判定为干净 → 不但不提示，还顺手
-  `dismissGuardNotice("a.md")`。三条症状全部对上。
-- **更危险的潜在后果**：若那份陈旧内容恰好是「干净但没编号」的，`applyRenumber` 会把
-  **a.md 的编号写进 b.md 的编辑器**。这次是守卫恰好拦住才没发生——属于侥幸，不是设计。
-
-**做了什么**：
-
-1. **`renumberOnOpen` 推迟一个宏任务**（`window.setTimeout(…, 0)` → 新的
-   `renumberOnOpenSettled`），在那时**重新解析**活动视图、并**重新确认**它就是本次打开的文件
-   （用户可能在这一瞬又切走了）。J9「打开即按当前模板重排」的语义不受影响——它本来就不要求
-   同步完成。
-2. **`scheduleRenumber` 计时器加作废闸**：到期时若 `info.file?.path !== path`，说明这个叶子在
-   防抖窗口内已切到别的文件（同一个 `MarkdownView`/`Editor` 实例会被复用来显示新文件），
-   **整轮作废**。此前只靠 1.0.19 那道「活动文件」门挡提示，写入侧并没有挡。
-3. **`main.test.ts` 新增 J15 三例**，其中一例把「`view.file` 已换、`editor` 内容未换」那一瞬
-   **精确建模**（同一个 editor 实例，推进事件循环时才换内容）——**去掉修复后该用例确实变红**，
-   已实测确认它抓得住这个 bug，不是写完就绿的摆设。
-
-**教训（第三轮才修对，值得记住）**：三轮修复分别在调「什么时候重新提示」（1.0.17 `file-open`
-重置 / 1.0.18 `lastGuardedPath`）、「这条提示说的是哪个文件」（1.0.19 活动文件门），**都对，但都
-不是根因**——根因是「判断所依据的内容本身就是错的」。前两轮的单测之所以全绿，是因为测试替身
-里**编辑器内容与文件路径永远是一致的**，而真实 Obsidian 在 `file-open` 那一瞬恰恰不一致。
-**替身比真实环境「更整齐」的地方，就是 bug 的藏身处。**
-
-**没做什么 / 已知遗留**：
-
-- **`setTimeout(0)` 是否足够**取决于 Obsidian 换内容的时机，本地无法验证。若第四轮仍复现，
-  下一步应改为「用 `metadataCache.getFileCache(file)` 的 headings 与编辑器内容交叉校验」，
-  内容对不上就跳过本轮——那是不依赖时序的判据，但实现更重，故先用延后这条轻的。
-- 1.0.19 遗留的「用户手动关掉提示后不会重新弹」（Obsidian 的 `Notice` 无关闭回调）仍在。
-
-**下一步**：① 把 1.0.20 发给用户**第四轮**复验（原样复现这次那条链路）；② 通过后推送、合并、
-打 tag（只发 1.0.20）；③ 排队中的手验清单（H12/H9/O5f/Dataview/E36）与 Setext 支持仍待推进。
-
-**验证方式**：`npx tsc --noEmit` / `npm test`（493 通过，唯一红灯仍是既知的
-`whitelist.test.ts:406` ICU 排序噪音）/ `npm run lint` / `npm run test:fuzz`（5000×80 两块
-记分板）全绿；新增回归经「去掉修复 → 变红 → 恢复 → 转绿」实测确认有效。
-
-**本周期派发 0 次**（主模型亲自处理——根因判断依赖对 Obsidian 事件时序的整体推理）。
 
 ---
 
