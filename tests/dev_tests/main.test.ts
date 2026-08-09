@@ -26,6 +26,8 @@ class FakeEditor {
 	private lines: string[];
 	/** `transaction` 被调用的次数。一次完整重排应只产生 **1** 次事务。 */
 	txnCount = 0;
+	/** 最近一次事务的变更清单，供断言写回范围（J19：最小范围改写，不整行替换）。 */
+	lastChanges: Array<{ from: Pos; to?: Pos; text: string }> = [];
 	/** 光标位置。默认 `-1` 行 = 不在任何行上，使既有用例不触发「光标所在行保护」（J11）。 */
 	private cursor: Pos = { line: -1, ch: 0 };
 
@@ -58,6 +60,7 @@ class FakeEditor {
 	 */
 	transaction(tx: { changes: Array<{ from: Pos; to?: Pos; text: string }> }): void {
 		this.txnCount++;
+		this.lastChanges = tx.changes;
 		const offset = (p: Pos) => {
 			let o = 0;
 			for (let i = 0; i < p.line; i++) {
@@ -1814,8 +1817,8 @@ describe("清除即暂停 / 重新编号即恢复（1.0.15，testplan H13–H16�
 	});
 });
 
-describe("光标所在行保护（1.0.15，testplan J11）", () => {
-	it("J11：光标停在刚敲了行尾空格的标题行上 → 该行原样保留，其余行照常重排", () => {
+describe("光标所在行行尾空白保护（1.0.24 换掉整行冻结，testplan J11）", () => {
+	it("J11：光标停在刚敲了行尾空格的标题行上 → 空格保住，但编号照常写入", () => {
 		const { p } = makePlugin({ autoNumber: true });
 		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
 		ed.setCursor(0, 5);
@@ -1823,11 +1826,12 @@ describe("光标所在行保护（1.0.15，testplan J11）", () => {
 		vi.advanceTimersByTime(500);
 
 		const lines = ed.getValue().split("\n");
-		expect(lines[0]).toBe("## 章一 "); // 行尾空格没被吞，编号也没抢在用户打字中途写入。
+		// 行尾空格没被吞（J11 的原始诉求），编号也不再被一起冻掉（J19 的诉求）。
+		expect(lines[0]).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章一 `);
 		expect(lines[1]).toBe(`## ${WORD_JOINER}2 ${WORD_JOINER}章二`); // 其余行照常。
 	});
 
-	it("J11：光标移开后的下一次触发把那一行补上", () => {
+	it("J11：光标移开后那一轮把行尾空格按既有归一化规则清掉", () => {
 		const { p } = makePlugin({ autoNumber: true });
 		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
 		ed.setCursor(0, 5);
@@ -1840,7 +1844,22 @@ describe("光标所在行保护（1.0.15，testplan J11）", () => {
 		expect(ed.getValue().split("\n")[0]).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章一`);
 	});
 
-	it("J11：手动「立即重新编号」不受保护，整文重排", () => {
+	it("J11：光标停着不动连跑两轮，第二轮无改动可写（补回空白后与落盘内容逐字节相同）", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
+		ed.setCursor(0, 5);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		const afterFirst = ed.getValue();
+		const txnAfterFirst = ed.txnCount;
+
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		expect(ed.getValue()).toBe(afterFirst);
+		expect(ed.txnCount).toBe(txnAfterFirst); // 不发空事务，不刷撤销历史。
+	});
+
+	it("J11：手动「立即重新编号」不受保护，行尾空白照常归一化", () => {
 		const { p } = makePlugin({ autoNumber: true });
 		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
 		ed.setCursor(0, 5);
@@ -1848,20 +1867,75 @@ describe("光标所在行保护（1.0.15，testplan J11）", () => {
 		expect(ed.getValue().split("\n")[0]).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章一`);
 	});
 
-	it("J11：保护后的快照按**实际落盘内容**记录，不产生幻影改名", async () => {
+	it("J11：快照按**实际落盘内容**记录——补回的行尾空白不产生幻影改名", async () => {
 		const { p, vaultFiles } = makePlugin({
 			autoNumber: true,
 			updateBacklinks: true,
 			vaultFiles: { "b.md": "见 [[a#章一]]" },
 		});
-		const ed = new FakeEditor(["## 章一", "## 章二"].join("\n"));
-		ed.setCursor(0, 3);
+		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
+		ed.setCursor(0, 5);
 		p.scheduleRenumber(ed, fileInfo("a.md"));
 		vi.advanceTimersByTime(500);
 		await flushPromises();
+		// 标题文本真的变了（加了编号）⇒ 链接跟着改到带编号的锚点，这是正确的同步。
+		expect(vaultFiles.get("b.md")).toBe(`见 [[a#${WORD_JOINER}1 ${WORD_JOINER}章一]]`);
 
-		// 第 0 行被保护 ⇒ 标题文本没变 ⇒ 指向它的链接不该被改写成带编号的锚点。
-		expect(vaultFiles.get("b.md")).toBe("见 [[a#章一]]");
+		// 光标移开、行尾空白被清掉的那一轮：标题文本（去尾空白后）没变 ⇒ 不该再改一次链接。
+		ed.setCursor(1, 0);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe(`见 [[a#${WORD_JOINER}1 ${WORD_JOINER}章一]]`);
+	});
+});
+
+describe("新敲出的标题当轮即编号（1.0.24 真机反馈，testplan J19）", () => {
+	it("J19：在空行上新敲一个标题、光标停在行尾 → 本轮就编号，不必再按 Enter", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一", ""].join("\n"));
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500); // 建立快照基线（此时只有一个标题）。
+
+		// 用户在第 1 行敲出一个**新**标题，光标停在行尾——正是真机复现的操作。
+		const typed = "## 新标题";
+		ed.setValue([ed.getValue().split("\n")[0], typed].join("\n"));
+		ed.setCursor(1, typed.length);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		// 新增标题会让标题数量相对快照变化——1.0.23 的层级判据在这里走保守分支、整行冻结，
+		// 于是「不按 Enter 就不编号」。现在不再依赖任何快照推断，本轮直接写入。
+		expect(ed.getValue().split("\n")[1]).toBe(`## ${WORD_JOINER}2 ${WORD_JOINER}新标题`);
+	});
+
+	it("J19：新敲的标题末尾带空格 → 编号照写，空格同样保住", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一", ""].join("\n"));
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		const typed = "## 新标题 ";
+		ed.setValue([ed.getValue().split("\n")[0], typed].join("\n"));
+		ed.setCursor(1, typed.length);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		expect(ed.getValue().split("\n")[1]).toBe(`## ${WORD_JOINER}2 ${WORD_JOINER}新标题 `);
+	});
+
+	it("J19：写回只覆盖真正变化的那一段，不整行替换（光标不被甩走）", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor("## 章一");
+		ed.setCursor(0, 5);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		// 前缀插在行首（`## ` 之后），变更范围不该延伸到用户光标所在的行尾。
+		const change = ed.lastChanges[0];
+		expect(change.from.ch).toBe(3);
+		expect(change.to?.ch).toBe(3); // 纯插入：起止相同，一个字符都没被替换掉。
+		expect(change.text).toBe(`${WORD_JOINER}1 ${WORD_JOINER}`);
 	});
 });
 

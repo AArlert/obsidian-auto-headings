@@ -1423,11 +1423,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			const newLines = newContent.split("\n");
 			for (let i = 0; i < newLines.length; i++) {
 				if (oldLines[i] !== newLines[i]) {
-					changes.push({
-						from: { line: i, ch: 0 },
-						to: { line: i, ch: oldLines[i].length },
-						text: newLines[i],
-					});
+					changes.push(this.lineChange(i, oldLines[i], newLines[i]));
 				}
 			}
 		}
@@ -1437,6 +1433,47 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		editor.transaction({ changes });
 		return true;
+	}
+
+	/**
+	 * 把一行的新旧文本折算成**只覆盖真正变化的那一段**的变更（掐掉两端的公共前后缀），而不是
+	 * 整行替换。
+	 *
+	 * **为什么必须最小化**（1.0.24）：自 `preserveCursorLineTrailingSpace` 不再整行冻结起，光标
+	 * 所在行会在用户正敲字时被改写。整行替换的变更范围**覆盖光标位置**，CM6 无从知道光标该落在
+	 * 替换文本的哪里，只能甩到一端——用户正在行尾打字，光标却被扔走，这是换一种形式的「抢键盘」。
+	 * 编号前缀落在行首、用户光标通常在行尾，掐掉公共后缀后变更范围与光标天然不重叠，位置映射
+	 * 自然保住（也顺带缩小了 J6 「编号写回不该移动光标/打乱选区」的暴露面）。
+	 *
+	 * 边界只有一处需要当心：切点不能落在代理对（surrogate pair）中间——emoji 标题很常见，从中间
+	 * 切开会产生半个码位的坐标。故两端切点各回退一格避开。文本内容本身不受影响：无论切在哪，
+	 * 「公共前缀 + 中段 + 公共后缀」拼回来都逐字节等于新行。
+	 */
+	private lineChange(line: number, oldLine: string, newLine: string): EditorChange {
+		const max = Math.min(oldLine.length, newLine.length);
+		let head = 0;
+		while (head < max && oldLine[head] === newLine[head]) {
+			head++;
+		}
+		// 回退避免切在代理对中间（高位代理后面必须跟着它的低位）。
+		if (head > 0 && isHighSurrogate(oldLine.charCodeAt(head - 1))) {
+			head--;
+		}
+		let tail = 0;
+		while (
+			tail < max - head &&
+			oldLine[oldLine.length - 1 - tail] === newLine[newLine.length - 1 - tail]
+		) {
+			tail++;
+		}
+		if (tail > 0 && isLowSurrogate(oldLine.charCodeAt(oldLine.length - tail))) {
+			tail--;
+		}
+		return {
+			from: { line, ch: head },
+			to: { line, ch: oldLine.length - tail },
+			text: newLine.slice(head, newLine.length - tail),
+		};
 	}
 
 	/**
@@ -1479,11 +1516,14 @@ export default class AutoHeadingsPlugin extends Plugin {
 			strippablePrefixes: prefixes,
 			strippableSuffixes: suffixes,
 		});
-		// 光标所在行保护**必须在折叠自链接之前**：保护后那一行的标题文本没变，就不该产生改名，
-		// 更不该据此改写指向它的内链（否则链接指向一个文件里并不存在的标题）。
+		// 光标所在行保护**必须在折叠自链接之前**：保护改动的是最终落盘内容，改名表与快照都得基于
+		// 它算，否则会据一份并未真正写入的内容去改写内链 / 记快照。
 		if (opts.protectLine !== undefined) {
-			const snapshot = target?.path ? this.headingSnapshots.get(target.path) : undefined;
-			newContent = this.preserveLine(oldContent, newContent, opts.protectLine, snapshot);
+			newContent = this.preserveCursorLineTrailingSpace(
+				oldContent,
+				newContent,
+				opts.protectLine,
+			);
 		}
 		// 同文件内链先折进 newContent，随本次事务一并写回（见 foldSelfBacklinks）；即便编号本身
 		// 未变（M14 纯文本改名）也要折，写回时的行级 diff 会自然识别出这一变化并写回。
@@ -1497,30 +1537,39 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
-	 * 把 `newContent` 里指定的一行还原成 `oldContent` 的样子——「别在用户正敲字的那一行下手」。
+	 * 把用户在光标所在行**刚敲下、尚未敲完**的行尾空白补回 `newContent`——「别在用户正敲字的那一
+	 * 行下手」。
 	 *
 	 * **动机**（testplan J11）：`stripPrefix` 会把标题文本的行尾空白归一化掉（`strip.ts` 的
 	 * `\s+$`，这是幂等所必需的）。但自动路径此前没有任何光标守卫，用户在标题末尾敲一个空格、
 	 * 停顿超过防抖时长，那个空格就被静默吃掉，接着打的字直接贴上去——观感是插件在跟自己抢键盘。
 	 *
-	 * 只剔除这一行，**其余行照常重排**（而不是整轮顺延）：一来别的标题该更新还得更新，二来
-	 * 顺延会在用户光标停在标题行不动时无限期地重排计时器。该行会在光标移开后的下一次触发补上。
+	 * **保护手段两次收窄**：
+	 * 1. 1.0.15 初版把光标所在行的改动**整行**剔出事务，等光标移开后的下一次触发再补。
+	 * 2. 1.0.23 改为「层级相对快照变了就不冻结」，想让改标题层级能立刻生效。
+	 * 3. **1.0.24（本次）彻底换掉冻结这个手段**：只把行尾空白补回去，其余照常写入。
 	 *
-	 * **保护范围精确化**（testplan J16，2026-08-09 用户体验反馈）：此前不问缘由地整行冻结，
-	 * 导致改了标题层级（如敲 `#` 升/降级）后前缀也一并冻结在旧值，必须等光标移开、且等到下一次
-	 * 编辑触发才补上，观感是"卡顿"。现借助 {@link headingSnapshots}（上一次成功写入的层级基线）
-	 * 判断：这一行的标题层级相对基线**没变**，才当作纯打字场景保护；层级已经变了，说明用户刚做了
-	 * 一次结构性改动，本轮就该照常写入新前缀，不必等待。无基线（如文件从未写入过）时无法判断，
-	 * 沿用原保守策略（保护）。
+	 * 换掉的理由是前两版**都在用整行冻结去解决一个只关乎行尾空白的问题**，代价是"该编的号也不
+	 * 编"，而解除冻结依赖的「光标移开后的下一次触发」根本不成立——移动光标**不触发任何事件**
+	 * （自动路径只挂 `editor-change`），用户必须再编辑一次才会补上。真机反馈的两种症状同源：
+	 * 改层级后等不到新编号（1.0.23 用层级判据挡住了这一种）、**新敲出的标题不编号除非按 Enter**
+	 * （层级判据挡不住：新增标题会让标题数量相对快照变化，逐位对照的前提被打破而走保守分支）。
+	 *
+	 * 现在的判据不再需要任何快照或历史推断——**只看这一行现在有没有用户刚敲的行尾空白**：有就补
+	 * 回去，编号照常写。幂等性天然成立：补回后的行与上一轮落盘内容逐字节相同，下一轮算出同样结果
+	 * 即无改动可写；光标移开后那一轮不再补，空白按既有归一化规则清掉。
+	 *
+	 * 与 {@link writeLineDiff} 的最小范围改写配套——编号前缀落在行首、用户光标在行尾，两处互不
+	 * 重叠，本轮写入不会打断用户正在敲的位置。
 	 *
 	 * 返回值随后被 {@link syncAndSnapshot} 用作快照基线，所以快照记的始终是**真正落盘的内容**，
-	 * 不会因为「算出来改了、实际没写」而在下一轮识别出一个幻影改名。
+	 * 不会因为「算出来改了、实际没写」而在下一轮识别出一个幻影改名（行尾空白不进快照——
+	 * {@link parseHeadings} 的 `text` 字段本就去尾空白，故补回空白也不会造成幻影改名）。
 	 */
-	private preserveLine(
+	private preserveCursorLineTrailingSpace(
 		oldContent: string,
 		newContent: string,
 		line: number,
-		snapshot: readonly HeadingSnapshot[] | undefined,
 	): string {
 		const oldLines = oldContent.split("\n");
 		const newLines = newContent.split("\n");
@@ -1528,41 +1577,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (line < 0 || line >= newLines.length || oldLines.length !== newLines.length) {
 			return newContent;
 		}
-		if (oldLines[line] === newLines[line]) {
+		const trailing = /\s+$/.exec(oldLines[line])?.[0];
+		// 用户没在这行留下行尾空白，或本轮压根没动这行的行尾 → 无需干预。
+		if (!trailing || newLines[line].endsWith(trailing)) {
 			return newContent;
 		}
-		if (this.levelChangedSinceSnapshot(oldContent, line, snapshot)) {
-			return newContent;
-		}
-		newLines[line] = oldLines[line];
+		newLines[line] += trailing;
 		return newLines.join("\n");
-	}
-
-	/**
-	 * 光标所在行的标题层级，相对 {@link headingSnapshots} 记录的上一次成功写入基线是否发生了变化
-	 * （见 {@link preserveLine} J16）。用层级（而非文本）判断：层级从不受任何剥离/归一化影响，
-	 * 变了就一定是用户刚敲 `#` 做的结构性改动，不可能是行尾空白之类的打字噪音。
-	 *
-	 * 无基线、或标题数量相对基线已变化（逐位对照的前提被打破，同 {@link computeSnapshotRenames}
-	 * 的保守策略）时返回 `false`——保守起见，无法判断就当作"没变"，交由既有整行保护兜底。
-	 */
-	private levelChangedSinceSnapshot(
-		oldContent: string,
-		line: number,
-		snapshot: readonly HeadingSnapshot[] | undefined,
-	): boolean {
-		if (!snapshot) {
-			return false;
-		}
-		const headings = parseHeadings(oldContent);
-		if (headings.length !== snapshot.length) {
-			return false;
-		}
-		const index = headings.findIndex((h) => h.lineIndex === line);
-		if (index === -1) {
-			return false;
-		}
-		return headings[index].level !== snapshot[index].level;
 	}
 
 	/**
@@ -1712,6 +1733,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 interface LinkTarget {
 	path: string;
 	basename?: string;
+}
+
+/** UTF-16 高位代理（代理对的前一半），见 `lineChange` 的切点回退。 */
+function isHighSurrogate(code: number): boolean {
+	return code >= 0xd800 && code <= 0xdbff;
+}
+
+/** UTF-16 低位代理（代理对的后一半），见 `lineChange` 的切点回退。 */
+function isLowSurrogate(code: number): boolean {
+	return code >= 0xdc00 && code <= 0xdfff;
 }
 
 /**
