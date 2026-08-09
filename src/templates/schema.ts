@@ -16,6 +16,7 @@ import {
 	type LevelFormat,
 	normalizeAncestorNumeral,
 	normalizeBottomLevel,
+	normalizeInheritDepth,
 	normalizeStartIndex,
 	normalizeTopLevel,
 	type NumeralStyle,
@@ -74,7 +75,7 @@ function normalizeNumeral(v: unknown): NumeralStyle {
 }
 
 /** 将磁盘上的单级格式对象规范化为合法的 {@link LevelFormat}（`inherit` 缺省视为 true）。 */
-function normalizeLevel(raw: unknown): LevelFormat {
+function normalizeLevel(raw: unknown, maxDepth: number): LevelFormat {
 	const base = defaultLevel();
 	if (!isObject(raw)) {
 		return base;
@@ -87,6 +88,7 @@ function normalizeLevel(raw: unknown): LevelFormat {
 		titleSeparator: normalizeString(raw.titleSeparator, base.titleSeparator),
 		// inherit 缺省视为 true；仅当显式为 false 时关闭。
 		inherit: raw.inherit === false ? false : true,
+		inheritDepth: normalizeInheritDepth(raw.inheritDepth, maxDepth),
 	};
 }
 
@@ -146,12 +148,12 @@ export function normalizeTemplate(raw: unknown, fallbackName: string): Template 
 	return {
 		name: normalizeString(obj.name, fallbackName),
 		levels: {
-			h1: normalizeLevel(levels.h1),
-			h2: normalizeLevel(levels.h2),
-			h3: normalizeLevel(levels.h3),
-			h4: normalizeLevel(levels.h4),
-			h5: normalizeLevel(levels.h5),
-			h6: normalizeLevel(levels.h6),
+			h1: normalizeLevel(levels.h1, 0),
+			h2: normalizeLevel(levels.h2, 1),
+			h3: normalizeLevel(levels.h3, 2),
+			h4: normalizeLevel(levels.h4, 3),
+			h5: normalizeLevel(levels.h5, 4),
+			h6: normalizeLevel(levels.h6, 5),
 		},
 		whitelist: normalizeWhitelist(obj.whitelist),
 		skipFill: normalizeSkipFill(obj.skipFill),

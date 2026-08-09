@@ -21,7 +21,9 @@ import { buildPrefix } from "./render";
 import { stripHeadingPrefix, stripPrefix, WORD_JOINER, type StripAffixOptions } from "./strip";
 import {
 	DEFAULT_TEMPLATE,
+	getLevelFormat,
 	normalizeBottomLevel,
+	normalizeInheritDepth,
 	normalizeSkipFill,
 	normalizeTopLevel,
 	type Template,
@@ -123,6 +125,13 @@ export function numberHeadings(
 	return headings.map((heading) => {
 		const level = heading.level;
 		const hashes = "#".repeat(level);
+		const fmt = getLevelFormat(template, level);
+		const inheritDepth =
+			fmt?.inherit === true ? normalizeInheritDepth(fmt.inheritDepth, level - 1) : null;
+		const skipCheckStart =
+			fmt?.inherit === true && inheritDepth !== null
+				? Math.max(top, level - inheritDepth)
+				: top;
 
 		// 白名单命中 **或** 行尾带 `<!-- skip -->` 标记（issue #6，spec §3.21）：完全透明
 		//（不计数、不归零），但剥离其已有编号——所以给一个**已编号**的标题补上标记，下一次重排
@@ -168,7 +177,7 @@ export function numberHeadings(
 			level > top &&
 			counter
 				.sequence(level)
-				.slice(top - 1, -1)
+				.slice(skipCheckStart - 1, -1)
 				.includes(0)
 		) {
 			return bareHeading(heading);
