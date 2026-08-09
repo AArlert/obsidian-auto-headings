@@ -548,6 +548,7 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
 	});
 
@@ -556,6 +557,7 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(ed.txnCount).toBe(0);
 		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
 	});
@@ -565,6 +567,7 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(ed.getValue()).toBe("## 章");
 	});
 
@@ -574,6 +577,7 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 		const ed = new FakeEditor(content);
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(ed.getValue()).toBe(content);
 	});
 
@@ -582,6 +586,7 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		expect(() => p.renumberOnOpen({ path: "a.md" })).not.toThrow();
+		vi.advanceTimersByTime(0);
 		expect(ed.getValue()).toBe("## 章");
 	});
 
@@ -590,6 +595,7 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "active.md" } });
 		p.renumberOnOpen({ path: "other.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(ed.getValue()).toBe("## 章");
 	});
 
@@ -597,6 +603,7 @@ describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9
 		const { p, setActiveView } = makePlugin();
 		setActiveView(null);
 		expect(() => p.renumberOnOpen({ path: "a.md" })).not.toThrow();
+		vi.advanceTimersByTime(0);
 	});
 });
 
@@ -622,6 +629,7 @@ describe("迁移守卫：疑似外来编号且插件从未接触过的文件，�
 		const ed = new FakeEditor("## 第3章 引言");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(ed.getValue()).toBe("## 第3章 引言");
 		expect(ed.txnCount).toBe(0);
 		expect(Notice.messages).toHaveLength(1);
@@ -676,6 +684,59 @@ describe("迁移守卫：疑似外来编号且插件从未接触过的文件，�
 		expect(ed.getValue()).toBe(
 			`## ${WORD_JOINER}1 ${WORD_JOINER}红米\n### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`,
 		);
+	});
+});
+
+describe("file-open 时编辑器内容尚未换到位（J15，1.0.20 修第三轮真机反馈）", () => {
+	/**
+	 * 真机链路：`file-open` 触发那一刻，Obsidian 已把 `view.file` 换成新文件，但编辑器里的内容
+	 * 还是上一篇的。用一个「`file` 已是 b.md、`editor` 仍持 a.md 内容」的视图精确模拟这个瞬间，
+	 * 并在推进事件循环时把内容换成 b.md 的——正是真实环境的时序。
+	 */
+	it("不拿上一篇的内容去判断新文件（用户报的「切到已接管文件反而弹提示、点进去说没什么可清理」）", () => {
+		const { p, setActiveView, setActiveFile } = makePlugin();
+		// 同一个 editor 实例被复用来显示新文件（Obsidian 的真实行为）。
+		const shared = new FakeEditor("## 1 红米"); // 此刻还是 a.md 的内容（疑似外来编号）。
+		setActiveView({ editor: shared, file: { path: "b.md" } }); // view.file 已经是 b.md。
+		setActiveFile({ path: "b.md" });
+
+		p.renumberOnOpen({ path: "b.md" });
+		// 事件循环推进前，内容换成 b.md 真正的样子（本插件已接管、带 WJ）。
+		shared.setValue(`## ${WORD_JOINER}1 ${WORD_JOINER}模块设计`);
+		vi.advanceTimersByTime(0);
+
+		// 不该为 b.md 弹「疑似外来编号」——它其实是干净的。
+		expect(Notice.messages).toHaveLength(0);
+	});
+
+	it("延后之后用户又切走了：整轮作废，不动任何文件", () => {
+		const { p, setActiveView, setActiveFile } = makePlugin();
+		const ed = new FakeEditor("## 章");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		setActiveFile({ path: "a.md" });
+
+		p.renumberOnOpen({ path: "a.md" });
+		setActiveFile({ path: "b.md" }); // 这一瞬用户又切走了。
+		vi.advanceTimersByTime(0);
+
+		expect(ed.getValue()).toBe("## 章"); // 没有按 a.md 的模板动 b.md 的编辑器。
+		expect(ed.txnCount).toBe(0);
+	});
+
+	it("防抖到期时该叶子已切到别的文件：本轮作废（不为看不见的文件弹提示、更不写错文件）", () => {
+		const { p, setActiveFile } = makePlugin();
+		const ed = new FakeEditor("## 1 红米");
+		// info.file 与 editor 都是「同一个叶子」的引用；切换文件后 info.file.path 会变。
+		const info = { file: { path: "a.md" } };
+		setActiveFile({ path: "a.md" });
+
+		p.scheduleRenumber(ed, info);
+		info.file.path = "b.md"; // 叶子在防抖窗口内切到了 b.md。
+		setActiveFile({ path: "b.md" });
+		vi.advanceTimersByTime(300);
+
+		expect(Notice.messages).toHaveLength(0);
+		expect(ed.txnCount).toBe(0);
 	});
 });
 
@@ -734,6 +795,7 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		setActiveView({ editor: a, file: { path: "a.md" } });
 		setActiveFile({ path: "a.md" });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(Notice.messages).toHaveLength(1);
 		expect(Notice.instances[0].hidden).toBe(false);
 
@@ -741,6 +803,7 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		setActiveView({ editor: b, file: { path: "b.md" } });
 		setActiveFile({ path: "b.md" });
 		p.renumberOnOpen({ path: "b.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(Notice.instances[0].hidden).toBe(true);
 	});
 
@@ -752,15 +815,18 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		setActiveView({ editor: a, file: { path: "a.md" } });
 		setActiveFile({ path: "a.md" });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(Notice.messages).toHaveLength(1);
 
 		setActiveView({ editor: b, file: { path: "b.md" } });
 		setActiveFile({ path: "b.md" });
 		p.renumberOnOpen({ path: "b.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 
 		setActiveView({ editor: a, file: { path: "a.md" } });
 		setActiveFile({ path: "a.md" });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(Notice.messages).toHaveLength(2); // 回来后重新提示。
 	});
 
@@ -784,10 +850,12 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		const ed = new FakeEditor("## 1 红米");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(Notice.messages).toHaveLength(1);
 
 		ed.setValue("## 红米"); // 用户手动清理干净。
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(Notice.messages).toHaveLength(1); // 未再命中守卫，无新提示。
 		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}红米`); // 正常接管编号。
 	});
@@ -799,6 +867,7 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () 
 		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		expect(Notice.messages).toHaveLength(1);
 
 		const frag = Notice.lastFragment;
@@ -832,6 +901,7 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () 
 		const ed = new FakeEditor("## 1 红米");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		Notice.lastFragment!.children[0].click();
 		expect(Modal.instances).toHaveLength(1);
 		// 不调用 onConfirm：内容原封不动。
@@ -843,6 +913,7 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () 
 		const ed = new FakeEditor("## 1 红米");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		const link = Notice.lastFragment!.children[0];
 
 		setActiveView(null); // 模拟该文件的标签页已关闭。
@@ -856,6 +927,7 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () 
 		const ed = new FakeEditor("## 1 红米");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
+		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
 		const link = Notice.lastFragment!.children[0];
 
 		ed.setValue("## 红米"); // 点击前用户已手动清理干净。

@@ -573,9 +573,33 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 文件」的守卫提示——不管后面几步是否提前 return（全局开关关 / 无模板等），用户已经切到别的
 	 * 文件这件事本身就该让上一条提示消失，否则屏幕上会留一条指向另一篇笔记的孤儿提示，被读成
 	 * 在说眼前这篇（1.0.19 真机反馈的症状之一）。
+	 *
+	 * ★ **为什么要延后一个事件循环再干活**（1.0.20，第三轮真机反馈的根因，testplan J15）：
+	 * `file-open` 触发那一刻，Obsidian 已经把 `view.file` 换成了新文件，**但编辑器里的内容可能
+	 * 还是上一篇的**。同步读 `editor.getValue()` 会拿到**陈旧内容**，后果有二：
+	 * 1. 守卫用 A 的内容判断、却把提示挂在 B 的路径上——用户切到一个本插件已接管的文件时看到
+	 *    「疑似外来编号」提示，点进去又发现没什么可清理（因为 B 的真实内容是干净的）；切回 A 时
+	 *    编辑器又还停在 B 的内容上，于是反而不提示。三条症状同源，正是用户报的现象。
+	 * 2. **更危险的潜在后果**：若那份陈旧内容恰好是「干净但没编号」的，`applyRenumber` 会把
+	 *    **A 的编号写进 B 的编辑器**。这次是守卫恰好拦住才没发生。
+	 *
+	 * 故把实际动作推到下一个宏任务，并在那时**重新解析**活动视图 + 重新确认它就是本次打开的
+	 * 文件（用户可能在这一瞬又切走了）。J9「打开即按当前模板重排」的语义不受影响——它本来就
+	 * 不要求同步完成。
 	 */
 	private renumberOnOpen(file: { path: string }): void {
 		this.dismissGuardNoticeUnlessFor(file.path);
+		window.setTimeout(() => {
+			this.renumberOnOpenSettled(file);
+		}, 0);
+	}
+
+	/** {@link renumberOnOpen} 延后一个事件循环后的实际动作（内容已换到位）。 */
+	private renumberOnOpenSettled(file: { path: string }): void {
+		// 这一瞬用户可能又切走了：以「当前活动文件」为准，不是本次打开的这个就整轮作废。
+		if (this.app.workspace.getActiveFile?.()?.path !== file.path) {
+			return;
+		}
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view || view.file?.path !== file.path) {
 			return; // 活动视图与本次打开的文件不一致（如后台/快速切换）时不强行处理。
@@ -1164,6 +1188,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 			// IME 组合中（拼音尚未上屏，J8）：不写回，顺延一个防抖周期再试。
 			if (this.imeComposing) {
 				this.scheduleRenumber(editor, info);
+				return;
+			}
+			// 该叶子在这 300ms 内已切到别的文件（同一个 MarkdownView / Editor 实例会被复用来
+			// 显示新文件）：本轮整个作废（1.0.20，testplan J15）。否则会拿新文件的内容去跑
+			// 「安排这轮时那个文件」的逻辑——轻则为看不见的文件弹提示，重则把编号写错文件。
+			if (info.file?.path !== path) {
 				return;
 			}
 			// 计时器到期时再次校验（其间用户可能改了开关或 frontmatter）。
