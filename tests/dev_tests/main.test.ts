@@ -1817,7 +1817,7 @@ describe("清除即暂停 / 重新编号即恢复（1.0.15，testplan H13–H16�
 	});
 });
 
-describe("光标所在行行尾空白保护（1.0.24 换掉整行冻结，testplan J11）", () => {
+describe("光标所在行行尾空白保护（1.0.23 换掉整行冻结，testplan J11）", () => {
 	it("J11：光标停在刚敲了行尾空格的标题行上 → 空格保住，但编号照常写入", () => {
 		const { p } = makePlugin({ autoNumber: true });
 		const ed = new FakeEditor(["## 章一 ", "## 章二"].join("\n"));
@@ -1890,7 +1890,7 @@ describe("光标所在行行尾空白保护（1.0.24 换掉整行冻结，testpl
 	});
 });
 
-describe("新敲出的标题当轮即编号（1.0.24 真机反馈，testplan J19）", () => {
+describe("新敲出的标题当轮即编号（1.0.23 真机反馈，testplan J19）", () => {
 	it("J19：在空行上新敲一个标题、光标停在行尾 → 本轮就编号，不必再按 Enter", () => {
 		const { p } = makePlugin({ autoNumber: true });
 		const ed = new FakeEditor(["## 章一", ""].join("\n"));
@@ -1904,7 +1904,7 @@ describe("新敲出的标题当轮即编号（1.0.24 真机反馈，testplan J19
 		p.scheduleRenumber(ed, fileInfo("a.md"));
 		vi.advanceTimersByTime(500);
 
-		// 新增标题会让标题数量相对快照变化——1.0.23 的层级判据在这里走保守分支、整行冻结，
+		// 新增标题会让标题数量相对快照变化——曾经的层级判据在这里走保守分支、整行冻结，
 		// 于是「不按 Enter 就不编号」。现在不再依赖任何快照推断，本轮直接写入。
 		expect(ed.getValue().split("\n")[1]).toBe(`## ${WORD_JOINER}2 ${WORD_JOINER}新标题`);
 	});
