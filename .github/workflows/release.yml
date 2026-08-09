@@ -39,9 +39,15 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               # 说明文本优先取仓库内 doc/release-notes/<tag>.md（人写的双语说明，随代码入库可追溯）；
               # 没有该文件时回退到 --generate-notes 自动生成。
+              #
+              # 先删同名 Release 再建，使本工作流**可重复触发**：`gh release create` 在 Release 已
+              # 存在时直接报错退出，于是「把 tag 移到新提交、强推重发」这条路原本走不通（2026-08-09
+              # 首次需要它时才发现）。`--yes` 免交互；不加 `--cleanup-tag`，tag 本身保留不动；
+              # Release 不存在时该命令返回非零，用 `|| true` 咽掉，首次发布照常。
               run: |
                   tag="${GITHUB_REF#refs/tags/}"
                   notes="doc/release-notes/$tag.md"
+                  gh release delete "$tag" --yes || true
                   if [ -f "$notes" ]; then
                     gh release create "$tag" \
                       --title "$tag" \
