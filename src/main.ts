@@ -574,30 +574,53 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 文件这件事本身就该让上一条提示消失，否则屏幕上会留一条指向另一篇笔记的孤儿提示，被读成
 	 * 在说眼前这篇（1.0.19 真机反馈的症状之一）。
 	 *
-	 * ★ **为什么要延后一个事件循环再干活**（1.0.20，第三轮真机反馈的根因，testplan J15）：
-	 * `file-open` 触发那一刻，Obsidian 已经把 `view.file` 换成了新文件，**但编辑器里的内容可能
-	 * 还是上一篇的**。同步读 `editor.getValue()` 会拿到**陈旧内容**，后果有二：
-	 * 1. 守卫用 A 的内容判断、却把提示挂在 B 的路径上——用户切到一个本插件已接管的文件时看到
-	 *    「疑似外来编号」提示，点进去又发现没什么可清理（因为 B 的真实内容是干净的）；切回 A 时
-	 *    编辑器又还停在 B 的内容上，于是反而不提示。三条症状同源，正是用户报的现象。
-	 * 2. **更危险的潜在后果**：若那份陈旧内容恰好是「干净但没编号」的，`applyRenumber` 会把
-	 *    **A 的编号写进 B 的编辑器**。这次是守卫恰好拦住才没发生。
+	 * ★ **判断依据是「这个文件的内容」，不是「编辑器缓冲区里的内容」**（1.0.21，第四轮真机反馈
+	 * 才定位对，testplan J15）：`file-open` 触发时 Obsidian 已把 `view.file` 换成新文件，**但
+	 * 编辑器里显示的还是上一篇**，而且实测**滞后不止一个事件循环**——1.0.20 试过推迟一个宏任务
+	 * 再读，仍然拿到上一篇的内容。用户复现得很干净：a、b 正常，C 含外来编号，`a → C` 不弹
+	 * （读到的是 a 的干净内容）、`C → b` 反而弹且没什么可清理（读到的是 C 的脏内容、却把提示挂在
+	 * b 上）——**编辑器内容正好落后一个文件**。
 	 *
-	 * 故把实际动作推到下一个宏任务，并在那时**重新解析**活动视图 + 重新确认它就是本次打开的
-	 * 文件（用户可能在这一瞬又切走了）。J9「打开即按当前模板重排」的语义不受影响——它本来就
-	 * 不要求同步完成。
+	 * 故不再读编辑器，改用 `vault.cachedRead(file)`：它按 `TFile` 取该文件自己的内容，与编辑器
+	 * 换没换到位**完全无关**，是时序无关的判据。这也正是用户提的诉求——「只检测当前打开的
+	 * 文件，然后立马弹出提示」。
+	 *
+	 * **写入侧（真的重排）另外把关**：`applyRenumber` 必须通过编辑器写，所以只有在编辑器确实
+	 * 已经显示这个文件、且其内容与刚读到的文件内容**一致**时才动手；不一致说明编辑器尚未换到位
+	 * （或有未落盘改动），本轮跳过写入——**宁可这一轮不重排，也不能把 A 的编号写进 B**
+	 * （1.0.20 记录的那个潜在数据损坏，这里才真正堵死）。用户随后的第一次编辑会经防抖路径补上。
 	 */
-	private renumberOnOpen(file: { path: string }): void {
+	private renumberOnOpen(file: TFile): void {
 		this.dismissGuardNoticeUnlessFor(file.path);
-		window.setTimeout(() => {
-			this.renumberOnOpenSettled(file);
-		}, 0);
+		void this.app.vault
+			.cachedRead(file)
+			.then((content) => {
+				this.renumberOnOpenSettled(file, content);
+			})
+			.catch(() => {
+				/* 读取失败：本轮不判断也不写入，交给后续编辑触发的防抖路径。 */
+			});
 	}
 
-	/** {@link renumberOnOpen} 延后一个事件循环后的实际动作（内容已换到位）。 */
-	private renumberOnOpenSettled(file: { path: string }): void {
-		// 这一瞬用户可能又切走了：以「当前活动文件」为准，不是本次打开的这个就整轮作废。
+	/**
+	 * {@link renumberOnOpen} 读到**该文件自己的内容**之后的实际动作。
+	 *
+	 * @param content `vault.cachedRead(file)` 的结果——权威、与编辑器换没换到位无关。
+	 */
+	private renumberOnOpenSettled(file: TFile, content: string): void {
+		// 异步读盘期间用户可能又切走了：以「当前活动文件」为准，不是本次打开的这个就整轮作废。
 		if (this.app.workspace.getActiveFile?.()?.path !== file.path) {
+			return;
+		}
+		if (!this.shouldAutoTrigger(content)) {
+			return;
+		}
+		const template = this.getTemplateForFile(file.path);
+		if (!template) {
+			return;
+		}
+		// 守卫与提示都基于文件自身内容——这一步不碰编辑器，故不受换页时序影响。
+		if (this.guardForeignNumbering(file.path, content)) {
 			return;
 		}
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -605,15 +628,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return; // 活动视图与本次打开的文件不一致（如后台/快速切换）时不强行处理。
 		}
 		const editor = view.editor;
-		if (!editor || !this.shouldAutoTrigger(editor.getValue())) {
-			return;
-		}
-		const template = this.getTemplateForFile(file.path);
-		if (!template) {
-			return;
-		}
-		if (this.guardForeignNumbering(file.path, editor.getValue())) {
-			return;
+		if (!editor || editor.getValue() !== content) {
+			return; // 编辑器尚未换到位 / 有未落盘改动：本轮只判断不写入（见上方 JSDoc）。
 		}
 		this.applyRenumber(editor, template, view.file);
 	}

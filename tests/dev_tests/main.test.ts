@@ -187,6 +187,25 @@ function makePlugin(
 		getMarkdownFiles: () =>
 			[...vaultFiles.keys()].map((p) => ({ path: p, basename: fileBasename(p) })),
 		read: async (file: { path: string }) => vaultFiles.get(file.path) ?? "",
+		/**
+		 * 「这个文件自己的内容」——`renumberOnOpen` 的判断依据（J15）。**刻意不走编辑器**：真实
+		 * Obsidian 在 `file-open` 那一刻编辑器还显示着上一篇，读编辑器会拿到别的文件的内容。
+		 * 显式给了 `vaultFiles` 就用它（可与编辑器内容不一致，正是要建模的那个瞬间）；
+		 * 没给则回落到持有该文件的视图，保持既有用例（内容只活在 FakeEditor 里）行为不变。
+		 */
+		cachedRead: async (file: { path: string }) => {
+			if (vaultFiles.has(file.path)) {
+				return vaultFiles.get(file.path) ?? "";
+			}
+			const leaf = leaves.find((l) => l.view.file?.path === file.path);
+			if (leaf) {
+				return leaf.view.editor.getValue();
+			}
+			if (activeView?.file?.path === file.path) {
+				return activeView.editor.getValue();
+			}
+			return "";
+		},
 		modify: async (file: { path: string }, content: string) => {
 			vaultFiles.set(file.path, content);
 		},
@@ -543,67 +562,67 @@ describe("renumberActiveFile：设置面板改模板后即时重排（J5）", ()
 });
 
 describe("renumberOnOpen：打开文件即按当前生效模板自动重排（J9，用户需求）", () => {
-	it("路径规则改投新模板后，尚未编辑、只是打开该文件即按新模板重排", () => {
+	it("路径规则改投新模板后，尚未编辑、只是打开该文件即按新模板重排", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
 	});
 
-	it("已是当前模板的正确格式：打开时静默 no-op，不重复写回", () => {
+	it("已是当前模板的正确格式：打开时静默 no-op，不重复写回", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(ed.txnCount).toBe(0);
 		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}章`);
 	});
 
-	it("全局自动编号关 + 无 frontmatter：打开不触发（同 I4 门控）", () => {
+	it("全局自动编号关 + 无 frontmatter：打开不触发（同 I4 门控）", async () => {
 		const { p, setActiveView } = makePlugin({ autoNumber: false });
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(ed.getValue()).toBe("## 章");
 	});
 
-	it("frontmatter 显式 false：即便全局开也不触发（同 I2 门控）", () => {
+	it("frontmatter 显式 false：即便全局开也不触发（同 I2 门控）", async () => {
 		const { p, setActiveView } = makePlugin();
 		const content = ["---", "obsidian-auto-headings: false", "---", "## 章"].join("\n");
 		const ed = new FakeEditor(content);
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(ed.getValue()).toBe(content);
 	});
 
-	it("无任何路径规则命中：静默跳过、不抛错", () => {
+	it("无任何路径规则命中：静默跳过、不抛错", async () => {
 		const { p, setActiveView } = makePlugin({ pathRules: [] });
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		expect(() => p.renumberOnOpen({ path: "a.md" })).not.toThrow();
-		vi.advanceTimersByTime(0);
+		await flushPromises();
 		expect(ed.getValue()).toBe("## 章");
 	});
 
-	it("打开的文件与当前活动视图不一致（如后台/快速切换）：不处理该文件", () => {
+	it("打开的文件与当前活动视图不一致（如后台/快速切换）：不处理该文件", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "active.md" } });
 		p.renumberOnOpen({ path: "other.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(ed.getValue()).toBe("## 章");
 	});
 
-	it("无活动 Markdown 视图：不抛错、不动作", () => {
+	it("无活动 Markdown 视图：不抛错、不动作", async () => {
 		const { p, setActiveView } = makePlugin();
 		setActiveView(null);
 		expect(() => p.renumberOnOpen({ path: "a.md" })).not.toThrow();
-		vi.advanceTimersByTime(0);
+		await flushPromises();
 	});
 });
 
@@ -624,12 +643,12 @@ describe("迁移守卫：疑似外来编号且插件从未接触过的文件，�
 		expect(Notice.messages).toHaveLength(1);
 	});
 
-	it("renumberOnOpen 命中守卫：打开疑似迁移文件不写回，仅提示", () => {
+	it("renumberOnOpen 命中守卫：打开疑似迁移文件不写回，仅提示", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 第3章 引言");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(ed.getValue()).toBe("## 第3章 引言");
 		expect(ed.txnCount).toBe(0);
 		expect(Notice.messages).toHaveLength(1);
@@ -687,29 +706,79 @@ describe("迁移守卫：疑似外来编号且插件从未接触过的文件，�
 	});
 });
 
-describe("file-open 时编辑器内容尚未换到位（J15，1.0.20 修第三轮真机反馈）", () => {
+describe("file-open 判断依据是文件自身内容而非编辑器缓冲区（J15，1.0.21 修第四轮真机反馈）", () => {
 	/**
-	 * 真机链路：`file-open` 触发那一刻，Obsidian 已把 `view.file` 换成新文件，但编辑器里的内容
-	 * 还是上一篇的。用一个「`file` 已是 b.md、`editor` 仍持 a.md 内容」的视图精确模拟这个瞬间，
-	 * 并在推进事件循环时把内容换成 b.md 的——正是真实环境的时序。
+	 * 真机链路（用户第四轮给的干净复现）：a、b 是正常文件，C 含外来编号。
+	 * `a → C` 不弹提示、`C → b` 反而弹且没什么可清理——**编辑器内容正好落后一个文件**：
+	 * 打开 C 时编辑器还显示 a 的内容（干净 ⇒ 不弹），打开 b 时编辑器还显示 C 的内容
+	 * （脏 ⇒ 弹，但提示挂在 b 上，点进去按 b 的真实内容算自然是「没什么可清理」）。
+	 *
+	 * 建模方式：`vaultFiles` 放**文件自己的真实内容**，`FakeEditor` 放**滞后一个文件的内容**。
+	 * 只要实现读的是 `vault.cachedRead(file)` 而不是 `editor.getValue()`，两条断言就都成立。
 	 */
-	it("不拿上一篇的内容去判断新文件（用户报的「切到已接管文件反而弹提示、点进去说没什么可清理」）", () => {
-		const { p, setActiveView, setActiveFile } = makePlugin();
-		// 同一个 editor 实例被复用来显示新文件（Obsidian 的真实行为）。
-		const shared = new FakeEditor("## 1 红米"); // 此刻还是 a.md 的内容（疑似外来编号）。
-		setActiveView({ editor: shared, file: { path: "b.md" } }); // view.file 已经是 b.md。
+	const clean = "## 普通标题";
+	const foreign = "## 1 红米";
+
+	it("a → C（编辑器还显示 a 的干净内容）：仍能认出 C 是脏的并**立即**提示", async () => {
+		const { p, setActiveView, setActiveFile } = makePlugin({
+			vaultFiles: { "C.md": foreign },
+		});
+		// 编辑器滞后：view.file 已是 C.md，内容却还是上一篇 a.md 的。
+		const shared = new FakeEditor(clean);
+		setActiveView({ editor: shared, file: { path: "C.md" } });
+		setActiveFile({ path: "C.md" });
+
+		p.renumberOnOpen({ path: "C.md" });
+		await flushPromises();
+
+		expect(Notice.messages).toHaveLength(1); // 打开 C 就该弹。
+	});
+
+	it("C → b（编辑器还显示 C 的脏内容）：**不**为干净的 b 弹提示", async () => {
+		const { p, setActiveView, setActiveFile } = makePlugin({
+			vaultFiles: { "b.md": clean },
+		});
+		// 编辑器滞后：view.file 已是 b.md，内容却还是上一篇 C.md 的（脏）。
+		const shared = new FakeEditor(foreign);
+		setActiveView({ editor: shared, file: { path: "b.md" } });
 		setActiveFile({ path: "b.md" });
 
 		p.renumberOnOpen({ path: "b.md" });
-		// 事件循环推进前，内容换成 b.md 真正的样子（本插件已接管、带 WJ）。
-		shared.setValue(`## ${WORD_JOINER}1 ${WORD_JOINER}模块设计`);
-		vi.advanceTimersByTime(0);
+		await flushPromises();
 
-		// 不该为 b.md 弹「疑似外来编号」——它其实是干净的。
-		expect(Notice.messages).toHaveLength(0);
+		expect(Notice.messages).toHaveLength(0); // b 是干净的，不该弹。
 	});
 
-	it("延后之后用户又切走了：整轮作废，不动任何文件", () => {
+	it("编辑器尚未换到位时**只判断不写入**（宁可这轮不重排，也不能把别的文件的编号写进来）", async () => {
+		const { p, setActiveView, setActiveFile } = makePlugin({
+			vaultFiles: { "b.md": clean },
+		});
+		const shared = new FakeEditor(foreign); // 仍持上一篇的内容。
+		setActiveView({ editor: shared, file: { path: "b.md" } });
+		setActiveFile({ path: "b.md" });
+
+		p.renumberOnOpen({ path: "b.md" });
+		await flushPromises();
+
+		expect(shared.getValue()).toBe(foreign); // 一个字都没动。
+		expect(shared.txnCount).toBe(0);
+	});
+
+	it("编辑器已换到位（内容与文件一致）：照常按模板重排（J9 语义不受影响）", async () => {
+		const { p, setActiveView, setActiveFile } = makePlugin({
+			vaultFiles: { "b.md": clean },
+		});
+		const ed = new FakeEditor(clean); // 与文件内容一致 = 已换到位。
+		setActiveView({ editor: ed, file: { path: "b.md" } });
+		setActiveFile({ path: "b.md" });
+
+		p.renumberOnOpen({ path: "b.md" });
+		await flushPromises();
+
+		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}普通标题`);
+	});
+
+	it("延后之后用户又切走了：整轮作废，不动任何文件", async () => {
 		const { p, setActiveView, setActiveFile } = makePlugin();
 		const ed = new FakeEditor("## 章");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
@@ -717,7 +786,7 @@ describe("file-open 时编辑器内容尚未换到位（J15，1.0.20 修第三�
 
 		p.renumberOnOpen({ path: "a.md" });
 		setActiveFile({ path: "b.md" }); // 这一瞬用户又切走了。
-		vi.advanceTimersByTime(0);
+		await flushPromises();
 
 		expect(ed.getValue()).toBe("## 章"); // 没有按 a.md 的模板动 b.md 的编辑器。
 		expect(ed.txnCount).toBe(0);
@@ -787,7 +856,7 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		expect(Notice.instances.filter((n) => !n.hidden)).toHaveLength(1);
 	});
 
-	it("切到别的文件：上一条提示被收起（不留下指向另一篇笔记的孤儿提示）", () => {
+	it("切到别的文件：上一条提示被收起（不留下指向另一篇笔记的孤儿提示）", async () => {
 		const { p, setActiveView, setActiveFile } = makePlugin();
 		const a = new FakeEditor("## 1 红米");
 		const b = new FakeEditor("## 普通标题");
@@ -795,7 +864,7 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		setActiveView({ editor: a, file: { path: "a.md" } });
 		setActiveFile({ path: "a.md" });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(Notice.messages).toHaveLength(1);
 		expect(Notice.instances[0].hidden).toBe(false);
 
@@ -803,11 +872,11 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		setActiveView({ editor: b, file: { path: "b.md" } });
 		setActiveFile({ path: "b.md" });
 		p.renumberOnOpen({ path: "b.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(Notice.instances[0].hidden).toBe(true);
 	});
 
-	it("切走再切回仍命中守卫：重新提示（这是 1.0.17 反馈要修的原始诉求）", () => {
+	it("切走再切回仍命中守卫：重新提示（这是 1.0.17 反馈要修的原始诉求）", async () => {
 		const { p, setActiveView, setActiveFile } = makePlugin();
 		const a = new FakeEditor("## 1 红米");
 		const b = new FakeEditor("## 普通标题");
@@ -815,18 +884,18 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		setActiveView({ editor: a, file: { path: "a.md" } });
 		setActiveFile({ path: "a.md" });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(Notice.messages).toHaveLength(1);
 
 		setActiveView({ editor: b, file: { path: "b.md" } });
 		setActiveFile({ path: "b.md" });
 		p.renumberOnOpen({ path: "b.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 
 		setActiveView({ editor: a, file: { path: "a.md" } });
 		setActiveFile({ path: "a.md" });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(Notice.messages).toHaveLength(2); // 回来后重新提示。
 	});
 
@@ -845,29 +914,29 @@ describe("迁移守卫提示只为当前活动文件发声（J13，1.0.19 修真
 		expect(Notice.instances[0].hidden).toBe(true);
 	});
 
-	it("重新打开后若已清理干净，不再命中守卫、也不再提示", () => {
+	it("重新打开后若已清理干净，不再命中守卫、也不再提示", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 1 红米");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(Notice.messages).toHaveLength(1);
 
 		ed.setValue("## 红米"); // 用户手动清理干净。
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(Notice.messages).toHaveLength(1); // 未再命中守卫，无新提示。
 		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}红米`); // 正常接管编号。
 	});
 });
 
 describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () => {
-	it("点击链接：打开确认框，预览「现状→清理后」逐条对照；确认后与「清理非本插件的标题编号」命令结果一致", () => {
+	it("点击链接：打开确认框，预览「现状→清理后」逐条对照；确认后与「清理非本插件的标题编号」命令结果一致", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		expect(Notice.messages).toHaveLength(1);
 
 		const frag = Notice.lastFragment;
@@ -896,24 +965,24 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () 
 		expect(ed.getValue()).toBe("## 红米\n### 工艺");
 	});
 
-	it("不确认（相当于点「取消」/直接关闭）不改动文件内容", () => {
+	it("不确认（相当于点「取消」/直接关闭）不改动文件内容", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 1 红米");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		Notice.lastFragment!.children[0].click();
 		expect(Modal.instances).toHaveLength(1);
 		// 不调用 onConfirm：内容原封不动。
 		expect(ed.getValue()).toBe("## 1 红米");
 	});
 
-	it("点击时该文件已不在任何已打开的标签页：提示改为重新打开，不抛错、不开确认框", () => {
+	it("点击时该文件已不在任何已打开的标签页：提示改为重新打开，不抛错、不开确认框", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 1 红米");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		const link = Notice.lastFragment!.children[0];
 
 		setActiveView(null); // 模拟该文件的标签页已关闭。
@@ -922,12 +991,12 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14）", () 
 		expect(Notice.messages).toContain("该文件已不在任何标签页中，请重新打开后再清理");
 	});
 
-	it("点击时内容已不含外来编号（用户已自行清理）：提示无可清理，不开确认框", () => {
+	it("点击时内容已不含外来编号（用户已自行清理）：提示无可清理，不开确认框", async () => {
 		const { p, setActiveView } = makePlugin();
 		const ed = new FakeEditor("## 1 红米");
 		setActiveView({ editor: ed, file: { path: "a.md" } });
 		p.renumberOnOpen({ path: "a.md" });
-		vi.advanceTimersByTime(0); // 打开后的动作延后一个事件循环（内容换到位再判断，J15）
+		await flushPromises();
 		const link = Notice.lastFragment!.children[0];
 
 		ed.setValue("## 红米"); // 点击前用户已手动清理干净。
