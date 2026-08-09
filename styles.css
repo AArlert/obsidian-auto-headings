@@ -582,6 +582,59 @@ button.ah-tab.ah-tab-active:hover {
 	width: min(640px, 92vw);
 }
 
+/* 顶部搜索定位（J17 追加）：候选多时按标题现状文本实时匹配，结果列表紧贴输入框下方。 */
+.ah-foreign-guard-search {
+	margin: 0 0 12px;
+}
+
+.ah-foreign-guard-search-input {
+	width: 100%;
+}
+
+.ah-foreign-guard-search-results {
+	margin: 6px 0 0;
+	padding-left: 0;
+	list-style: none;
+	max-height: 30vh;
+	overflow-y: auto;
+}
+
+.ah-foreign-guard-search-results:empty {
+	margin: 0;
+}
+
+.ah-foreign-guard-search-result {
+	padding: 6px 10px;
+	border-radius: var(--radius-s, 4px);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	overflow-wrap: anywhere;
+}
+
+.ah-foreign-guard-search-result:hover {
+	background: var(--background-modifier-hover);
+}
+
+.ah-foreign-guard-search-empty {
+	padding: 6px 10px;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+/* 搜索结果跳转命中时的短暂高亮，帮用户在长列表里一眼找到目标。 */
+.ah-foreign-guard-item-flash {
+	animation: ah-foreign-guard-flash 1.2s ease-out;
+}
+
+@keyframes ah-foreign-guard-flash {
+	0% {
+		background: var(--text-selection, var(--background-modifier-hover));
+	}
+	100% {
+		background: var(--background-secondary);
+	}
+}
+
 .ah-foreign-guard-list {
 	max-height: 50vh;
 	overflow-y: auto;
@@ -603,16 +656,11 @@ button.ah-tab.ah-tab-active:hover {
 	background: var(--background-secondary);
 }
 
-/* 逐条勾选（默认勾选=清理，J17）：checkbox + 短文案竖排，点哪都能切换。 */
+/* 逐条勾选（默认勾选=清理，J17）：checkbox 与 diff 首行对齐。 */
 .ah-foreign-guard-toggle {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 4px;
 	flex: 0 0 auto;
 	padding-top: 2px;
 	cursor: pointer;
-	user-select: none;
 }
 
 .ah-foreign-guard-checkbox {
@@ -621,12 +669,6 @@ button.ah-tab.ah-tab-active:hover {
 	margin: 0;
 	accent-color: var(--interactive-accent);
 	cursor: pointer;
-}
-
-.ah-foreign-guard-toggle-text {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
-	white-space: nowrap;
 }
 
 /* git 风格 −/+ 两行对照：现状（红）在上，套模板后的效果（绿）在下。 */
@@ -690,7 +732,6 @@ button.ah-tab.ah-tab-active:hover {
 	}
 
 	.ah-foreign-guard-toggle {
-		flex-direction: row;
 		align-self: flex-start;
 		padding-top: 0;
 	}

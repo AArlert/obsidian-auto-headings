@@ -251,10 +251,12 @@ export interface Messages {
 	foreignGuardModalTitle: string;
 	foreignGuardModalBody: (count: number) => string;
 	foreignGuardModalConfirm: string;
-	/** 逐条勾选框的可见文案（J17）。 */
-	foreignGuardItemToggleLabel: string;
 	/** 逐条勾选框的 aria-label，携带该标题现状文本以便读屏区分（J17）。 */
 	foreignGuardItemToggle: (before: string) => string;
+	/** 顶部搜索框占位符（J17）。 */
+	foreignGuardSearchPlaceholder: string;
+	/** 搜索无匹配时的提示（J17）。 */
+	foreignGuardSearchEmpty: string;
 
 	// —— 命令名（main.ts）——
 	cmdToggle: string;
@@ -500,8 +502,9 @@ const zh: Messages = {
 	foreignGuardModalBody: (count) =>
 		`以下 ${count} 处标题看起来带编号，但插件不确定是不是你自己写的（如「API 设计」「TODO 清单」这类标题也可能被误判）。默认全部勾选清理；取消勾选的会保留原文，插件仍会照常在前面按模板加上自己的编号：`,
 	foreignGuardModalConfirm: "确认清理",
-	foreignGuardItemToggleLabel: "清理",
 	foreignGuardItemToggle: (before) => `清理「${before}」的外来编号`,
+	foreignGuardSearchPlaceholder: "搜索标题…",
+	foreignGuardSearchEmpty: "没有匹配的标题",
 
 	cmdToggle: "切换全局自动编号（全局）",
 	cmdRenumber: "立即重新编号（当前文件）",
@@ -756,8 +759,9 @@ const en: Messages = {
 	foreignGuardModalBody: (count) =>
 		`The following ${count} heading(s) look numbered, but the plugin isn't sure you wrote that yourself (headings like "API design" or "TODO list" can trigger a false positive too). All are checked to clean up by default; unchecking one keeps its original text as-is — the plugin will still add its own numbering in front of it using the current template:`,
 	foreignGuardModalConfirm: "Confirm cleanup",
-	foreignGuardItemToggleLabel: "Clean up",
 	foreignGuardItemToggle: (before) => `Clean up foreign numbering in "${before}"`,
+	foreignGuardSearchPlaceholder: "Search headings…",
+	foreignGuardSearchEmpty: "No matching headings",
 
 	cmdToggle: "Toggle global auto-numbering (global)",
 	cmdRenumber: "Renumber now (current file)",

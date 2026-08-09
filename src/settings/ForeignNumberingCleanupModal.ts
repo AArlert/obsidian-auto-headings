@@ -22,6 +22,8 @@ export interface ForeignNumberingCandidate {
  * 2. **逐条可勾选**（J17）：默认全部勾选=清理；取消勾选的标题保留原文，插件仍会在前面按模板
  *    插入自己的编号（双重编号观感，与「未接管标题」的既有语义一致）——用户对哪些是自己手写的、
  *    哪些是插件误判的，比插件自己判断得准，理应由用户逐条拍板而非只能整体接受/拒绝。
+ * 3. **顶部搜索定位**（J17 追加）：候选多时逐条翻找累，搜索框按标题现状文本实时匹配，点结果
+ *    （或直接回车取第一条）把主列表滚动到对应条目并短暂高亮——纯定位辅助，不改变任何勾选状态。
  *
  * 预览随勾选状态**实时重算**（{@link computePreview}，由 main.ts 的 `computeForeignCleanupPreview`
  * 提供）而非提前算好两个静态变体——白名单 `subtree` 匹配依据标题文本判豁免，某条外来编号是否被
@@ -30,6 +32,8 @@ export interface ForeignNumberingCandidate {
 export class ForeignNumberingCleanupModal extends Modal {
 	/** 取消勾选（=保留原文，不清理）的行号集合；默认空集＝全部勾选清理。 */
 	private readonly keepLines = new Set<number>();
+	/** 搜索框当前查询词；跨 {@link render} 重绘保留，避免勾选联动重算时把用户正输入的内容擦掉。 */
+	private searchQuery = "";
 
 	constructor(
 		app: App,
@@ -63,9 +67,72 @@ export class ForeignNumberingCleanupModal extends Modal {
 		contentEl.createEl("h3", { text: this.t.foreignGuardModalTitle });
 		contentEl.createEl("p", { text: this.t.foreignGuardModalBody(this.candidates.length) });
 
+		const items = this.computePreview(this.keepLines);
+		const rows = new Map<number, HTMLElement>();
+
+		const searchWrap = contentEl.createDiv({ cls: "ah-foreign-guard-search" });
+		const searchInput = searchWrap.createEl("input", {
+			type: "text",
+			cls: "ah-foreign-guard-search-input",
+			placeholder: this.t.foreignGuardSearchPlaceholder,
+		});
+		searchInput.value = this.searchQuery;
+		const searchResults = searchWrap.createEl("ul", { cls: "ah-foreign-guard-search-results" });
+
+		const jumpTo = (lineIndex: number): void => {
+			const row = rows.get(lineIndex);
+			if (!row) {
+				return;
+			}
+			row.scrollIntoView({ block: "center", behavior: "smooth" });
+			row.addClass("ah-foreign-guard-item-flash");
+			window.setTimeout(() => row.removeClass("ah-foreign-guard-item-flash"), 1200);
+			this.searchQuery = "";
+			searchInput.value = "";
+			searchResults.empty();
+		};
+
+		const renderSearchResults = (): void => {
+			searchResults.empty();
+			const query = this.searchQuery.trim().toLowerCase();
+			if (!query) {
+				return;
+			}
+			const matches = items.filter((i) => i.before.toLowerCase().includes(query));
+			if (matches.length === 0) {
+				searchResults.createEl("li", {
+					cls: "ah-foreign-guard-search-empty",
+					text: this.t.foreignGuardSearchEmpty,
+				});
+				return;
+			}
+			for (const m of matches) {
+				const row = searchResults.createEl("li", { cls: "ah-foreign-guard-search-result" });
+				row.setText(m.before);
+				row.addEventListener("click", () => jumpTo(m.lineIndex));
+			}
+		};
+		searchInput.addEventListener("input", () => {
+			this.searchQuery = searchInput.value;
+			renderSearchResults();
+		});
+		searchInput.addEventListener("keydown", (evt) => {
+			if (evt.key !== "Enter") {
+				return;
+			}
+			const query = this.searchQuery.trim().toLowerCase();
+			const first = items.find((i) => i.before.toLowerCase().includes(query));
+			if (query && first) {
+				evt.preventDefault();
+				jumpTo(first.lineIndex);
+			}
+		});
+		renderSearchResults();
+
 		const list = contentEl.createEl("ul", { cls: "ah-foreign-guard-list" });
-		for (const item of this.computePreview(this.keepLines)) {
+		for (const item of items) {
 			const li = list.createEl("li", { cls: "ah-foreign-guard-item" });
+			rows.set(item.lineIndex, li);
 
 			const label = li.createEl("label", { cls: "ah-foreign-guard-toggle" });
 			const checkbox = label.createEl("input", {
@@ -74,10 +141,6 @@ export class ForeignNumberingCleanupModal extends Modal {
 			});
 			checkbox.checked = !this.keepLines.has(item.lineIndex);
 			checkbox.setAttr("aria-label", this.t.foreignGuardItemToggle(item.before));
-			label.createSpan({
-				cls: "ah-foreign-guard-toggle-text",
-				text: this.t.foreignGuardItemToggleLabel,
-			});
 			checkbox.addEventListener("change", () => {
 				if (checkbox.checked) {
 					this.keepLines.delete(item.lineIndex);
