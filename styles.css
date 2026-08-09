@@ -647,23 +647,26 @@ button.ah-tab.ah-tab-active:hover {
 }
 
 .ah-foreign-guard-item {
-	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-	padding: 12px 14px;
+	position: relative;
+	padding: 12px 14px 12px 40px;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m, 8px);
 	background: var(--background-secondary);
 }
 
-/* 逐条勾选（默认勾选=清理，J17）：checkbox 与 diff 首行对齐。 */
+/* 逐条勾选（默认勾选=清理，J17）：checkbox 绝对定位悬在左侧留白里，不挤占 diff 的横向空间，
+   diff 因此能在所有宽度下都占满卡片内容区（1.0.24 起不再随宽度切换横排/竖排）。
+   `top` 与 item 的 `padding-top` 相等 ⇒ 天然对齐 before（红）首行顶部，红行换行成两排也不受影响。 */
 .ah-foreign-guard-toggle {
-	flex: 0 0 auto;
-	padding-top: 2px;
+	position: absolute;
+	top: 12px;
+	left: 14px;
+	display: block;
 	cursor: pointer;
 }
 
 .ah-foreign-guard-checkbox {
+	display: block;
 	width: 18px;
 	height: 18px;
 	margin: 0;
@@ -673,8 +676,8 @@ button.ah-tab.ah-tab-active:hover {
 
 /* git 风格 −/+ 两行对照：现状（红）在上，套模板后的效果（绿）在下。 */
 .ah-foreign-guard-diff {
-	flex: 1 1 auto;
-	min-width: 0; /* 允许长标题在 flex 容器里正常换行，不撑破卡片 */
+	width: 100%;
+	min-width: 0; /* 允许长标题正常换行，不撑破卡片 */
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
@@ -720,20 +723,15 @@ button.ah-tab.ah-tab-active:hover {
 	color: var(--color-green, #08b94e);
 }
 
-/* 窄屏（含移动端）：勾选框从"左侧竖排"改为顶部横排，diff 块独占一行；勾选可点触区域加大。 */
+/* 窄屏（含移动端）：布局与桌面端一致（checkbox 悬浮左侧留白 + diff 占满内容区），
+   仅放大勾选可点触区域，相应加宽卡片左侧留白避免与 diff 重叠。 */
 @media (max-width: 480px) {
 	.modal.ah-foreign-guard-modal {
 		width: 100vw;
 	}
 
 	.ah-foreign-guard-item {
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	.ah-foreign-guard-toggle {
-		align-self: flex-start;
-		padding-top: 0;
+		padding-left: 44px;
 	}
 
 	.ah-foreign-guard-checkbox {

@@ -5,6 +5,85 @@
 
 ---
 
+## 2026-08-09 社区 PR #7 审核并入：继承级数 inheritDepth（1.0.22）
+
+> **接手者从这里开始读。** 本块是**第一次合入外部贡献**的完整记录——含「PR 基于旧版本该怎么核」的
+> 复用姿势，以及本仓库要求而 PR 不可能自带的那部分收尾（文档 / testplan / 版本 / 产物）。
+
+### 做了什么
+
+合入 GitHub PR [#7](https://github.com/AArlert/obsidian-auto-headings/pull/7)「feat: add configurable heading
+inheritance depth」，新增每级可选字段 `inheritDepth`：`inherit=true` 时**最多往上拼几个祖先段**。
+缺省 / `null` = 继承到 `topLevel`（= 1.0.21 及以前的唯一行为，**老模板零迁移**）。
+截取起点 `max(topLevel, level - inheritDepth)`，**永不越过 `topLevel`**。规格见 `spec.md` §3.6
+「继承级数用途」，场景真值表见 `testplan.md` §P（P1–P12）。
+
+**PR 作者交付的部分**（原样采纳，未改一行逻辑）：`template.ts` 的 `normalizeInheritDepth` +
+`render.ts` `buildPrefix` 截取 + `numbering.ts` skipFill=none 检查范围收窄 + `schema.ts` 按物理层级
+夹紧（h1→0…h6→5）+ `EditPanel.ts` 新增「继承级数」下拉 + i18n 中英文案 + `styles.css` 九列网格 +
+`inherit-depth.test.ts`（220 行，13 例）+ `schema.test.ts` 补 24 行。
+
+**本次补齐的部分**（PR 不可能自带）：`spec.md` §3.6 字段表 + 用途小节 + JSON 示例 + CR-14b；
+`testplan.md` §P 十二行场景；README 中英各一条；`release-notes/1.0.22.md`；bump 1.0.21→1.0.22；
+`release/` 重建；本块 + `status.jsonl`。
+
+### 合并风险怎么核的（可复用姿势）★
+
+PR 基于 `1ff21f8`（**1.0.13**），master 已到 1.0.21，中间隔 **14 个提交**。核查顺序：
+
+1. `git fetch origin refs/pull/7/head:pr-7` → `git merge-base master pr-7` 定位基线。
+2. **只比对 PR 触碰的那几个文件在 master 上的分叉**（`git diff --stat <base> master -- <files>`），
+   而不是看 master 整体改了多少——本次 8 个源文件里 **4 个在 master 上一行没动**
+   （`render.ts` / `template.ts` / `templates/schema.ts` / `EditPanel.ts`），风险面立刻收敛到 3 个。
+3. 分叉的 3 个（`i18n.ts` / `numbering.ts` / `styles.css`）**全部自动合并无冲突**，但
+   **`numbering.ts` 必须手工复核**——master 侧 1.0.17 的 `<!-- skip -->` 分支（issue #6）就落在
+   PR 插入点的**紧邻下方**，自动合并「文本干净」不等于「语义正确」。复核结论：PR 的
+   `skipCheckStart` 计算在 map 回调开头、skip 标记分支在其后，互不干扰，`slice(skipCheckStart - 1, -1)`
+   落在正确的 skipFill=none 分支里。
+4. 门槛：`tsc -noEmit` 干净；`vitest` 516 条 515 绿（唯一红是 `whitelist.test.ts` 的 ICU 排序，
+   **Windows 本地老假红**，与本 PR 无关，master 上同样红）。
+
+### 顺带修掉的一个既有缺陷
+
+`buildPrefix` 里起始编号偏移原本判 `i === 0`（序列首段）。截取起点可变后，首段不再必然是
+`topLevel` 段，PR 改判 `segLevel === top`——**这同时修正了原代码的语义**：偏移本就该跟着
+「真正的 `topLevel` 段」走，而非「序列第一段」。testplan P5 锁住该行为。
+
+### 订正：上一块的「发版状态」已过期 ★
+
+上一块写着「线上商店仍是 1.0.13、1.0.14–1.0.21 全部未发布、tag 尚未推送」——**这条已不成立**。
+本次收尾核对 `git ls-remote --tags origin` 与 GitHub Releases 页发现：**`1.0.21` 早已推送并发布，
+且被标记为 Latest**（说明文本即 `1.0.21.md`，已含 1.0.14–1.0.21 全部用户可见改动）。
+
+**教训**：`doc/log.md` 里的「发版状态」是**会被仓库外动作改变**的事实（用户可能在会话之外自己推了
+tag），写进日志那一刻就可能开始腐坏。**发版前必须现场核**（`git ls-remote --tags origin`），
+不能信日志里的旧结论。本次因此差点把 1.0.14–1.0.21 的说明重复塞进 1.0.22 的 Release
+（会让用户把「单标题跳过编号」这类早已发布的功能当成新功能读第二遍），核对后已改回只讲本版新增。
+
+### 没做什么
+
+- **PR 分支未在 GitHub 上关闭**——本地合并后需推 master，GitHub 会自行识别；若不自动关闭需手动
+  关并致谢（本机无 `gh` CLI）。
+- **P12 的 DOM 手验没做**：「继承级数」下拉的置灰联动（H1 恒灰、取消「继承前级」时同步灰）
+  是纯 UI，需真机。逻辑侧走同一 `buildPrefix`、已被 P1–P11 覆盖。
+- **UVM 未纳入 `inheritDepth` 随机化**：`uvm/stimulus.ts` 目前根本不随机化任何**级内**格式字段
+  （`inherit` / `numeral` / 分隔符都不动），不是本 PR 的遗漏，是压测框架既有的覆盖缺口。
+- **tag 未推**：发版仍等用户指令，见下方发版状态。
+
+### 下一步
+
+1. **已发版**：`1.0.22` tag 已推送，工作流按 `doc/release-notes/1.0.22.md` 建 Release。
+   该说明**只讲 inheritDepth**——因为 1.0.14–1.0.21 的改动已随 **1.0.21 Release 发布过**（见下）。
+2. 待手验清单在上一块基础上**新增 P12**：E36 / O11① / O5f / H12 / H9 / Dataview / P12。
+3. 未解决问题总账与竞品调研采纳清单见下一块与 `spec.md` Roadmap M9，未受本次影响。
+
+### 本周期派发
+
+派发 0 次（主模型全程自持）——本次是**外部代码审核**，判断合并风险与语义正确性需要完整持有
+master 与 PR 两侧的上下文，拆给子 agent 反而要把上下文重述一遍，不划算。
+
+---
+
 ## 2026-08-09 会话收尾：未解决问题总账 + 竞品调研路线调整（无版本变化，纯文档）
 
 > **接手者从这里开始读。** 本块是 2026-08-09 那次长会话（1.0.15 → 1.0.21，七个版本）的收尾总账，

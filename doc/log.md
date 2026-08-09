@@ -41,6 +41,51 @@
 
 ---
 
+## 2026-08-10 UX 小改：清理外来编号确认框移动端视觉对齐 PC（1.0.24）
+
+### 做了什么
+
+用户实机截图反馈（两张对照图）：J17（1.0.23）加的逐条勾选 + git 风格 diff 确认框，窄屏
+（含移动端，`@media max-width:480px`）下把勾选框与 diff 从横排切成纵排——勾选框独占一行，
+diff 卡片另起一行、且因原横排逻辑被挤窄。用户要求移动端对齐 PC 端的视觉效果。
+
+**先问清楚再动手**：截图能看出两处差异——① 布局（横排 vs 纵排）；② 卡片背景观感（移动端截图
+隐约能看到卡片背后透出笔记原文，疑似半透明）。这次没有直接猜，用 `AskUserQuestion` 让用户
+明确排除了②（"不改卡片透不透"），锁定只改布局，并给出比"简单加宽横排"更具体的方案：
+**checkbox 不再挤占 diff 的横向空间**——diff 始终占满卡片内容区宽度，checkbox 改为悬浮定位，
+纵向对齐 diff 首行（红/before 行）的顶部；红行换行成两排时，checkbox 仍对齐最上方一排。
+
+实现（`styles.css`）：
+- `.ah-foreign-guard-item` 从 flex 横/纵排切换改为 `position: relative` + 固定 `padding-left`
+  留白（默认 40px，窄屏媒体查询加宽到 44px 配合更大的可点触勾选框）。
+- `.ah-foreign-guard-toggle` 改 `position: absolute`，`top`/`left` 与卡片的
+  `padding-top`/`padding-left` 对齐——天然贴 diff 首行顶部，不需要额外算高度。
+- `.ah-foreign-guard-diff` 从 `flex: 1 1 auto`（与 checkbox 分享行内空间）改为 `width: 100%`。
+- 窄屏媒体查询精简：只保留放大 checkbox 触控尺寸（22px）+ 相应加宽 `padding-left`，去掉原来
+  的 `flex-direction: column` 整套横纵排切换——**桌面与移动端现在是同一套布局代码**，不再有
+  断点级的视觉分裂，"对齐"这件事从"调参数凑相似"变成"物理上不可能不一致"。
+
+验证方式：本机起 `python -m http.server` 把改动后的 `styles.css` 配一份最小 HTML 骨架跑进
+Claude Browser 预览，375px（模拟移动端）与 800px（模拟桌面）两个视口截图核对，长标题换行两排
+时 checkbox 仍贴最上一排——符合预期后清理临时文件，未入库。质量门槛：`npm test`（唯一失败是
+`whitelist.test.ts:406` 的 Windows ICU 排序已知假红，与本次改动无关）/ `lint` / `format:check`
+全绿。纯 CSS 改动，无需改测试代码。
+
+### 没做什么
+
+- 没碰卡片背景透明度/`--background-secondary` 相关的任何东西——用户已明确排除，若移动端真有
+  背景色不透底的观感问题，需要用户另外反馈、单独查根因，不要顺手"顺便"改了。
+- 没有做移动端真机手验（本次是纯 CSS 视觉改动，本机浏览器多宽度截图已核对布局符合用户给出的
+  具体规格，但最终观感仍需用户真机确认，见 testplan J20 状态）。
+
+### 下一步
+
+- 等用户真机确认 J20（对话框在移动端的实际观感）。
+- 其余待办不变，见 status.jsonl 首行与本文件更早周期块（P12 / E36 / O11① 等 DOM 手验、竞品
+  调研采纳清单）。
+
+---
+
 ## 2026-08-09 真机回归：新敲的标题不编号——彻底换掉「整行冻结」（并入 1.0.23，不单独发版）
 
 > **接手者注意**：本块记录的是**上一块修得不对**、用户真机又打回来的一次。教训在最后一节，
@@ -236,85 +281,6 @@ J18），按候选标题现状文本实时匹配，点击结果或搜索框内�
 问过用户）与"预览/执行必须逐条一致"这类跨文件设计约束，拆给子 agent 反而要重述完整上下文，不划算；
 质量门槛验证按惯例派 `quality-gate`（本周期共 4 次：main.test.ts 单测 ×2、全量 test/lint/fuzz ×1、
 format ×1）。
-
----
-
-## 2026-08-09 社区 PR #7 审核并入：继承级数 inheritDepth（1.0.22）
-
-> **接手者从这里开始读。** 本块是**第一次合入外部贡献**的完整记录——含「PR 基于旧版本该怎么核」的
-> 复用姿势，以及本仓库要求而 PR 不可能自带的那部分收尾（文档 / testplan / 版本 / 产物）。
-
-### 做了什么
-
-合入 GitHub PR [#7](https://github.com/AArlert/obsidian-auto-headings/pull/7)「feat: add configurable heading
-inheritance depth」，新增每级可选字段 `inheritDepth`：`inherit=true` 时**最多往上拼几个祖先段**。
-缺省 / `null` = 继承到 `topLevel`（= 1.0.21 及以前的唯一行为，**老模板零迁移**）。
-截取起点 `max(topLevel, level - inheritDepth)`，**永不越过 `topLevel`**。规格见 `spec.md` §3.6
-「继承级数用途」，场景真值表见 `testplan.md` §P（P1–P12）。
-
-**PR 作者交付的部分**（原样采纳，未改一行逻辑）：`template.ts` 的 `normalizeInheritDepth` +
-`render.ts` `buildPrefix` 截取 + `numbering.ts` skipFill=none 检查范围收窄 + `schema.ts` 按物理层级
-夹紧（h1→0…h6→5）+ `EditPanel.ts` 新增「继承级数」下拉 + i18n 中英文案 + `styles.css` 九列网格 +
-`inherit-depth.test.ts`（220 行，13 例）+ `schema.test.ts` 补 24 行。
-
-**本次补齐的部分**（PR 不可能自带）：`spec.md` §3.6 字段表 + 用途小节 + JSON 示例 + CR-14b；
-`testplan.md` §P 十二行场景；README 中英各一条；`release-notes/1.0.22.md`；bump 1.0.21→1.0.22；
-`release/` 重建；本块 + `status.jsonl`。
-
-### 合并风险怎么核的（可复用姿势）★
-
-PR 基于 `1ff21f8`（**1.0.13**），master 已到 1.0.21，中间隔 **14 个提交**。核查顺序：
-
-1. `git fetch origin refs/pull/7/head:pr-7` → `git merge-base master pr-7` 定位基线。
-2. **只比对 PR 触碰的那几个文件在 master 上的分叉**（`git diff --stat <base> master -- <files>`），
-   而不是看 master 整体改了多少——本次 8 个源文件里 **4 个在 master 上一行没动**
-   （`render.ts` / `template.ts` / `templates/schema.ts` / `EditPanel.ts`），风险面立刻收敛到 3 个。
-3. 分叉的 3 个（`i18n.ts` / `numbering.ts` / `styles.css`）**全部自动合并无冲突**，但
-   **`numbering.ts` 必须手工复核**——master 侧 1.0.17 的 `<!-- skip -->` 分支（issue #6）就落在
-   PR 插入点的**紧邻下方**，自动合并「文本干净」不等于「语义正确」。复核结论：PR 的
-   `skipCheckStart` 计算在 map 回调开头、skip 标记分支在其后，互不干扰，`slice(skipCheckStart - 1, -1)`
-   落在正确的 skipFill=none 分支里。
-4. 门槛：`tsc -noEmit` 干净；`vitest` 516 条 515 绿（唯一红是 `whitelist.test.ts` 的 ICU 排序，
-   **Windows 本地老假红**，与本 PR 无关，master 上同样红）。
-
-### 顺带修掉的一个既有缺陷
-
-`buildPrefix` 里起始编号偏移原本判 `i === 0`（序列首段）。截取起点可变后，首段不再必然是
-`topLevel` 段，PR 改判 `segLevel === top`——**这同时修正了原代码的语义**：偏移本就该跟着
-「真正的 `topLevel` 段」走，而非「序列第一段」。testplan P5 锁住该行为。
-
-### 订正：上一块的「发版状态」已过期 ★
-
-上一块写着「线上商店仍是 1.0.13、1.0.14–1.0.21 全部未发布、tag 尚未推送」——**这条已不成立**。
-本次收尾核对 `git ls-remote --tags origin` 与 GitHub Releases 页发现：**`1.0.21` 早已推送并发布，
-且被标记为 Latest**（说明文本即 `1.0.21.md`，已含 1.0.14–1.0.21 全部用户可见改动）。
-
-**教训**：`doc/log.md` 里的「发版状态」是**会被仓库外动作改变**的事实（用户可能在会话之外自己推了
-tag），写进日志那一刻就可能开始腐坏。**发版前必须现场核**（`git ls-remote --tags origin`），
-不能信日志里的旧结论。本次因此差点把 1.0.14–1.0.21 的说明重复塞进 1.0.22 的 Release
-（会让用户把「单标题跳过编号」这类早已发布的功能当成新功能读第二遍），核对后已改回只讲本版新增。
-
-### 没做什么
-
-- **PR 分支未在 GitHub 上关闭**——本地合并后需推 master，GitHub 会自行识别；若不自动关闭需手动
-  关并致谢（本机无 `gh` CLI）。
-- **P12 的 DOM 手验没做**：「继承级数」下拉的置灰联动（H1 恒灰、取消「继承前级」时同步灰）
-  是纯 UI，需真机。逻辑侧走同一 `buildPrefix`、已被 P1–P11 覆盖。
-- **UVM 未纳入 `inheritDepth` 随机化**：`uvm/stimulus.ts` 目前根本不随机化任何**级内**格式字段
-  （`inherit` / `numeral` / 分隔符都不动），不是本 PR 的遗漏，是压测框架既有的覆盖缺口。
-- **tag 未推**：发版仍等用户指令，见下方发版状态。
-
-### 下一步
-
-1. **已发版**：`1.0.22` tag 已推送，工作流按 `doc/release-notes/1.0.22.md` 建 Release。
-   该说明**只讲 inheritDepth**——因为 1.0.14–1.0.21 的改动已随 **1.0.21 Release 发布过**（见下）。
-2. 待手验清单在上一块基础上**新增 P12**：E36 / O11① / O5f / H12 / H9 / Dataview / P12。
-3. 未解决问题总账与竞品调研采纳清单见下一块与 `spec.md` Roadmap M9，未受本次影响。
-
-### 本周期派发
-
-派发 0 次（主模型全程自持）——本次是**外部代码审核**，判断合并风险与语义正确性需要完整持有
-master 与 PR 两侧的上下文，拆给子 agent 反而要把上下文重述一遍，不划算。
 
 ---
 
