@@ -61,6 +61,18 @@ export function normalizeAncestorNumeral(value: unknown): AncestorNumeral {
 	return value === "arabic" ? "arabic" : "self";
 }
 
+/** 规范化最多继承的祖先段数；缺失或非法值均表示继承全部前级。 */
+export function normalizeInheritDepth(value: unknown, maxDepth = 5): number | null {
+	if (value === null || value === undefined) {
+		return null;
+	}
+	if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+		return null;
+	}
+	const limit = Math.max(0, Math.min(5, Math.floor(maxDepth)));
+	return limit > 0 ? Math.min(value, limit) : null;
+}
+
 /**
  * 规范化「起始编号层级」`topLevel`：夹到合法范围 [1, 6]，非数字回退默认 H2。
  * 含义：比 `topLevel` 浅的标题完全不编号、不改写；它及更深的标题正常编号，并以它为序号第一段。
@@ -151,6 +163,8 @@ export interface LevelFormat {
 	titleSeparator: string;
 	/** 是否拼接父级序号，默认开启；关闭后仅呈现本级序号。 */
 	inherit: boolean;
+	/** 最多继承的祖先标题段数；缺失或 null 表示一直继承到 topLevel。 */
+	inheritDepth?: number | null;
 }
 
 /**

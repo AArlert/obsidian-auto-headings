@@ -138,7 +138,10 @@ export interface Messages {
 	colSuffix: string;
 	colTitleSep: string;
 	colInherit: string;
+	colInheritDepth: string;
 	colPreview: string;
+	inheritDepthAll: string;
+	inheritDepthTooltip: string;
 	phPrefix: string;
 	phSuffix: string;
 	phSpace: string;
@@ -378,7 +381,10 @@ const zh: Messages = {
 	colSuffix: "后缀",
 	colTitleSep: "标题间隔符",
 	colInherit: "继承前级",
+	colInheritDepth: "继承级数",
 	colPreview: "预览",
+	inheritDepthAll: "全部",
+	inheritDepthTooltip: "最多继承多少个前级；不会越过起始编号层级。",
 	phPrefix: "前缀",
 	phSuffix: "后缀",
 	phSpace: "空格",
@@ -620,7 +626,11 @@ const en: Messages = {
 	colSuffix: "Suffix",
 	colTitleSep: "Title sep.",
 	colInherit: "Inherit",
+	colInheritDepth: "Inherit depth",
 	colPreview: "Preview",
+	inheritDepthAll: "All",
+	inheritDepthTooltip:
+		"The maximum number of preceding levels to inherit; never goes above the start level.",
 	phPrefix: "Prefix",
 	phSuffix: "Suffix",
 	phSpace: "Space",
