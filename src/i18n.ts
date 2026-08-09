@@ -72,10 +72,6 @@ export interface Messages {
 	updateBacklinksName: string;
 	updateBacklinksDesc: string;
 
-	// —— 复制净化（M11，spec §2.8）——
-	sanitizeClipboardName: string;
-	sanitizeClipboardDesc: string;
-
 	// —— 路径规则 ——
 	pathRulesHeading: string;
 	pathRulesDesc: string;
@@ -205,6 +201,14 @@ export interface Messages {
 	clearVaultName: string;
 	clearVaultDesc: string;
 	clearVaultBtn: string;
+	/** 固化编号并交还所有权（M12，敏感操作 TAB 第 4 项）。 */
+	freezeVaultName: string;
+	freezeVaultDesc: string;
+	freezeVaultBtn: string;
+	/** 已离场状态的提示条与「恢复接管」按钮（全局设置 TAB）。 */
+	retiredBannerTitle: string;
+	retiredBannerBody: string;
+	resumeBtn: string;
 
 	// —— 关于 ——
 	aboutVersionLabel: string;
@@ -235,6 +239,16 @@ export interface Messages {
 	clearVaultModalBody: string;
 	confirmClearVault: string;
 
+	// 固化编号（交还所有权）对话框
+	freezeVaultModalTitle: string;
+	freezeVaultModalBody: string;
+	confirmFreezeVault: string;
+
+	// 疑似外来编号清理预览对话框（迁移守卫 Notice 点击入口，testplan J14）
+	foreignGuardModalTitle: string;
+	foreignGuardModalBody: (count: number) => string;
+	foreignGuardModalConfirm: string;
+
 	// —— 命令名（main.ts）——
 	cmdToggle: string;
 	cmdRenumber: string;
@@ -246,7 +260,13 @@ export interface Messages {
 	noticeDisabled: string;
 	noticeNothingToClear: string;
 	noticeCleared: string;
+	/** 清除编号并顺带写入 frontmatter 暂停开关（1.0.15，testplan H13）——必须说清「怎么恢复」。 */
+	noticeClearedAndPaused: string;
+	/** 「立即重新编号」顺带移除了 frontmatter 暂停开关（1.0.15，testplan H15）。 */
+	noticeRenumberedAndResumed: string;
 	noticeClearedVault: (count: number) => string;
+	noticeFrozenVault: (count: number) => string;
+	noticeResumed: string;
 	noticeNoRule: string;
 	/** 「立即重新编号」命中「不编号」伪模板时的专用提示（区别于「未匹配任何规则」，K15）。 */
 	noticeNoNumberingRule: string;
@@ -261,6 +281,10 @@ export interface Messages {
 	noticeBacklinksIntro: string;
 	noticeNoActiveFile: string;
 	noticeForeignNumberingGuard: string;
+	/** 迁移守卫 Notice 里的可点击文案（点击打开清理预览确认框，J14）。 */
+	noticeForeignNumberingGuardAction: string;
+	/** 点击迁移守卫 Notice 时，该文件已不在任何已打开的标签页中。 */
+	noticeForeignGuardFileNotOpen: string;
 }
 
 /** 简体中文文案。 */
@@ -289,10 +313,6 @@ const zh: Messages = {
 	updateBacklinksName: "同步内部链接（Backlink）",
 	updateBacklinksDesc:
 		"标题文字一旦改动，自动更新其它文件里指向它的内部链接（如 [[文件#标题]]），避免断链——全局生效，与是否编号无关（改标题不加编号、或笔记未命中任何模板，链接照样同步）；注意会修改引用文件、改动不在其撤销历史内。",
-
-	sanitizeClipboardName: "复制净化（剥离隐形标记）",
-	sanitizeClipboardDesc:
-		"复制 / 剪切含编号标题的内容时，把插件写入的隐形标记字符（Word Joiner）从剪贴板剥净，粘贴到外部应用不再携带不可见字符；同一会话内原样粘贴回本库时自动还原原文，编号照常重排、不会出现双重编号。笔记文件本身不受影响；净化失败时静默维持原样。",
 
 	pathRulesHeading: "路径规则",
 	pathRulesDesc:
@@ -422,6 +442,14 @@ const zh: Messages = {
 	clearVaultDesc:
 		"剥离全库所有 Markdown 文件中本插件写入的编号前缀（不在撤销历史内，建议先备份）；确认后会先关闭「全局自动编号」再清除，避免一编辑又被编回去，需要时可再手动开启。",
 	clearVaultBtn: "清除全库编号…",
+	freezeVaultName: "固化编号并交还所有权（全库）",
+	freezeVaultDesc:
+		"**保留**全库现有编号、只移除插件的不可见标记，此后插件停止一切自动编号。适合「喜欢现在的编号，但不想再被插件管着」或「准备卸载但要留住编号成果」。标记移除后插件自己也认不出这些编号是它写的（不可逆）；不在撤销历史内，建议先备份。",
+	freezeVaultBtn: "固化编号并交还所有权…",
+	retiredBannerTitle: "插件已交还编号所有权",
+	retiredBannerBody:
+		"编号已作为普通文本保留在你的文件里，插件当前**不做任何自动编号**。想让插件重新接管：点下面的按钮，然后对相关文件跑一次「清理非本插件的标题编号」——否则现有编号会被当成外来编号，再叠一层新前缀变成双重编号。",
+	resumeBtn: "恢复接管",
 
 	aboutVersionLabel: "版本",
 	aboutLinkRepo: "GitHub 仓库",
@@ -451,6 +479,16 @@ const zh: Messages = {
 		"这将先关闭「全局自动编号」，再从全库所有 Markdown 文件中剥离本插件写入的编号前缀，把标题还原为裸标题。此操作通过 Vault API 写回、不在 Obsidian 撤销历史内，建议先备份。确认继续？",
 	confirmClearVault: "确认清除全库",
 
+	freezeVaultModalTitle: "固化编号并交还所有权（全库）",
+	freezeVaultModalBody:
+		"确认后将发生五件事：① 全库现有编号**原样保留**，变成普通文本；② 全库的不可见标记（U+2060）一并移除——**包括写在内部链接锚点里的**，故 [[笔记#标题]] 仍能正常解析；③ 此操作通过 Vault API 写回、**不在 Obsidian 撤销历史内**，建议先备份；④ 插件将**停止一切自动编号**（该状态凌驾于 frontmatter 开关）；⑤ 之后若想恢复接管，须先对相关文件跑「清理非本插件的标题编号」，否则现有编号会被当成外来编号、再叠一层新前缀。确认继续？",
+	confirmFreezeVault: "确认固化并交还",
+
+	foreignGuardModalTitle: "疑似非本插件的编号",
+	foreignGuardModalBody: (count) =>
+		`以下 ${count} 处标题看起来带编号，但插件不确定是不是你自己写的（如「API 设计」「TODO 清单」这类标题也可能被误判）。确认清理会去掉这些编号，之后插件会正常接管本文件的自动编号：`,
+	foreignGuardModalConfirm: "确认清理",
+
 	cmdToggle: "切换全局自动编号（全局）",
 	cmdRenumber: "立即重新编号（当前文件）",
 	cmdClear: "清除当前文件编号",
@@ -460,7 +498,13 @@ const zh: Messages = {
 	noticeDisabled: "已禁用全局自动编号",
 	noticeNothingToClear: "当前文件无可清除的编号前缀",
 	noticeCleared: "已清除编号",
+	noticeClearedAndPaused:
+		"已清除编号，并暂停本文件的自动编号（属性 obsidian-auto-headings: false）。跑「立即重新编号」即可恢复接管。",
+	noticeRenumberedAndResumed: "已重新编号，并恢复本文件的自动编号",
 	noticeClearedVault: (count) => `已清除全库编号（共修改 ${count} 个文件）`,
+	noticeFrozenVault: (count) =>
+		`已固化编号并交还所有权（共修改 ${count} 个文件）；编号已保留为普通文本，插件停止自动编号`,
+	noticeResumed: "已恢复接管；若文件里留有固化过的编号，请先跑「清理非本插件的标题编号」",
 	noticeNoRule: "当前文件未匹配任何路径规则，无法编号",
 	noticeNoNumberingRule: "当前文件所在路径已设为「不编号」",
 	noticeBatchNoMatch: "该规则当前未命中任何 Markdown 文件",
@@ -475,7 +519,9 @@ const zh: Messages = {
 		"Auto Headings 已自动更新了其它文件里指向本文件标题的内部链接（避免断链）。这些改动不在被改文件的撤销历史内；不需要此功能可在 设置 → 全局设置 关闭「同步内部链接」。本提示只出现一次。",
 	noticeNoActiveFile: "没有打开的 Markdown 文件",
 	noticeForeignNumberingGuard:
-		"检测到疑似非本插件的标题编号，已跳过本次自动编号——请先执行「清理非本插件的标题编号」命令",
+		"这些标题看起来带编号，但插件不确定是不是你自己写的，已跳过本次自动编号。",
+	noticeForeignNumberingGuardAction: "点击查看并清理",
+	noticeForeignGuardFileNotOpen: "该文件已不在任何标签页中，请重新打开后再清理",
 };
 
 /** English copy. */
@@ -505,10 +551,6 @@ const en: Messages = {
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc:
 		"Whenever a heading's text changes, automatically update internal links in other files that point to it (e.g. [[file#heading]]) so they don't break — this works globally, regardless of numbering (edits with no numbering added, or notes matching no template, still sync); note this modifies the referencing files outside their undo history.",
-
-	sanitizeClipboardName: "Sanitize copied text (strip hidden markers)",
-	sanitizeClipboardDesc:
-		"When copying or cutting numbered headings, strip the plugin's invisible marker characters (Word Joiner) from the clipboard so external apps never receive hidden characters; pasting the same text back into this vault within the same session restores the original, so numbering re-flows without double numbers. Your note files are unaffected; on any failure the clipboard is left untouched.",
 
 	pathRulesHeading: "Path rules",
 	pathRulesDesc:
@@ -646,6 +688,14 @@ const en: Messages = {
 	clearVaultDesc:
 		"Strip the numbering prefixes this plugin wrote from every Markdown file in the vault (NOT in undo history — back up first). Confirming first turns OFF global auto-numbering so edits don't re-number cleared files; re-enable it manually when wanted.",
 	clearVaultBtn: "Clear vault numbering…",
+	freezeVaultName: "Freeze numbering and release ownership (entire vault)",
+	freezeVaultDesc:
+		"**Keeps** every number you already have and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For when you like the current numbering but no longer want the plugin managing it — or you're uninstalling and want to keep the result. Once the markers are gone the plugin can no longer tell those numbers were its own (irreversible). NOT in undo history — back up first.",
+	freezeVaultBtn: "Freeze numbering and release ownership…",
+	retiredBannerTitle: "The plugin has released ownership of your numbering",
+	retiredBannerBody:
+		"Your numbers remain in your files as ordinary text, and the plugin is currently doing **no** automatic numbering. To hand control back: press the button below, then run **Clean foreign numbering** on the affected files — otherwise the existing numbers count as foreign numbering and a fresh prefix gets stacked on top of them.",
+	resumeBtn: "Resume managing numbering",
 
 	aboutVersionLabel: "Version",
 	aboutLinkRepo: "GitHub repository",
@@ -675,6 +725,16 @@ const en: Messages = {
 		"This will first turn OFF global auto-numbering, then strip the numbering prefixes this plugin wrote from every Markdown file in the vault, restoring bare headings. It writes back via the Vault API and is NOT in Obsidian's undo history — back up first. Continue?",
 	confirmClearVault: "Confirm clear vault",
 
+	freezeVaultModalTitle: "Freeze numbering and release ownership (entire vault)",
+	freezeVaultModalBody:
+		"Confirming does five things: (1) every number you already have is **kept as-is**, becoming ordinary text; (2) the invisible markers (U+2060) are removed vault-wide — **including the ones inside internal link anchors**, so [[note#heading]] links keep resolving; (3) this writes back via the Vault API and is **NOT in Obsidian's undo history** — back up first; (4) the plugin will **stop all automatic numbering** (this overrides the per-file frontmatter switch); (5) if you later want the plugin to take over again, run **Clean foreign numbering** on the affected files first, otherwise your existing numbers count as foreign numbering and a new prefix gets stacked on top. Continue?",
+	confirmFreezeVault: "Confirm freeze and release",
+
+	foreignGuardModalTitle: "Possible non-plugin numbering",
+	foreignGuardModalBody: (count) =>
+		`The following ${count} heading(s) look numbered, but the plugin isn't sure you wrote that yourself (headings like "API design" or "TODO list" can trigger a false positive too). Confirming will remove these numbers; the plugin will then resume auto-numbering this file:`,
+	foreignGuardModalConfirm: "Confirm cleanup",
+
 	cmdToggle: "Toggle global auto-numbering (global)",
 	cmdRenumber: "Renumber now (current file)",
 	cmdClear: "Clear numbering in current file",
@@ -684,7 +744,14 @@ const en: Messages = {
 	noticeDisabled: "Global auto-numbering disabled",
 	noticeNothingToClear: "No numbering prefix to clear in the current file",
 	noticeCleared: "Numbering cleared",
+	noticeClearedAndPaused:
+		"Numbering cleared, and auto-numbering paused for this note (property obsidian-auto-headings: false). Run “Renumber now” to resume.",
+	noticeRenumberedAndResumed: "Renumbered, and auto-numbering resumed for this note",
 	noticeClearedVault: (count) => `Vault numbering cleared (${count} file(s) changed)`,
+	noticeFrozenVault: (count) =>
+		`Numbering frozen and ownership released (${count} file(s) changed); the numbers stay as plain text and automatic numbering is now off`,
+	noticeResumed:
+		"Now managing numbering again; if any frozen numbering is still in your files, run Clean foreign numbering first",
 	noticeNoRule: "The current file matches no path rule; cannot number it",
 	noticeNoNumberingRule: "This file's path is set to “No numbering”",
 	noticeBatchNoMatch: "This rule currently matches no Markdown files",
@@ -699,7 +766,9 @@ const en: Messages = {
 		"Auto Headings just updated internal links in other files that point to headings in this file (so they don't break). Those edits are NOT in the modified files' undo history; you can turn off \"Sync internal links\" under Settings → General. This notice appears only once.",
 	noticeNoActiveFile: "No open Markdown file",
 	noticeForeignNumberingGuard:
-		'Detected headings that look like non-plugin numbering; skipped auto-numbering this time — run "Clear non-plugin heading numbering" first',
+		"These headings look numbered, but the plugin isn't sure you wrote that yourself — skipped auto-numbering this time.",
+	noticeForeignNumberingGuardAction: "Click to review and clean up",
+	noticeForeignGuardFileNotOpen: "This file is no longer open in any tab; reopen it to clean up",
 };
 
 /** 取某语言的文案表。 */

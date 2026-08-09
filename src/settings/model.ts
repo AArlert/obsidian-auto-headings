@@ -47,12 +47,17 @@ export interface AutoHeadingsSettings {
 	 */
 	backlinksIntroShown: boolean;
 	/**
-	 * 复制净化（M11「复制净化开关」，1.0.10，见 spec.md §2.8）：copy/cut 时把插件写入的 WJ 哨兵
-	 * 从剪贴板出口剥净（外部应用不再收到隐形字符），同会话内粘贴回本库时自动还原原文避免双重
-	 * 编号。**默认开**（M11 信任包：把 WJ 风险从「披露」升级到「主动消解」；WJ 守卫保证不含
-	 * 编号的复制粘贴零介入）。单开关同时门控 copy/cut 净化与 paste 还原两端。
+	 * **已交还所有权 / 插件离场**（M12「固化编号并交还所有权」，见 spec.md §3.18）。
+	 *
+	 * `true` 时插件**停止一切自动编号**。这是一道**硬闸**，位置在 `shouldAutoTrigger` 首行、
+	 * **凌驾于 frontmatter `obsidian-auto-headings: true`** ——只关 `autoNumber` 是不够的：
+	 * 带 `fm:true` 的文件本就绕开全局开关，固化之后一编辑就会在已成普通文本的编号上再叠一层
+	 * 新前缀，变成双重编号。
+	 *
+	 * 刻意**不动 `autoNumber`**：那是用户的偏好，恢复接管时不该要他重设一遍。
+	 * 手动命令（「立即重新编号」等）不受本闸约束——用户显式敲命令即明确意图。
 	 */
-	sanitizeClipboard: boolean;
+	retired: boolean;
 }
 
 /** 防抖延迟的边界与默认值（见 spec.md §3.9）。 */
@@ -74,7 +79,7 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	language: DEFAULT_LANG_SETTING,
 	updateBacklinks: true,
 	backlinksIntroShown: false,
-	sanitizeClipboard: true,
+	retired: false,
 };
 
 /** 将防抖延迟夹到合法范围 [50, 2000]，非数字回退到默认值。 */

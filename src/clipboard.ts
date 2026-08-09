@@ -1,23 +1,33 @@
 /**
- * 剪贴板净化纯逻辑层（M11「复制净化开关」，见 spec.md §2.8「同步净化 + 内存映射双通道」）。
+ * 剪贴板净化纯逻辑层（M11，见 spec.md §2.8「同步净化 + 内存映射双通道」；1.0.16 起恒开无开关）。
  *
  * 职责边界：本文件只含可单测的纯函数与内存缓存——WJ 剥离、换行规范化、`净化文本 → 原文`
  * 的会话级 LRU 映射（OS 剪贴板隐藏通道被 2026-07-15 spike 判死后的内存替代）。DOM / 事件
  * 接线（copy/cut 监听、editor-paste 命中还原）在 main.ts。
  */
 
-import { WORD_JOINER } from "./numbering";
+import { stripWordJoiners } from "./numbering";
 
-/** LRU 条数上限：超过逐出最旧（spec §2.8「内存映射」）。 */
-export const CLIPBOARD_CACHE_MAX_ENTRIES = 50;
+/**
+ * 剥净字符串中全部 Word Joiner 哨兵。
+ *
+ * 实现已迁往 `strip.ts`（`WORD_JOINER` 的定义处，也是「WJ 相关纯函数」的归属地）——
+ * 它现在同时服务剪贴板净化与 M12「固化编号并交还所有权」，不再是剪贴板专属。
+ * 此处 re-export 保持既有 import 与单测零改动。
+ */
+export { stripWordJoiners };
+
+/**
+ * LRU 条数上限：超过逐出最旧（spec §2.8「内存映射」）。
+ *
+ * 1.0.17 由 50 抬到 200：逐出是「vault 内往返失去哨兵」的三个成因里唯一能靠调参消掉的
+ * （另两个是重启与外部改动）。条目本身受 {@link CLIPBOARD_CACHE_MAX_CHARS} 的总量闸约束，
+ * 抬条数不会让内存失控——真正的上限是字符总量。
+ */
+export const CLIPBOARD_CACHE_MAX_ENTRIES = 200;
 
 /** LRU 总字符量上限（键 + 值合计）：防止巨量复制常驻内存；超限逐最旧，单条超限即不驻留。 */
 export const CLIPBOARD_CACHE_MAX_CHARS = 2_000_000;
-
-/** 剥净字符串中全部 Word Joiner 哨兵——净化对任意字符串成立、不做结构解析（spec §2.8 守卫定案）。 */
-export function stripWordJoiners(text: string): string {
-	return text.split(WORD_JOINER).join("");
-}
 
 /**
  * 剥净 HTML 字符串中的 WJ：除原始字符外，兼顾序列化可能产出的数字 / 十六进制字符实体写法

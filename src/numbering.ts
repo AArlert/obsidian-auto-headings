@@ -14,7 +14,8 @@
  * | 本文件         | 编排：{@link numberHeadings} / {@link renumberContent}       |
  */
 
-import { Heading, FENCE_RE, parseHeadings } from "./parser";
+import { hasSkipMarker, Heading, parseHeadings } from "./parser";
+import { scanSkipRegions } from "./scan";
 import { HeadingCounter } from "./count";
 import { buildPrefix } from "./render";
 import { stripHeadingPrefix, stripPrefix, WORD_JOINER, type StripAffixOptions } from "./strip";
@@ -123,10 +124,13 @@ export function numberHeadings(
 		const level = heading.level;
 		const hashes = "#".repeat(level);
 
-		// 白名单命中：完全透明（不计数、不归零），但剥离其已有编号。
-		// 子树块成员额外置位「块后重置」（决策 D1）；exact/partial 豁免不置位、也不清位
-		//（夹在子树块与下一个编号标题之间的单标题豁免不打断重置语义）。
-		if (isWhitelisted(heading)) {
+		// 白名单命中 **或** 行尾带 `<!-- skip -->` 标记（issue #6，spec §3.21）：完全透明
+		//（不计数、不归零），但剥离其已有编号——所以给一个**已编号**的标题补上标记，下一次重排
+		// 就会把那个编号摘掉，而不是把它冻结在原地。
+		// 子树块成员额外置位「块后重置」（决策 D1）；exact/partial 豁免与 skip 标记都不置位、
+		// 也不清位（夹在子树块与下一个编号标题之间的单标题豁免不打断重置语义）。
+		// **skip 标记只作用于本行、不含子树**（phase 1 定案，见 spec §3.21「未定项」）。
+		if (isWhitelisted(heading) || hasSkipMarker(heading.rawText)) {
 			if (isSubtreeMember(heading)) {
 				pendingSubtreeReset = true;
 			}
@@ -209,49 +213,84 @@ export function renumberContent(
 	}
 
 	// ③ 降级残留清理：剥离用模板感知的 stripPrefix（双哨兵完好→剥到尾哨兵；尾哨兵被毁→按 topLevel
-	// 有界剥离）。
+	// 有界剥离）。自动路径只清注释块内的残留、**不碰围栏**（字面内容不得在日常编辑中被改写，
+	// 见 cleanDemotedResidue 的分治说明）。
 	const top = normalizeTopLevel(template.topLevel);
-	cleanDemotedResidue(lines, headingLines, (paragraph) =>
-		stripPrefix(paragraph, top, template, options),
+	cleanDemotedResidue(
+		lines,
+		headingLines,
+		(paragraph) => stripPrefix(paragraph, top, template, options),
+		{ comments: true, fences: false },
 	);
 	return lines.join("\n");
 }
+
+/** 跳过区域内的 WJ 残留要不要清（M12 分区域分治，见 {@link cleanDemotedResidue}）。 */
+export interface ResidueScope {
+	/** 注释块内：自动路径与清除路径**都** true。 */
+	comments?: boolean;
+	/** 围栏代码块内：**只有清除路径** true（日常编辑绝不改写字面内容）。 */
+	fences?: boolean;
+}
+
+/** 跳过区域内「标题形 + 紧跟 WJ」的残留行，如 `## ⁠1.2 ⁠标题`（捕获 `#` 段与其后的带 WJ 部分）。 */
+const SKIPPED_HEADING_RESIDUE_RE = new RegExp(`^([ \\t]*#{1,6}[ \\t]+)(${WORD_JOINER}.*)$`);
 
 /**
  * ③ 降级残留清理（0.7.20，共享 helper）：**就地**清掉「原是标题、被用户删光 `#` 降级为正文」的行里
  * 残留的 WJ 哨兵 + 编号（如 `⁠一、⁠标题`）。被 {@link renumberContent}（模板感知剥离）与
  * `clearNumberingContent`（全样式并集剥离）共用——一致地保证任何「整理文档」的操作都不留插件残留。
  *
- * 识别极稳、误伤面极小：**非围栏代码块内、非标题行、且内容去前导空白后以 WJ 哨兵起头**的行才处理
- * ——WJ 是插件独有的不可见标记，正文几乎不可能自带。保留原行前导空白。
+ * 识别极稳、误伤面极小：**非标题行、且内容去前导空白后以 WJ 哨兵起头**的行才处理——WJ 是插件独有的
+ * 不可见标记，正文几乎不可能自带（契约亦明说「无 WJ 即插件从未染指」）。保留原行前导空白。
+ *
+ * ## 跳过区域内的残留（M12 分治规则）
+ *
+ * 标题被事后包进注释块 / 围栏后，它的 WJ 前缀会**留在区域里**。此时 `parseHeadings` 已不再返回该行，
+ * 若不额外处理就会永远留着。按 `scope` 分治，两类区域**故意不同**：
+ *
+ * - **注释块 = 隐藏散文** ⇒ 自动路径就清。里面的 WJ 残留在阅读视图根本不可见，用户肉眼永远找不到，
+ *   留着毫无价值。
+ * - **围栏代码块 = 字面内容** ⇒ **只有用户主动跑清除命令时才清**。否则一段「演示本插件 WJ 格式的
+ *   代码块」会在敲字过程中被静默吃掉——插件不该在日常编辑里改写代码块。
+ *
+ * 但清除命令必须**两类都清**：否则注释里那份不可见残留会挺过「清除全库编号」，直接违背标记契约
+ * 「永远可退出 / 精确剥净」的承诺。
+ *
+ * 一行同时属于两类时（注释内开了围栏，见 scan.ts 已知限制）**以围栏为准**，取更保守的一侧。
  *
  * @param lines 已按行切分的全文（会被就地修改）。
  * @param headingLines 本轮识别为标题的行下标集合（这些行不参与清理）。
  * @param strip 对「以 WJ 起头的残留正文」剥离前缀的函数（调用方按其语义注入模板感知 / 全样式剥离器）。
+ * @param scope 跳过区域内的清理开关，缺省两者皆 false（= 0.7.20 的原行为）。
  */
 export function cleanDemotedResidue(
 	lines: string[],
 	headingLines: Set<number>,
 	strip: (paragraph: string) => string,
+	scope: ResidueScope = {},
 ): void {
-	let inFence = false;
-	let fenceChar = "";
+	const skip = scanSkipRegions(lines);
 	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-		const fence = line.match(FENCE_RE);
-		if (fence) {
-			const char = fence[1][0];
-			if (!inFence) {
-				inFence = true;
-				fenceChar = char;
-			} else if (char === fenceChar) {
-				inFence = false;
-				fenceChar = "";
-			}
+		const state = skip[i];
+		// 围栏定界行本身既不是标题也不可能带残留。
+		if (state.isFenceMarker || headingLines.has(i)) {
 			continue;
 		}
-		if (inFence || headingLines.has(i)) {
-			continue;
+		const line = lines[i];
+		if (state.inFence || state.inComment) {
+			// 同属两类时以围栏为准（更保守）。
+			const allowed = state.inFence ? scope.fences === true : scope.comments === true;
+			if (!allowed) {
+				continue;
+			}
+			// 区域内的标题形残留：保留 `#` 段，只剥它后面那截带 WJ 的前缀。
+			const m = SKIPPED_HEADING_RESIDUE_RE.exec(line);
+			if (m) {
+				lines[i] = m[1] + strip(m[2]);
+				continue;
+			}
+			// 否则按下方的正文残留同一口径处理（区域内也可能有降级残留）。
 		}
 		const trimmed = line.replace(/^[ \t]+/, "");
 		if (trimmed.startsWith(WORD_JOINER)) {

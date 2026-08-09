@@ -146,7 +146,6 @@ interface ClipboardInternals {
 		language: "auto" | "zh" | "en";
 		updateBacklinks: boolean;
 		backlinksIntroShown: boolean;
-		sanitizeClipboard: boolean;
 	};
 	templateStore: { get(name: string): Template | undefined };
 	clipboardCache: ClipboardOriginalCache;
@@ -154,7 +153,7 @@ interface ClipboardInternals {
 	restoreSanitizedPaste(evt: unknown, editor: unknown, info: unknown): void;
 }
 
-function makeClipboardPlugin(opts: { sanitize?: boolean; pathRules?: PathRule[] } = {}) {
+function makeClipboardPlugin(opts: { pathRules?: PathRule[] } = {}) {
 	const PluginCtor = AutoHeadingsPlugin as unknown as new (
 		app: unknown,
 		manifest: unknown,
@@ -168,7 +167,6 @@ function makeClipboardPlugin(opts: { sanitize?: boolean; pathRules?: PathRule[] 
 		language: "zh",
 		updateBacklinks: false,
 		backlinksIntroShown: false,
-		sanitizeClipboard: opts.sanitize ?? true,
 	};
 	p.templateStore = {
 		get: (name: string) => (name === "默认" ? DEFAULT_TEMPLATE : undefined),
@@ -235,11 +233,13 @@ describe("copy/cut 出口净化守卫（O8，插件级）", () => {
 		expect(p.clipboardCache.size).toBe(0);
 	});
 
-	it("开关关闭：不介入", () => {
-		const p = makeClipboardPlugin({ sanitize: false });
+	// O11（1.0.16）：净化恒开。旧配置里残留的 sanitizeClipboard:false 不再有门控效力。
+	it("旧配置残留 sanitizeClipboard:false：照常净化（O11）", () => {
+		const p = makeClipboardPlugin();
+		(p.settings as unknown as Record<string, unknown>).sanitizeClipboard = false;
 		const data = makeDataTransfer({ "text/plain": original });
 		p.sanitizeClipboardEvent(makeClipboardEvent(data, true), {});
-		expect(data.getData("text/plain")).toBe(original);
+		expect(data.getData("text/plain")).toBe("## 1 概述\n正文");
 	});
 
 	it("clipboardData 缺失（O10 降级）：静默不介入、不抛错", () => {
@@ -360,12 +360,46 @@ describe("paste 端守卫矩阵（O9，插件级）", () => {
 		expect(editor.inserted).toBeNull();
 	});
 
-	it("开关关闭：放行（还原端与净化端同一开关门控）", () => {
+	// O11（1.0.16）：开关已取消。残留的旧配置键不再有任何门控效力——曾显式关掉的用户升级后同样净化 / 还原。
+	it("旧配置残留 sanitizeClipboard:false：不再门控，照常还原（O11）", () => {
 		const { p, sanitized } = seeded();
-		p.settings.sanitizeClipboard = false;
+		(p.settings as unknown as Record<string, unknown>).sanitizeClipboard = false;
 		const editor = makePasteEditor(targetContent);
 		const evt = makeClipboardEvent(makeDataTransfer({ "text/plain": sanitized }));
 		p.restoreSanitizedPaste(evt, editor, { file: { path: "笔记.md" } });
-		expect(editor.inserted).toBeNull();
+		expect(editor.inserted).toBe(original);
+	});
+
+	// O12：vault 内往返的高频姿势是「复制一次、粘贴多次」。lookup 命中只刷新新旧序、不消费条目，
+	// 第二次粘贴必须同样还原（若实现改成消费式，这条即红）。
+	it("同一份内容连续粘贴两次：两次都命中还原（O12）", () => {
+		const { p, sanitized } = seeded();
+		for (let i = 0; i < 2; i++) {
+			const editor = makePasteEditor(targetContent);
+			const evt = makeClipboardEvent(makeDataTransfer({ "text/plain": sanitized }));
+			p.restoreSanitizedPaste(evt, editor, { file: { path: "笔记.md" } });
+			expect(editor.inserted).toBe(original);
+		}
+	});
+});
+
+describe("设置迁移：历史开关 sanitizeClipboard 的清理（O11）", () => {
+	it("loadSettings 把旧键从设置对象里删掉（回写 data.json 后即消失）", async () => {
+		const PluginCtor = AutoHeadingsPlugin as unknown as new (
+			app: unknown,
+			manifest: unknown,
+		) => AutoHeadingsPlugin;
+		const plugin = new PluginCtor({}, { id: "auto-headings", dir: "plugins/auto-headings" });
+		// 模拟 1.0.10–1.0.15 期间显式关掉过净化的用户的 data.json。
+		(plugin as unknown as { loadData(): Promise<unknown> }).loadData = async () => ({
+			autoNumber: true,
+			sanitizeClipboard: false,
+		});
+
+		await plugin.loadSettings();
+
+		const settings = plugin.settings as unknown as Record<string, unknown>;
+		expect(settings.autoNumber).toBe(true); // 其余字段照常读取
+		expect("sanitizeClipboard" in settings).toBe(false); // 旧键随迁移删除
 	});
 });

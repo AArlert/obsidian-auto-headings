@@ -41,139 +41,207 @@
 
 ---
 
-## 2026-07-18 1.0.13（未 bump）UVM 压测框架拆分（1686→9 文件）+ 修 Windows 上失效的 test:fuzz + 订正过期框架文档
+## 2026-08-09 会话收尾：未解决问题总账 + 竞品调研路线调整（无版本变化，纯文档）
 
-**背景**：外部评审给 UVM 压测引擎 8.5/10，指出三条边界 + 一条工程隐患。核查后**三条边界均不动代码**——
-它们都已在仓库内明确记录（参考模型复用 build 路径是刻意取舍、幂等 oracle 的分工见 uvm/README，
-「明确不入 UVM」清单见本文件 testplan §4 尾部），评审是在复述而非发现。重建一套独立编号实现作参考模型
-属高成本低回报（会变成第二处需同步维护且必然漂移的真相源），**不做**。真正落地的是第四条 + 两处评审
-没发现的实缺陷。
+> **接手者从这里开始读。** 本块是 2026-08-09 那次长会话（1.0.15 → 1.0.21，七个版本）的收尾总账，
+> 只汇总**状态与去向**，不复述细节——每条都指向真正的事实源。
 
-**做了什么**：
+### 本次会话产出（七个版本）
 
-1. **`framework.ts` 1686 行拆成 9 个文件**（原为全仓库最大文件，超过 `main.ts` 1286，违反 CLAUDE.md §3
-   「~500 行且多职责 = 拆分信号」）：`framework.ts`(533，World 状态 + step/finish/trigger + runSequence，
-   仍是唯一入口并 re-export 公共 API) / `operations.ts`(262) / `config-ops.ts`(317) / `oracles.ts`(246) /
-   `coverage.ts`(191) / `stimulus.ts`(111) / `config.ts`(98) / `model.ts`(61) / `rng.ts`(41)。
-   `World` 的方法体外移为接收 world 句柄的自由函数、类内保留一行委托，故 `step()` 等调用点零改动；
-   三个新模块用 **`import type { World }`** 引入（编译期擦除）保证运行时依赖图单向无环。
-   `random_sequence.test.ts` 一行未改。
-2. **纯搬运的验收方式（可复用）**：RNG 是种子化 mulberry32 ⇒ 序列完全确定。改动前先采集**黄金基线**
-   （DEFAULT_GEN + EXPLORE_GEN 各 500 seeds × 60 ops，dump 每个 seed 的 World 终态全字段 + Coverage
-   累加器指纹，8MB）。Phase 1（外移常量/Coverage）与 Phase 2（拆 World）后各比对一次，**md5 全程一致**
-   （`4b4552b2…`），实锤 rng 调用序列未被扰动。采集用的临时用例已删。
-   > 踩坑记录：`JSON.stringify` 对 `Map`/`Set` 默认产出 `{}`，会**静默掏空指纹**——`Coverage.numerals`
-   > 是 Set、`Coverage.ops` 与 `World.lastResolved` 是 Map，replacer 里必须显式处理。首版漏了 Set，
-   > 54 个 bin 里只有 1 个是真数字，差点拿一张假的安全网去做重构。
-3. **修 `npm run test:fuzz` 在 Windows 上长期失效**：原命令用 POSIX 前缀赋值
-   `AAH_FUZZ_RUNS=5000 … vitest`，而 npm 在 Windows 默认走 `cmd.exe`（`script-shell` 未配置），
-   该语法直接是语法错误 ⇒ CLAUDE.md §4 第 4 步「动核心逻辑后额外跑一遍 test:fuzz」在本机**一直没生效**。
-   新增 `scripts/fuzz.mjs`：以 `process.execPath` 直接拉起 vitest 的 ESM 入口（免 npx / 免 `shell:true`，
-   参数不会被二次拆词），注入 `AAH_FUZZ_*`，**透传退出码**（已实测失败场景返回 1，否则 CI 会把失败当通过），
-   支持 `--runs=/--ops=/--seed=`。超时从 120s 放宽到 600s（`--runs=20000` 时原值不够）。**不引入 cross-env 依赖**。
-4. **订正 `uvm/README.md` 的过期描述**（评审没发现；过期的地图比大文件更坑接手 Agent）：
-   ① explore 标注「进 CI？否（`it.skip`，会撞 U1/U2/U3）」——实际 0.6.7 起已转正、每次 `npm test` 都跑，
-   且 U1/U2（0.6.3）、U3（0.6.6 方案A）、U4（0.6.7）**全部已修**；② 称 explore 由 `AAH_FUZZ_MODE=explore`
-   切换——该变量早已无门控效果；③ 写「默认 400 条 × 40 步」——实际 500×60；④ explore 序号样式漏了
-   roman（黄金基线的 coverage dump 实测为 arabic/circled/cjk + lower/upper-alpha + lower/upper-roman）。
-   另把「参考侧…**不会和 DUT 一起错**」这句过度声明改准确：它不会与 DUT 各自演化出分歧，但对**共因错误**
-   （两侧对同一条规则一起理解错）没有免疫力——这正是 S7 另配独立参考模型 `indepMatch`/`indepSpec` 的原因。
-   新增「文件分工」节。
-5. **下沉 `framework.ts` 顶部历史升级段落**（同批用户追加要求）：顶部设计注释里 0.6.2/0.6.5/0.7.1/0.7.5/
-   0.7.6 五段「升级」叙事经核查**在 `log-archive.md` 对应版本条目已有完整周期块**（做了什么/压测结果/
-   没做什么一应俱全）——原叙事是重复记录而非新信息，违反 CLAUDE.md §3.1 单一事实源纪律。删除四段
-   `0.6.5`/`0.7.1`/`0.7.5`/`0.7.6` 详细叙事（`0.6.2` 一段本就只是「两种模式」现状说明，只去掉版本号
-   标题、留主体），代之以一句「历史演进」指针段落，指向 `log-archive.md` 五个版本条目 + `testplan.md`
-   §3.2（bug 状态权威源）。纯注释删减，零逻辑变化。
+| 版本 | 一句话 |
+| --- | --- |
+| 1.0.15 | `CLAUDE.md` 瘦身 46 行，开发周期十步下沉为按需加载的 `dev-cycle` 技能（纯文档，未 bump） |
+| 1.0.16 | 复制净化取消开关、改为恒开（旧配置迁移删键）+ 订正附录 A.11 两处「移动端独占 / 唯一」错误论点 |
+| 1.0.17 | 单标题跳过编号 `<!-- skip -->`（issue #6 phase 1）+ 迁移守卫可见化 + UVM 注释块排雷三颗雷 |
+| 1.0.18–1.0.21 | 迁移守卫提示的**四轮真机修复**，详见下方「那条 bug 的四轮教训」 |
 
-**没做什么**：未 bump（按 CLAUDE.md §4.1 上架后策略：只碰 `tests/` `doc/` `scripts/`，`src/` 一行未动、
-无行为与产物变化，故不推送空更新给线上用户），未重建 `release/`。未重建独立参考模型（理由见背景）。
-未动任何 oracle 语义 / 约束表 / 覆盖率 bin 定义。`framework.ts` 现 486 行（< 500），历史升级叙事已下沉。
+### 发版状态 / git tag ★
 
-**验证方式**：黄金基线逐字节比对（Phase 1 / Phase 2 各一次，md5 全程一致）；`npm test` 409/410 通过
-（唯一红灯是 `whitelist.test.ts:406` 的本机 ICU collation 预存噪音，CI 为准）；
-**`npm run test:fuzz` 5000×80 两块记分板全绿（4.7s）**——这条同时实证了新脚本在 Windows 上真能跑；
-`eslint` + `prettier --check` 对 `tests/dev_tests/uvm` 全绿；注释下沉后**重跑一遍同一质量门槛**确认
-纯文档改动未引入回归（仅改 `/** ... */` 注释文本，语义上不可能影响 rng 调用序列，但仍全量复核）。
+- **线上商店仍是 1.0.13**；`git tag` 最新也是 `1.0.13`。1.0.14–1.0.21 **全部只在仓库里，未发布**。
+- **用户已拍板：只发最新那一个版本**（不逐版本补发）。故 `doc/release-notes/` 里**只有
+  `1.0.21.md` 是会被取用的**——它已把 1.0.14–1.0.21 的全部用户可见改动合并成一份双语说明。
+  `1.0.10.md`–`1.0.17.md` 均为历史草稿，**不会被任何流程读取**，保留仅作留档。
+- **发布姿势**（本机无 `gh` CLI，走 tag 触发工作流）：确认 `manifest.json` 版本 = `1.0.21` →
+  `git tag -a 1.0.21 -m "1.0.21"`（**不带 `v` 前缀**，Obsidian 约定）→ `git push origin 1.0.21`。
+  `.github/workflows/release.yml` 会自动构建、按 `doc/release-notes/1.0.21.md` 建 Release 并附三个
+  产物。**截至收尾时 tag 尚未推送**——等用户明确指令再发（推 tag = 面向全体用户公开发布）。
 
-**本周期派发 4 次（Explore × 2、feature-coder × 2）**。
+### 未解决问题总账
 
-**下一步**：接 1.0.13 原有待办——用户真机手验 K15/K16、打 tag `1.0.13` 发布、M12 余项。
-UVM 侧 backlog 不变（放开「各模板不同前后缀候选」+ 按活模板动态算剥离并集，探「删含唯一前缀模板 →
-旧文件孤儿残留」）；新增可选项：默认模式样式约束（arabic/cjk/circled）的原因已随方案A失效，
-可专项放开跑一轮，绿了就删约束。
+**A. 待用户真机手验**（本地无从验证，都需要真实 vault）
 
----
+| 项 | 内容 |
+| --- | --- |
+| testplan `E36` | 带 `<!-- skip -->` 的标题，`[[文件#` 补全给出哪种形态、已有内链是否解析。夹具已备好：`tests/user_tests/11-单标题跳过编号.md` 最后一节 |
+| testplan `O11①` | 设置 → 全局设置里确认**不再有**「复制净化」开关（纯 UI，1.0.16 已删代码） |
+| testplan `O5f` | Obsidian **内置**「导出为 PDF」是否残留 WJ。**这条卡着一个需求的决策**：结论出来才能定「渲染层剥 WJ」做不做 |
+| testplan `H12` / `H9` | 固化编号确认框 / 离场提示条；真库内链不断 |
+| Dataview 样例 | README 里给的查询写法需在真实 Dataview 上验一遍 |
 
-## 2026-07-18 1.0.13 M12 两项落地：批量重编号 +「不编号」伪模板；K14/K14b 手验回填 + 箭头图标统一
+**B. 待决策**
 
-**做了什么**：
+- **复制净化未命中时的降级**（spec §2.8「残余已知限制」）：LRU 未命中（重启后 / 条目逐出 /
+  外部改过）时粘贴回来的是净化文本。1.0.17 已把上限 50→200 吃掉「同会话逐出」这一类；
+  **剩下「跨重启」这一类未处理**——曾评估的「未命中时剥净编号再插入」会改变粘贴语义，未做；
+  「持久化 LRU」已因隐私 + 多端同步冲突**两次否决**，不要再翻案。
+- **Setext 标题支持的优先级**（spec Roadmap M12 已登记）：做与不做未定；真要做**必须连
+  frontmatter 结尾 `---` 被误判成 Setext H2 那个坑一起做**（竞品 gurjar1 的同类缺陷至今 open）。
+- **`doc/research/` 的可移植性**：它是 `.gitignore` 排除的**本地留档**，换机器/重新克隆就没了。
+  当初这么定是因为本仓库是**公开发布仓库**、放不得逐条点名竞品的拆解材料。若要跨机器保留，
+  需另择存放处——这个取舍用户知情但未最终拍板。
 
-1. **用户真机手验 1.0.12 通过**（「效果达标」）：testplan K14/K14b 的「手验 DOM」回填 ✅。随手感
-   反馈做小改：分层浏览的 `⬅` 返回 / `▸` 下钻改用**同族 lucide 图标**（`setIcon` `arrow-left` /
-   `arrow-right`，`--icon-size: var(--icon-s)`，点击区扩大手法不变）。
-2. **M12「不编号」伪模板（testplan K15）**：`pathrules.ts` 新增哨兵 `NO_NUMBERING_TEMPLATE = "$none"`；
-   `getTemplateForFile` 对哨兵返回无模板（复用「无可用模板」既有语义，自动路径静默跳过、已有编号
-   冻结）；伪模板**参与具体度解析并可胜出**（`daily/→不编号` 压过根规则）；手动命令经
-   `resolvesToNoNumbering` 弹专用 Notice；`TemplateStore.rename` 拒占哨兵名；GUI 下拉在真实模板后
-   固定伪选项，「失效模板」兜底不误伤哨兵。
-3. **M12 多文件批量重编号（testplan K16）**：`main.ts` 新增 `batchRenumberRule`——作用域=规则**路径
-   模式**命中的全部 Markdown 文件，**每个文件用它自己解析出的模板**；跳过 fm `false` / 未接管外来
-   编号（J10 同源）/「不编号」；**已打开文件走编辑器单一事务**（可撤销、无 `vault.process` 竞态），
-   未打开走 `vault.process`；backlink 照常同步且改写数**汇总一条 Notice**（`syncBacklinksCounted`
-   从 `syncBacklinks` 拆出计数核心 + `notifyBacklinkTotal` 统一出口）。GUI：行内 `list-ordered`
-   图标按钮（「不编号」行置灰）+ `BatchRenumberModal` 确认框（显示命中文件数，内联在
-   `PathRules.ts`，随 `DeleteTemplateModal` 先例）；表格加第 6 列（grid 28px×2）。
-4. **测试**：`main.test.ts` 新增 K15×3 + K16×5 共 8 例（含「点根规则批量不覆盖子规则文件」「编辑器
-   通道不被 vault 竞态覆盖」），68 例全过；`pathrules.test.ts` 45 例全过；tsc 干净。
-5. **文档**：spec §3.8 新增两段规格 + M12 两项勾选；README 双语补「规则级两件配套工具」段并修
-   「没打开的文件永远不会被碰」表述（显式确认的批量操作除外）；release-notes/1.0.13.md 双语。
+**C. 待做（已定性，等排期）**
 
-**没做什么**：K15/K16 的 GUI 手验 DOM 仍 🔲（下拉伪选项观感、批量确认框、批量后实测编号），留用户
-真机确认；批量重编号未做进度条 / 取消（命中数极大的库一次跑完，Notice 只在结束时汇总）——如有需求
-再立项。
+- **单标题 skip 的 phase 2**：标题旁浮动菜单里一键切换，标记由插件写入。等 M8a/M8b GUI 落地。
+  纪律见 [spec §3.20](./spec.md)：**手写标记只是兜底，不得当卖点售卖**。
+- **竞品调研的采纳清单 8 项**：已全部立项进 [spec Roadmap M9](./spec.md)「竞品源码级调研的采纳
+  清单」，含工作量 / 风险 / 与既有设计的冲突点。**不要照抄竞品实现**，每条都写明了不可照抄的
+  地方（尤其 backlink 回滚的并发写、低置信度编号接管）。
 
-**验证方式**：`main.test.ts` 68 例 + `pathrules.test.ts` 45 例全过（quality-gate 定向）；
-`npm run preflight` 全绿（Windows ICU collation 预存噪音除外，CI 为准）。
+**D. 已知限制（接受，不修）**
 
-**本周期派发 3 次（repo-scout × 1、quality-gate × 2）**。
+- 迁移守卫的提示：**用户手动关掉后不会重新弹**（Obsidian 的 `Notice` 无「被关闭」回调），
+  需切到别的文件再回来。
+- 迁移守卫的判据（`stripForeignNumbering`）有**固有误伤面**：`## API 设计`、`## TODO 清单`
+  这类正常标题会被判成疑似外来编号 ⇒ 弹提示、跳过自动编号。正因如此，清理**必须**走预览确认框，
+  **绝不可做成无预览的一键清理**（否则就是把 `API` 从用户标题里吃掉）。
+- 未落盘改动下，`cachedRead` 读到的是上次落盘内容，切回来那一瞬的守卫判断可能滞后一步；
+  用户一开始打字即经防抖路径按编辑器真实内容重新判断，不影响正确性。
+- 本机 `whitelist.test.ts:406` 的 ICU 排序断言**恒红**，是 Windows 环境差异，不是回归。
 
-**下一步**：用户真机手验 K15/K16（伪模板下拉 + 批量按钮/确认框）；打 tag `1.0.13` 发布（release
-工作流取 `doc/release-notes/1.0.13.md`）；M12 余项（注释块跳过、断链扫描命令、description 重排、
-公开 API 改名事件、迁移指南与社区发布）。
+### 那条 bug 的四轮教训 ★（最值得下一个接手者读的一段）
+
+同一个「迁移守卫提示不对」的问题修了四轮，每轮都以为找到根因：
+
+1. **1.0.17** 按 `file-open` 事件重置「已提示」标志 → 真机说切回来不一定弹。
+2. **1.0.18** 改按「最近检查的路径」推导，不依赖事件 → 真机说切到干净文件反而弹。
+3. **1.0.19** 加「提示只为当前活动文件发声」的门 → 真机说提示依然是过时的。
+4. **1.0.21** 才发现：**喂给判断的内容本身就是错的**——`file-open` 那一刻 `view.file` 已换、
+   编辑器缓冲区还显示上一篇，且滞后**不止一个事件循环**（1.0.20 推迟一个宏任务仍读到上一篇）。
+   改用 `vault.cachedRead(file)` 取文件自身内容，时序无关，问题消失。
+
+**四轮的单测全绿，根子是同一个**：测试替身里「文件内容」与「编辑器内容」**永远相等**、且
+`app.workspace` **根本没有 `getActiveFile`**，于是「被检查的文件 ≠ 用户正看着的文件」「文件内容 ≠
+缓冲区内容」这两个维度在单测里**根本不可表达**。
+**⇒ 替身比真实环境「更整齐」的地方，就是 bug 的藏身处。** 往 `obsidian-mock.ts` 里补方法时，
+优先补那些能让「不一致」被表达出来的，而不是让一切都自洽。
+本轮新增的回归都做了**「去掉修复 → 确认变红 → 恢复 → 转绿」**的实测，不是写完就绿的摆设——
+这个动作值得成为习惯。
+
+### 接手指引
+
+1. 第一条命令仍是 `npm run docs -- --handover`。
+2. 本分支 `feat/m11-export-m12-retire` 的改动**已全部合并回 `master`**（见下方「验证方式」）。
+3. 竞品调研的**结论**在 [spec Roadmap M9 采纳清单](./spec.md)；**原始报告**在 `doc/research/`
+   （本地、不入库），需要溯源细节时才翻。
+
+**验证方式**：全程 `npx tsc --noEmit` / `npm test` / `npm run lint` / `npm run format:check` /
+`npm run test:fuzz` 五项门槛；唯一红灯是既知的 ICU 排序噪音。1.0.21 已由用户真机确认解决。
+
+**本周期派发 0 次**（收尾整理，主模型亲自做）。
 
 ---
 
-## 2026-07-18 1.0.12 路径建议弹窗：统一「已配置行再次点击」的外观（K14b，用户实测反馈）
+## 2026-08-09 1.0.21 判断依据改为文件自身内容（真机反馈第四轮；用户直接点出了正解）
+
+**背景**：1.0.20 的 `setTimeout(0)` 不够。用户第四轮给了一个非常干净的复现，直接把规律指出来了：
+「a、b 是正常文件，C 是外来编号。那么 **a→C 无提示，C→b 弹提示且没什么可清理**」——
+**编辑器内容正好落后一个文件**。并且直接提了正解：**「为什么不能做成打开 C 就弹出？打开 a、b
+不弹出？就是只检测当前打开的文件，然后立马弹出提示」**。
+
+**根因（终于对上）**：`file-open` 那一刻 `view.file` 已换、编辑器缓冲区还显示上一篇，而且这个
+滞后**不止一个事件循环**——1.0.20 推迟一个宏任务再读，读到的仍是上一篇。所以「读编辑器」这条路
+本身就是错的，推迟多久都是在猜。
+
+**做了什么**：`renumberOnOpen` 不再读 `editor.getValue()`，改用 **`vault.cachedRead(file)`**——
+它按 `TFile` 取**这个文件自己的内容**，与编辑器换没换到位**完全无关**，是时序无关的判据。
+守卫与提示全部基于它，于是「打开 C 就弹、打开 a/b 不弹」自然成立。
+
+- **写入侧另加一道闸**：`applyRenumber` 必须经编辑器写，故只有在编辑器确实已显示该文件、
+  且 `editor.getValue() === content` 时才动手；不一致说明尚未换到位（或有未落盘改动），
+  本轮**只判断不写入**。1.0.20 记录的那个「可能把 A 的编号写进 B」的潜在数据损坏，到这里才真正
+  堵死——之前只是靠守卫恰好拦住。J9 的语义不受影响：内容一致时照常重排，不一致时由用户随后的
+  第一次编辑经防抖路径补上。
+- **`main.test.ts` J15 重写为 6 例**，直接按用户给的 a→C / C→b 两个方向建模，**去掉修复后这两条
+  确实变红**（已实测）。
+
+**教训（连着四轮，根因每轮都更深一层）**：1.0.17 调「何时重新提示」→ 1.0.18 换判据仍在调时机 →
+1.0.19 加「提示归属哪个文件」的门 → 1.0.21 才发现**喂给判断的内容本身就是错的**。四轮的单测全绿，
+根子是同一个：**测试替身里「文件内容」与「编辑器内容」永远相等**，而真实 Obsidian 在换页瞬间恰恰
+不等。本轮给替身补上 `vault.cachedRead`、并让它能与编辑器内容**故意不一致**，这个维度才第一次
+可表达。**替身比真实环境「更整齐」的地方，就是 bug 的藏身处**——这条已经连续验证两次了。
+
+**没做什么 / 已知遗留**：
+
+- **未落盘改动的边角**：用户在某文件里打了字（未保存）后切走再切回，`cachedRead` 读到的是上次
+  落盘的内容，可能与屏幕上不完全一致。守卫判据因此可能略滞后一步；随后的第一次编辑会经防抖
+  路径按编辑器真实内容重新判断，故只影响「刚切回来那一瞬的提示」，不影响正确性。
+- 1.0.19 遗留的「用户手动关掉提示后不会重新弹」（Obsidian 的 `Notice` 无关闭回调）仍在。
+
+**下一步**：① 把 1.0.21 发给用户**第五轮**复验（原样跑 a→C、C→b 两步）；② 通过后推送、合并、
+打 tag（只发 1.0.21）；③ 排队中的手验清单（H12/H9/O5f/Dataview/E36）与 Setext 支持仍待推进。
+
+**验证方式**：`npx tsc --noEmit` / `npm test`（496 通过，唯一红灯仍是既知的
+`whitelist.test.ts:406` ICU 排序噪音）/ `npm run lint` / `npm run test:fuzz`（5000×80 两块记分板）
+全绿；J15 新用例经「去掉修复 → ①② 变红 → 恢复 → 转绿」实测确认有效。
+
+**本周期派发 0 次**。
+
+---
+
+## 2026-08-09 1.0.20 `file-open` 时编辑器内容尚未换到位（真机反馈第三轮；**方向对、药量不够**——见 1.0.21）
+
+**背景**：1.0.19 发出去后第三轮真机反馈：「在外来编号的文件里敲个字、立刻切去**已经由本插件
+接管**的文件，弹出，但点击后还是显示没有什么可以清理——提示依然是过时的。切回来也不弹出。」
+1.0.19 加的「只为当前活动文件发声」那道门**确实生效了**（提示挂在了 b.md 上、`getActiveFile()`
+也确实是 b.md，所以门放行了），但它挡不住真正的毛病：**内容是错的**。
+
+**根因**：`renumberOnOpen` 同步跑在 `file-open` 处理器里，而**那一刻 Obsidian 已经把
+`view.file` 换成了新文件、编辑器里的内容却还是上一篇的**。于是：
+
+- `view.file?.path === "b.md"` ✅ 通过 → `editor.getValue()` 返回的却是 **a.md 的内容** →
+  `hasUnclaimedForeignNumbering(a 的内容)` = true → 提示**挂在 b.md 的路径上**弹出。
+- 点击时 `markdownContextForPath("b.md")` 重新读 b.md 的**真实**内容（此时已换到位、带 WJ）
+  → 预览为空 → 「没有什么可以清理」。
+- 切回 a.md 时同理：编辑器又还停在 b.md 的内容上 → 判定为干净 → 不但不提示，还顺手
+  `dismissGuardNotice("a.md")`。三条症状全部对上。
+- **更危险的潜在后果**：若那份陈旧内容恰好是「干净但没编号」的，`applyRenumber` 会把
+  **a.md 的编号写进 b.md 的编辑器**。这次是守卫恰好拦住才没发生——属于侥幸，不是设计。
 
 **做了什么**：
 
-1. **用户实测 1.0.11 后反馈**：新增空行进分层浏览外观正确，但**把某行配好 `/` 或 `A/` 后再次点击
-   该行**，弹窗又回落成「匹配一堆」的扁平列表——视觉设计与功能设计不统一。
-2. **根因**：1.0.11 的模式判断只看「输入框是否为空」（`value.trim() === ""`），配好的行 value 非空
-   ⇒ 一律走扁平搜索分支（`/` 经前导斜杠剥离后 needle 为空 ⇒ `filterPathCandidates` 返回全部候选；
-   `A/` ⇒ 匹配一堆含 `a/` 的项）。
-3. **修复（1.0.12，行为变化已 bump）**：
-   - `pathrules.ts` 新增纯函数 `browseDirForInput(value, folderPaths)`——决定该进分层浏览还是扁平
-     搜索并返回要浏览的目录：空 / 根 `/`（含 `//`、`\` 归一化写法）/ **真实存在的文件夹（尾斜杠，
-     如 `A/`）** → 返回目录路径（`A/` 返回 `A`，浏览**进** A）；正在打字的片段（`Pro`）/ 文件规则
-     （`A/note.md` 无尾斜杠）/ 尚不存在的文件夹名 → 返回 `null`（交给扁平搜索）；
-   - `PathSuggest.ts` `refresh()` 改由 `browseDirForInput` 决定模式（替换原「是否为空」判断），并把
-     `getCandidates()` 结果复用、顺带算出 `folderPaths`；类注释与 spec §3.8 同步。
-4. **测试**：`pathrules.test.ts` 新增 `browseDirForInput` 14 例（空/根/真实文件夹/前导斜杠反斜杠/
-   打字片段/文件规则/非实文件夹边界），全过；`npm test` 401 通过、`lint`/`format`/`tsc` 全绿。
+1. **`renumberOnOpen` 推迟一个宏任务**（`window.setTimeout(…, 0)` → 新的
+   `renumberOnOpenSettled`），在那时**重新解析**活动视图、并**重新确认**它就是本次打开的文件
+   （用户可能在这一瞬又切走了）。J9「打开即按当前模板重排」的语义不受影响——它本来就不要求
+   同步完成。
+2. **`scheduleRenumber` 计时器加作废闸**：到期时若 `info.file?.path !== path`，说明这个叶子在
+   防抖窗口内已切到别的文件（同一个 `MarkdownView`/`Editor` 实例会被复用来显示新文件），
+   **整轮作废**。此前只靠 1.0.19 那道「活动文件」门挡提示，写入侧并没有挡。
+3. **`main.test.ts` 新增 J15 三例**，其中一例把「`view.file` 已换、`editor` 内容未换」那一瞬
+   **精确建模**（同一个 editor 实例，推进事件循环时才换内容）——**去掉修复后该用例确实变红**，
+   已实测确认它抓得住这个 bug，不是写完就绿的摆设。
 
-**没做什么**：DOM 交互仍无自动化覆盖（同 1.0.11），K14b 标 🔲 手验 DOM，留用户实测「配好后再点击
-的外观一致性」。
+**教训（第三轮才修对，值得记住）**：三轮修复分别在调「什么时候重新提示」（1.0.17 `file-open`
+重置 / 1.0.18 `lastGuardedPath`）、「这条提示说的是哪个文件」（1.0.19 活动文件门），**都对，但都
+不是根因**——根因是「判断所依据的内容本身就是错的」。前两轮的单测之所以全绿，是因为测试替身
+里**编辑器内容与文件路径永远是一致的**，而真实 Obsidian 在 `file-open` 那一瞬恰恰不一致。
+**替身比真实环境「更整齐」的地方，就是 bug 的藏身处。**
 
-**验证方式**：`pathrules.test.ts` 45 例全过（含新增 14 例）、`npm test` 401 通过、`lint`/`format`
-全绿；唯一红灯是本机预存 Windows ICU collation 排序噪音（`whitelist.test.ts:406`，与本改动无关，
-CI 为准）。
+**没做什么 / 已知遗留**：
 
-**本周期派发 1 次（quality-gate × 1）**。
+- **`setTimeout(0)` 是否足够**取决于 Obsidian 换内容的时机，本地无法验证。若第四轮仍复现，
+  下一步应改为「用 `metadataCache.getFileCache(file)` 的 headings 与编辑器内容交叉校验」，
+  内容对不上就跳过本轮——那是不依赖时序的判据，但实现更重，故先用延后这条轻的。
+- 1.0.19 遗留的「用户手动关掉提示后不会重新弹」（Obsidian 的 `Notice` 无关闭回调）仍在。
 
-**下一步**：用户实测 1.0.12 分层浏览（含配好后再点击）的完整手感，回填 K14/K14b 手验；M11 其余项
-（导出验证矩阵、Canvas O1、E8 拍板、Backlink 审阅模式、H8+清库撤销、CM6 原子区域）。
+**下一步**：① 把 1.0.20 发给用户**第四轮**复验（原样复现这次那条链路）；② 通过后推送、合并、
+打 tag（只发 1.0.20）；③ 排队中的手验清单（H12/H9/O5f/Dataview/E36）与 Setext 支持仍待推进。
+
+**验证方式**：`npx tsc --noEmit` / `npm test`（493 通过，唯一红灯仍是既知的
+`whitelist.test.ts:406` ICU 排序噪音）/ `npm run lint` / `npm run test:fuzz`（5000×80 两块
+记分板）全绿；新增回归经「去掉修复 → 变红 → 恢复 → 转绿」实测确认有效。
+
+**本周期派发 0 次**（主模型亲自处理——根因判断依赖对 Obsidian 事件时序的整体推理）。
 
 ---
 
@@ -183,12 +251,13 @@ CI 为准）。
 obsidian-auto-headings/
 ├── src/                  ← 源代码（TypeScript）
 │   ├── main.ts             插件入口：生命周期、命令、防抖、事务写回、Backlink 同步接线
-│   ├── parser.ts           Markdown 标题解析（ATX、代码块边界）
+│   ├── parser.ts           Markdown 标题解析（ATX；跳过区域判定委托 scan.ts）
+│   ├── scan.ts             跳过区域扫描器：围栏代码块 + 注释块（%%…%% / <!-- -->），parser 与 numbering 共用
 │   ├── numbering.ts        编号引擎编排（numberHeadings/renumberContent）+ 对外 barrel（↓四模块经它转发）
 │   ├── template.ts         模板数据模型：类型/默认值/字段规范化
 │   ├── count.ts            计数器状态机 HeadingCounter
 │   ├── render.ts           序号渲染器 + 前缀拼装 buildPrefix + 面板预览
-│   ├── strip.ts            三个剥离器（WJ 边界/清除全样式/清理外来）+ WORD_JOINER
+│   ├── strip.ts            三个剥离器（WJ 边界/清除全样式/清理外来）+ WORD_JOINER + stripWordJoiners
 │   ├── whitelist.ts        白名单归一化/命中判定/面板预览分析
 │   ├── backlinks.ts        Backlink 同步纯函数核心（改名表/锚点归一/链接重写）
 │   ├── cleanup.ts          清除编号命令的内容级封装
@@ -199,8 +268,9 @@ obsidian-auto-headings/
 │   ├── settings/
 │   │   ├── model.ts        设置数据模型（全局开关、防抖延迟、路径规则持久化）
 │   │   ├── SettingsTab.ts  设置 GUI 壳：TAB 栏 + 分发（内容在 tabs/，M7 多 TAB 已拆完）
+│   │   ├── ForeignNumberingCleanupModal.ts 迁移守卫 Notice 点击入口：清理预览确认框（testplan J14）
 │   │   └── tabs/           七个 TAB 的实现
-│   │       ├── GeneralTab.ts      常规设置（全局开关、防抖、语言、Backlink 开关、复制净化开关）
+│   │       ├── GeneralTab.ts      常规设置（全局开关、防抖、语言、Backlink 开关；复制净化 1.0.16 起恒开无开关）
 │   │       ├── TemplatesTab.ts    模板列表（自绘 header：折叠/命名/删除）
 │   │       ├── EditPanel.ts       模板编辑面板（级别格式网格 + 跳级/占位字符）
 │   │       ├── WhitelistEditor.ts 白名单行编辑器（分段控件/行内编辑/命中角标）
@@ -215,14 +285,16 @@ obsidian-auto-headings/
 │   ├── dev_tests/          自动化单元测试（Vitest，无需 Obsidian 运行时，npm test 跑它）+ uvm/ 压测框架
 │   └── user_tests/         可复制粘贴进 Obsidian 实测的 .md 样例（每个对应 testplan 某场景）
 ├── README.md             ← 面向读者的简介（核心功能 + Milestone 概览，入口文档）
-├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + marker-contract 下游契约 + release-notes/ 各版本发布说明（Release 工作流按 tag 取用），见 CLAUDE.md §3.1；grill 方向审查已收编为 spec 附录 A）
+├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + marker-contract 下游契约 + release-notes/ 各版本发布说明（Release 工作流按 tag 取用），见 CLAUDE.md §3.1；grill 方向审查已收编为 spec 附录 A；research/ 本地调研留档、.gitignore 排除不入库，见该目录 README.md）
 ├── release/              ← 可分发插件文件（main.js/manifest/styles/README；zip 本地生成不入库）★每周期必更新
 ├── scripts/
 │   ├── sync-release.mjs    把构建产物同步到 release/（被 npm run release 调用）
 │   ├── bump.mjs            一键版本号同步（npm run bump）
 │   ├── fuzz.mjs            跨平台跑重型随机压测（npm run test:fuzz [-- --runs=/--ops=/--seed=]）
 │   └── docs.mjs            文档维护：归档/滚动/摘要/守卫/交接（npm run docs [-- --handover|--check]）
-├── .claude/agents/       ← SubAgent 定义（quality-gate / repo-scout / mech-editor / feature-coder）
+├── .claude/
+│   ├── agents/             SubAgent 定义（quality-gate / repo-scout / mech-editor / feature-coder）
+│   └── skills/dev-cycle/   开发周期完整清单（十步 + 版本号规则；根 CLAUDE.md §4 只留一句话流程 + 指针）
 ├── manifest.json         ← 插件清单（Obsidian 约定须在插件根目录）
 ├── versions.json         ← 版本 → 最低 Obsidian 版本映射
 ├── styles.css            ← 面板样式源（构建时随插件加载，并复制入 release/）

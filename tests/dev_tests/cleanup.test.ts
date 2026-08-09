@@ -3,6 +3,7 @@ import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
 	hasUnclaimedForeignNumbering,
+	previewForeignNumberingCleanup,
 } from "../../src/cleanup";
 import { renumberContent, DEFAULT_TEMPLATE, WORD_JOINER } from "../../src/numbering";
 
@@ -175,6 +176,57 @@ describe("clearForeignNumberingContent（0.6.6「清理非本插件的标题编�
 	});
 });
 
+describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，testplan J14）", () => {
+	it("单条外来编号标题：现状→清理后一一对应，含 # 前缀", () => {
+		const items = previewForeignNumberingCleanup("## 1 红米\n### 1.1 工艺");
+		expect(items).toEqual([
+			{ before: "## 1 红米", after: "## 红米" },
+			{ before: "### 1.1 工艺", after: "### 工艺" },
+		]);
+	});
+
+	it("覆盖手写惯例（括号 / 第…章）：预览结果与 clearForeignNumberingContent 逐条一致", () => {
+		const content = "## (1) 概述\n## 第3章 引言";
+		const items = previewForeignNumberingCleanup(content);
+		expect(items).toEqual([
+			{ before: "## (1) 概述", after: "## 概述" },
+			{ before: "## 第3章 引言", after: "## 引言" },
+		]);
+		// 与实际清理命令结果逐条一致：拼回全文应等于 clearForeignNumberingContent 的输出。
+		const cleaned = clearForeignNumberingContent(content);
+		expect(cleaned).toBe(items.map((i) => i.after).join("\n"));
+	});
+
+	it("含 WJ 的标题（本插件已接管）不出现在预览列表里", () => {
+		const input = `## ${WORD_JOINER}1 ${WORD_JOINER}已编号\n### 1.1 疑似外来`;
+		const items = previewForeignNumberingCleanup(input);
+		expect(items).toEqual([{ before: "### 1.1 疑似外来", after: "### 疑似外来" }]);
+	});
+
+	it("裸标题（无任何疑似编号）不出现在预览列表里", () => {
+		expect(previewForeignNumberingCleanup("## 概述\n### 背景与动机")).toEqual([]);
+	});
+
+	it("仅行尾空白（J12 同一误报口径）不出现在预览列表里：不该让用户以为「这条会被改」", () => {
+		expect(previewForeignNumberingCleanup("## 章一 \n## 章二")).toEqual([]);
+	});
+
+	it("无标题的纯文本 → 空预览", () => {
+		expect(previewForeignNumberingCleanup("正文一行\n另一行")).toEqual([]);
+	});
+
+	it("混合：真外来编号 + 仅空白 + 已接管，只有第一种进入预览", () => {
+		const input = [
+			"## 1 外来编号",
+			`## ${WORD_JOINER}2 ${WORD_JOINER}已接管`,
+			"## 裸标题 ",
+		].join("\n");
+		expect(previewForeignNumberingCleanup(input)).toEqual([
+			{ before: "## 1 外来编号", after: "## 外来编号" },
+		]);
+	});
+});
+
 describe("hasUnclaimedForeignNumbering（迁移守卫探测，testplan J10）", () => {
 	it("全无 WJ + 标题像外来编号 → 命中", () => {
 		expect(hasUnclaimedForeignNumbering("## 1 红米\n### 1.1 工艺")).toBe(true);
@@ -198,5 +250,76 @@ describe("hasUnclaimedForeignNumbering（迁移守卫探测，testplan J10）", 
 	it("已清理干净（无编号残留）→ 不命中，插件可正常接管编号", () => {
 		const cleaned = clearForeignNumberingContent("## 1 红米\n### 1.1 工艺");
 		expect(hasUnclaimedForeignNumbering(cleaned)).toBe(false);
+	});
+});
+
+describe("clearNumberingContent — 跳过区域内的残留（M12，testplan E29）", () => {
+	const p = (n: string): string => `${WORD_JOINER}${n} ${WORD_JOINER}`;
+
+	it("E29：清除命令**注释块与围栏内一并清净**", () => {
+		// 与自动路径的分治不同：清除是用户主动的一次性操作，且注释里的不可见残留若挺过
+		// 「清除全库编号」，就直接违背标记契约「永远可退出 / 精确剥净」的承诺。
+		const input = [
+			`## ${p("1")}正常标题`,
+			"%%",
+			`## ${p("9.9")}注释里的旧编号`,
+			"%%",
+			"```",
+			`## ${p("8.8")}围栏里的旧编号`,
+			"```",
+		].join("\n");
+		const out = clearNumberingContent(input);
+		expect(out).not.toContain(WORD_JOINER);
+		const lines = out.split("\n");
+		expect(lines[0]).toBe("## 正常标题");
+		expect(lines[2]).toBe("## 注释里的旧编号");
+		expect(lines[5]).toBe("## 围栏里的旧编号");
+	});
+
+	it("E29：区域内**不含 WJ** 的普通文本一个字符都不动", () => {
+		const input = [
+			"%%",
+			"# 用户自己写的注释标题",
+			"手写的 1. 编号也不该被碰",
+			"%%",
+			"```",
+			"# 代码块里的井号",
+			"```",
+		].join("\n");
+		expect(clearNumberingContent(input)).toBe(input);
+	});
+
+	it("E29：注释块内的降级正文残留也清净", () => {
+		const input = ["%%", `${p("9.9")}降级残留`, "%%"].join("\n");
+		expect(clearNumberingContent(input).split("\n")[1]).toBe("降级残留");
+	});
+
+	it("clearForeignNumberingContent 对注释块内部不做任何事", () => {
+		// 它按定义只碰无 WJ 的标题，而注释内的无 WJ 文本是插件从未染指的用户文本。
+		const input = ["## 1 外来编号", "%%", "## 2 注释里的外来编号", "%%"].join("\n");
+		const out = clearForeignNumberingContent(input).split("\n");
+		expect(out[0]).toBe("## 外来编号");
+		expect(out[2]).toBe("## 2 注释里的外来编号");
+	});
+
+	it("hasUnclaimedForeignNumbering：唯一的外来样标题在注释内 → 不命中（迁移误报减少）", () => {
+		expect(hasUnclaimedForeignNumbering(["%%", "## 1 注释里的", "%%"].join("\n"))).toBe(false);
+		// 对照：同样的标题在注释外则命中
+		expect(hasUnclaimedForeignNumbering("## 1 正文里的")).toBe(true);
+	});
+});
+
+describe("hasUnclaimedForeignNumbering — 行尾空白不该触发迁移守卫（1.0.15，testplan J12）", () => {
+	it("J12：无 WJ、无任何编号，仅标题行尾带空格 → 守卫不命中", () => {
+		// 此前 stripForeignNumbering 末尾的 `\s+$` 归一化让「剥离结果 ≠ 原文」，于是仅仅因为
+		// 一个空格就判定成外来编号，整个文件的自动编号被拦下并弹出误导提示。
+		expect(hasUnclaimedForeignNumbering("## 章一 \n## 章二")).toBe(false);
+		expect(hasUnclaimedForeignNumbering("## 章一\t\n正文")).toBe(false);
+	});
+
+	it("J12 对照：真的带外来编号时仍然命中（修复没有把守卫改瞎）", () => {
+		expect(hasUnclaimedForeignNumbering("## 1 章一\n## 2 章二")).toBe(true);
+		// 行尾空格 + 真外来编号：仍命中。
+		expect(hasUnclaimedForeignNumbering("## 1 章一 ")).toBe(true);
 	});
 });

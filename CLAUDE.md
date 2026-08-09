@@ -3,10 +3,6 @@
 本仓库是 Obsidian 插件 **Auto Headings**（按模板自动为 Markdown 标题编号）的**独立发布仓库**，
 对外发布名 `AArlert/obsidian-auto-headings`，用于向 Obsidian 社区插件目录提交与分发。
 
-> 历史备注：本仓库最初由作者的私有 monorepo（收纳多个浏览器扩展与 Obsidian 插件）迁移而来，早期曾
-> 直接携带 monorepo 版 `CLAUDE.md`（含其他 Addon 的描述），已随本次迁移核实一并订正，去除不适用于
-> 本仓库的内容。仓库根目录**就是**这个插件本身——没有多 Addon 子目录，也没有顶层 workspace。
-
 > 动手前：先读本文件，再读 [`doc/`](./doc/) 下的规格与日志。
 > 详细规格：[`doc/spec.md`](./doc/spec.md)。
 
@@ -29,12 +25,6 @@
 
 **主模型保留**：需求澄清、架构决策、testplan 语义设计、log.md / status.jsonl 周期块、bump、
 commit、合并。每周期 log 块记一句「本周期派发 N 次（agent 名 × 次数）」，供回顾各 agent 去留。
-
-## 1. 仓库结构
-
-单一 Obsidian 插件的完整源码仓库：`src/` 源码、`tests/` 测试、`doc/` 规格与交接文档、`scripts/`
-构建与文档维护脚本、`release/` 可分发产物（入库以支持 BRAT / 手动安装）。根目录 `package.json` 即
-本插件的唯一 npm 项目，无需 `cd` 进任何子目录。
 
 ## 2. 语言与代码风格
 
@@ -72,17 +62,18 @@ commit、合并。每周期 log 块记一句「本周期派发 N 次（agent 名
 
 ### 3.1 文档结构
 
-| 文件                       | 职责                                                              | 何时改                          |
-| -------------------------- | ----------------------------------------------------------------- | ------------------------------- |
-| `README.md`/`README.zh.md` | 简介：功能 + 安装 + 命令一览（商店渲染的门面）                    | 功能变化时                      |
-| `doc/spec.md`              | 详细规格 / 设计决策 / Roadmap                                     | 涉及规格改动时                  |
-| `doc/log.md`               | 详细交接日志（倒序，**仅保留最新 N 周期块**）                     | 每周期追加新块，收尾跑归档脚本  |
-| `doc/log-archive.md`       | 由 `log.md` 滚动出去的历史周期块（倒序）                          | 归档脚本自动维护，**平时不读**  |
-| `doc/status.jsonl`         | 状态索引（首行总览 + 最新 N 条周期概括，倒序）                    | 每周期更新，收尾脚本滚动        |
-| `doc/status-archive.jsonl` | 由 `status.jsonl` 滚动出去的历史概括行（倒序）                    | 归档脚本自动维护，**平时不读**  |
-| `doc/testplan.md`          | 场景真值表：操作序列 + 预期结果 + 状态（✅/❌/⚠️/🔲）+ 已知 bug   | 加功能 / 修 bug 时先改这里      |
-| `doc/marker-contract.md`   | 标记字符契约（英文，面向下游的字节格式与稳定性承诺）              | 格式/承诺变化时（须主版本迁移） |
-| `doc/release-notes/*.md`   | 各版本发布说明（双语；Release 工作流打 tag 时按 `<tag>.md` 取用） | 每次打 tag 发版前写好对应文件   |
+| 文件                       | 职责                                                                                                                                 | 何时改                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `README.md`/`README.zh.md` | 简介：功能 + 安装 + 命令一览（商店渲染的门面）                                                                                       | 功能变化时                                                                |
+| `doc/spec.md`              | 详细规格 / 设计决策 / Roadmap                                                                                                        | 涉及规格改动时                                                            |
+| `doc/log.md`               | 详细交接日志（倒序，**仅保留最新 N 周期块**）                                                                                        | 每周期追加新块，收尾跑归档脚本                                            |
+| `doc/log-archive.md`       | 由 `log.md` 滚动出去的历史周期块（倒序）                                                                                             | 归档脚本自动维护，**平时不读**                                            |
+| `doc/status.jsonl`         | 状态索引（首行总览 + 最新 N 条周期概括，倒序）                                                                                       | 每周期更新，收尾脚本滚动                                                  |
+| `doc/status-archive.jsonl` | 由 `status.jsonl` 滚动出去的历史概括行（倒序）                                                                                       | 归档脚本自动维护，**平时不读**                                            |
+| `doc/testplan.md`          | 场景真值表：操作序列 + 预期结果 + 状态（✅/❌/⚠️/🔲）+ 已知 bug                                                                      | 加功能 / 修 bug 时先改这里                                                |
+| `doc/marker-contract.md`   | 标记字符契约（英文，面向下游的字节格式与稳定性承诺）                                                                                 | 格式/承诺变化时（须主版本迁移）                                           |
+| `doc/release-notes/*.md`   | 各版本发布说明（双语；Release 工作流打 tag 时按 `<tag>.md` 取用）                                                                    | 每次打 tag 发版前写好对应文件                                             |
+| `doc/research/`            | **本地调研留档，`.gitignore` 排除、不入库**（见该目录 `README.md`）——竞品拆解等含源码行号 / 攻击性表述的原始材料，公开发布仓库放不得 | 单条结论按附录 A 口径改写后落进 `spec.md`/`testplan.md`；原始报告留在本地 |
 
 `testplan.md` 与 `tests/dev_tests/`（自动化单测）、`tests/user_tests/`（实测样例）一一对应。
 
@@ -92,34 +83,19 @@ commit、合并。每周期 log 块记一句「本周期派发 N 次（agent 名
 
 > **单一事实源纪律**：同一份设计 / 状态只**详写在一处**（规格→`spec.md`，验证设计→`testplan.md`，
 > 周期细节→`log.md`），其他文件只放一行概括 + 链接，不复制表格。临时分析 / 调研文档一旦结论
-> 落进上述常驻文件，**原文件即删**，不留副本。
+> 落进上述常驻文件，**原文件即删**，不留副本——**`doc/research/` 是唯一例外**：它是故意长期
+> 保留的本地引用库（不入库、不随克隆/其他机器带走），结论摘要照常落进常驻文件，但原始报告
+> **不删**，供日后需要溯源 / 深挖细节时回查。
 
 ## 4. 通用开发流程
-
-1. `npm install`（首次或依赖变化时）。
-2. `testplan.md`：**先**在其中加 / 改场景行（操作 + 预期 + 初始状态），再动代码。
-3. 改代码，配套补 / 改 `tests/dev_tests/` 与 `tests/user_tests/`，可追溯回 testplan 场景 ID。
-4. 质量门槛全绿：`npm test`、`npm run lint`、`npm run format:check`。动核心逻辑后额外跑一遍 `npm run test:fuzz`；修好已登记 bug 后放开对应的随机测试约束。
-5. 重新生成 `release/`（`npm run release`）并随提交入库。
-6. 回填 `testplan.md`：场景行状态 🔲/❌ → ✅，更新已知 bug 汇总。
-7. **bump 版本号**：`npm run bump` 一键同步（见 §4.1）。
-8. 更新 `doc/log.md`（顶部追加新周期块）与 `doc/status.jsonl`（见 §3）。
-9. **跑文档维护脚本**：写完新周期块后跑 `npm run docs`，把旧块归档进 `log-archive.md`
-   （顺带打印 testplan 摘要做收尾自检）。**先写后挪**：脚本只搬旧块，不动你刚写的新块。
-10. 提交。
 
 > 一句话流程：改代码+测试 → `npm run bump` → 写 `log.md` 新块 + `status.jsonl`
 > → **`npm run preflight`**（一条命令 = docs 归档 + release 重建 + test + lint + format:check）→ 提交。
 
-### 4.1 版本号
-
-格式 `0.M.*`：`M` = 当前 Milestone，`*` 在该里程碑内持续递增至满意再进入下一个。**凡实质改动（含纯文档）都要 bump `*`**，同步 `manifest.json` / `package.json` / `versions.json` 及 lockfile、`release/` 副本。
-
-> **一键 bump**：`npm run bump`（打磨递增 `*`）/ `npm run bump minor`（进新 Milestone，`*` 归零）/
-> `npm run bump 0.7.0`（显式），它会一次性同步上述全部文件，免去手改 4~5 处。
-
-> **上架后策略**（1.0.0 起适用，见 `doc/spec.md` §5 M7）：改为**仅行为 / 产物变化才 bump** manifest
-> 版本——纯文档改动只记 `log.md`，避免向线上用户推送无内容更新。
+**做实质改动或准备收尾提交前，读 `dev-cycle` 技能**（`.claude/skills/dev-cycle/SKILL.md`）——
+完整 10 步清单（testplan 先行、质量门槛、release 重建、回填 testplan）与版本号规则（`0.M.*`
+格式、`npm run bump` 各形态、上架后仅行为改动才 bump）都在那里。上面这条一句话流程是底线，
+**bump 与 preflight 一步都不能省**。
 
 ## 5. Git 与提交
 
@@ -138,18 +114,6 @@ commit、合并。每周期 log 块记一句「本周期派发 N 次（agent 名
 
 ## 7. 开发环境
 
-SessionStart 钩子（`.claude/hooks/session-start.sh`，由 `.claude/settings.json` 挂接）在远程会话
-启动时自动安装依赖，并启用共享 git 钩子（`git config core.hooksPath .githooks`）。
-
-**pre-commit 文档守卫**（`.githooks/pre-commit`）：提交时若本次有暂存改动，跑
-`node scripts/docs.mjs --check`——`log.md` 周期块超上限（忘归档）、`status.jsonl` 概括行超上限
-（忘滚动）、或「目录结构约定」常青块与磁盘不一致（新增/拆分文件忘回填），任一命中即**拦下提交**。
-修复：跑 `npm run docs`（目录树漂移需手动修缮 log.md 该块）后 `git add` 重提；确需跳过用
-`git commit --no-verify`。本地克隆首次需手动 `git config core.hooksPath .githooks`（远程会话由
-SessionStart 自动设）。
-
-**CI**（`.github/workflows/ci.yml`）：push 到 `master` 与 PR 时跑完整质量门槛（文档守卫 + test +
-lint + format:check + build）——pre-commit 可被 `--no-verify` 跳过，CI 是机器兜底。
-
-> 历史备注：这三项曾在私有 monorepo 迁移到本独立仓库时遗漏，2026-07-03 按单项目结构补回
-> （原 monorepo 版按多 Addon 循环处理，本仓库只有一个项目，已简化为直接对仓库根跑）。
+**本地克隆首次需手动** `git config core.hooksPath .githooks` 启用 pre-commit 文档守卫（远程会话由
+SessionStart 钩子自动设）。守卫拦下提交时的修复姿势：跑 `npm run docs` 后 `git add` 重提——但
+「目录结构约定」常青块漂移**脚本修不了**，需手动修缮 `log.md` 该块；确需跳过用 `git commit --no-verify`。

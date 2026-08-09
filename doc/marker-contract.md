@@ -41,7 +41,29 @@ Properties you can rely on:
   frontmatter, not in non-heading lines (a heading demoted to body text by the user may
   transiently carry residue; the plugin cleans it on next trigger).
 - **Unnumbered headings contain no WJ.** Absence of WJ ⇒ the plugin has never touched
-  that heading (or its numbering was fully cleared).
+  that heading, or its numbering was fully cleared, **or the user ran
+  *Freeze numbering and release ownership*** (see §5) — that command deliberately leaves the
+  numbers behind as ordinary text while removing every marker, so afterwards those numbers
+  are indistinguishable from hand-written ones. That is the point of it: the user is taking
+  the numbering back. Downstream code should treat such text as user content, which is
+  exactly what it now is.
+
+### Per-heading skip marker (v1.0.17+)
+
+A heading whose line **ends with** an HTML comment `<!-- skip -->` (case-insensitive, inner
+whitespace tolerant — `<!--skip-->`, `<!--  SKIP  -->` both count) is treated by the plugin as
+**exempt from numbering**: it is not numbered, does not advance the counter, and any prior
+plugin numbering on it is stripped on the next renumber. This is plain, visible text (not a
+Unicode marker) — the string is meaningful to Auto Headings but otherwise an ordinary HTML
+comment, invisible in reading view like any other. Downstream code that walks a vault's
+headings and wants to reproduce the plugin's numbering should treat a heading matching
+`/<!--\s*skip\s*-->\s*$/i` as excluded from the count.
+
+As of v1.0.17 the marker only exempts the single line it's on — headings nested under a
+skipped heading are numbered normally. This is a **v1.x behavior, not yet a stability
+guarantee**: a future release may add an opt-in subtree variant. The trigger string and its
+"exempt from numbering" meaning are stable; whether it *additionally* exempts descendants is
+not yet fixed.
 
 ## 2. Stability guarantees
 
@@ -60,23 +82,74 @@ Properties you can rely on:
 
 ### Normalize for matching (keep the numbers, drop the invisibles)
 
-If you match heading text exactly (Dataview `file.headers`, link anchors, tasks filters),
+If you match heading text exactly (link anchors, tasks filters, your own scripts),
 strip WJ first:
 
 ```js
-const clean = heading.replace(/⁠/g, "");
+const clean = heading.replace(/\u2060/g, "");
 ```
 
 ### Remove the whole numbering prefix (get the bare title)
 
 ```js
 // Double-sentinel format (v0.7.20+): drop everything between the paired WJs.
-const bare = heading.replace(/⁠[^⁠\n]*⁠/g, "");
+const bare = heading.replace(/\u2060[^\u2060\n]*\u2060/g, "");
 ```
 
 For mixed vaults that may still contain the legacy single-WJ format, prefer the plugin's
 own commands (*Clear numbering in current file / entire vault*), whose stripper handles
 both formats plus damaged edge cases.
+
+### Dataview
+
+**There is no `file.headers` field.** Dataview does not index headings at all — a page's
+implicit fields are `name`, `folder`, `path`, `ext`, `link`, `size`, `ctime`, `cday`,
+`mtime`, `mday`, `tags`, `etags`, `inlinks`, `outlinks`, `aliases`, `tasks`, `lists`,
+`frontmatter`, `day`, `starred`, and nothing heading-shaped. Earlier revisions of this
+document (and of the plugin README) suggested `WHERE file.headers = "1 My heading"` and
+blamed the empty result on WJ; that was wrong on both counts — the query returns nothing
+with or without the marker, because the field does not exist.
+
+WJ reaches Dataview through three real surfaces:
+
+| Surface | Where the WJ sits |
+| ------- | ----------------- |
+| `TASK` / `LIST` queries | `section` is a Link whose subpath is the heading text |
+| `file.outlinks` | the subpath of any `[[note#heading]]` the plugin has written |
+| DataviewJS | `app.metadataCache.getCache(path).headings[].heading` |
+
+#### Preferred: don't match the marker at all
+
+The numbering is always a *prefix*, so suffix and substring matching are unaffected by it.
+Replace exact matches with `endswith()` / `contains()` and nothing needs escaping anywhere:
+
+```
+TASK WHERE endswith(section.subpath, "Module design")
+```
+
+#### When you must normalize (display, GROUP BY)
+
+`regexreplace` works, and `"\u2060"` is the portable way to spell the character. Dataview's
+string parser passes `\u` through untouched (only `\"` and `\\` are special), so all six
+characters reach `new RegExp()`, which compiles them as the Unicode escape:
+
+```
+TABLE regexreplace(section.subpath, "\u2060", "") AS Section FROM "notes"
+```
+
+#### DataviewJS: list a file's headings
+
+Since Dataview has no heading index, read Obsidian's metadata cache directly:
+
+```js
+const MARKER = /\u2060/g;
+const PREFIX = /\u2060[^\u2060\n]*\u2060/g;
+const headings = app.metadataCache.getCache(dv.current().file.path)?.headings ?? [];
+dv.table(
+    ["Level", "Numbered", "Bare title"],
+    headings.map((h) => [h.level, h.heading.replace(MARKER, ""), h.heading.replace(PREFIX, "")]),
+);
+```
 
 ### Shell / CI
 
@@ -88,21 +161,45 @@ perl -CSD -i -pe 's/\x{2060}//g' **/*.md
 ### Pandoc
 
 Burn-in numbering plus `--number-sections` double-numbers your headings — that is inherent
-to baked-in numbers, not to WJ. Either export without `--number-sections`, or clear the
-plugin's numbering before export, or strip prefixes in a Lua filter:
+to baked-in numbers, not to WJ. A ready-made filter ships with the plugin repository:
+**[`assets/pandoc/strip-autoheadings.lua`](../assets/pandoc/strip-autoheadings.lua)**.
 
-```lua
--- strip-autoheadings.lua : remove Auto Headings prefixes (double-sentinel format)
-function Header(h)
-  local s = pandoc.utils.stringify(h.content)
-  local bare = s:gsub("\u{2060}[^\u{2060}]*\u{2060}", "")
-  if bare ~= s then h.content = pandoc.Inlines(pandoc.Str(bare)) end
-  return h
-end
+```sh
+# Let Pandoc do the numbering (default mode: removes the whole plugin prefix)
+pandoc in.md -o out.pdf -L strip-autoheadings.lua --number-sections
+
+# Keep the plugin's numbers, drop only the invisible markers
+pandoc in.md -o out.pdf -L strip-autoheadings.lua -M autoheadings=strip-marker
 ```
 
-(Adapt as needed — this collapses inline formatting inside headings; for rich headings walk
-the inline list instead.)
+It walks the inline list rather than calling `pandoc.utils.stringify`, so **inline formatting
+inside headings survives**. That distinction matters more than it looks: Pandoc parses
+`## <WJ>1.2 <WJ>Module design` into `Str"<WJ>1.2"`, `Space`, `Str"<WJ>Module"`, `Space`,
+`Str"design"` — the two sentinels land in *different* `Str` elements, so neither a per-`Str`
+regex nor a stringify-and-rebuild approach handles rich headings correctly. Legacy
+single-sentinel headings are handled too.
+
+Verified 2026-07-19 with pandoc 3.10 and `--pdf-engine=typst` (typst 0.15.1):
+
+| Invocation | Result |
+| ---------- | ------ |
+| plain conversion | plugin numbers kept; WJ present in HTML/AST output |
+| `--number-sections`, no filter | **double numbering** — `1.1 1.1 Introduction` |
+| `--number-sections` + filter | single clean numbering; `<strong>`/`<code>`/links inside headings intact; zero WJ |
+| filter, `strip-marker` mode | plugin numbers kept; zero WJ; formatting intact |
+
+Two further findings from that run:
+
+- **Documents that start at `##`** (the plugin's default top level) are numbered by Pandoc
+  according to nesting depth, not absolute heading level — the first `##` becomes `1`, its
+  `###` children `1.1`, `1.2`. So Pandoc's native numbering *coincides* with the plugin's
+  default scheme rather than producing an off-by-one level.
+- **The PDF text layer contained no U+2060 in any of the four runs**, including the
+  unfiltered one: the `ToUnicode` CMaps of the generated PDFs map no glyph to `2060`, while
+  a positive control (a CJK character from the same headings) is present as expected. On this
+  path the marker is dropped before it reaches the PDF. Other PDF engines and Obsidian's own
+  built-in "Export to PDF" (a different pipeline entirely — Electron print-to-PDF over the
+  reading view) have **not** been verified and may behave differently.
 
 ## 4. Known collision notice
 
@@ -115,11 +212,31 @@ tracker to coordinate).
 
 ## 5. Uninstalling cleanly
 
-1. Run **Clear numbering in entire vault** (Settings → Auto Headings → sensitive-operations
-   tab) — this strips every plugin-written prefix, both sentinel formats included.
-2. Disable/uninstall the plugin.
-3. Optionally remove `obsidian-auto-headings` keys from frontmatter (they are inert
-   without the plugin).
+Two exits, depending on whether you want to keep the numbers. Both live in
+Settings → Auto Headings → sensitive-operations tab, and both are deliberately **not**
+command-palette commands (a vault-wide irreversible rewrite should not sit on a hotkey).
+
+**A — drop the numbering.** Run **Clear numbering in entire vault**: strips every
+plugin-written prefix, both sentinel formats included, leaving bare headings.
+
+**B — keep the numbering.** Run **Freeze numbering and release ownership**: keeps every
+number as ordinary text and removes only the markers, then stops all automatic numbering.
+Use this when you like the numbering but no longer want it managed — or you are uninstalling
+and want to keep the result.
+
+Note that B strips WJ **vault-wide, including inside link anchors**. That is required, not
+incidental: the plugin writes WJ into `[[note#⁠1 ⁠heading]]` anchors on purpose, because
+Obsidian resolves anchors by byte comparison and does not strip WJ. Removing the marker from
+headings only would leave every internal link pointing at a byte sequence that no longer
+exists. Both sides go to zero together, so links keep resolving.
+
+B is irreversible *from the plugin's side* — per §1 it can no longer tell those numbers were
+its own. To hand control back, re-enable it in settings and run **Clean foreign numbering**
+on the affected files first; otherwise the existing numbers count as foreign numbering and a
+fresh prefix gets stacked on top.
+
+Then disable/uninstall the plugin, and optionally remove `obsidian-auto-headings` keys from
+frontmatter (they are inert without the plugin).
 
 Files numbered while the plugin was installed contain no other trace than the prefixes and
 the two WJs described above.

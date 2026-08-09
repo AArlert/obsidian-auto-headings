@@ -57,6 +57,19 @@ export function renderDangerTab(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 					new ClearVaultModal(plugin.app, plugin).open();
 				}),
 		);
+
+	// —— 固化编号并交还所有权（二次确认）——
+	new Setting(containerEl)
+		.setName(t.freezeVaultName)
+		.setDesc(t.freezeVaultDesc)
+		.addButton((btn) =>
+			btn
+				.setButtonText(t.freezeVaultBtn)
+				.setWarning()
+				.onClick(() => {
+					new FreezeVaultModal(plugin.app, plugin).open();
+				}),
+		);
 }
 
 /**
@@ -88,6 +101,44 @@ class ClearVaultModal extends Modal {
 					.onClick(async () => {
 						this.close();
 						await this.plugin.clearAllVaultNumbering();
+					}),
+			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/**
+ * 「固化编号并交还所有权（全库）」二次确认对话框（M12，见 spec.md §3.18）。
+ *
+ * 与 {@link ClearVaultModal} 同样**刻意不注册为命令**——它比清库更需要防误触：清库清掉的编号还能
+ * 重编回来，固化之后插件已认不出那些编号是自己写的，回不去了。
+ */
+class FreezeVaultModal extends Modal {
+	private readonly plugin: AutoHeadingsPlugin;
+
+	constructor(app: App, plugin: AutoHeadingsPlugin) {
+		super(app);
+		this.plugin = plugin;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		const t = this.plugin.messages();
+		contentEl.empty();
+		contentEl.createEl("h3", { text: t.freezeVaultModalTitle });
+		contentEl.createEl("p", { text: t.freezeVaultModalBody });
+		new Setting(contentEl)
+			.addButton((btn) => btn.setButtonText(t.cancel).onClick(() => this.close()))
+			.addButton((btn) =>
+				btn
+					.setButtonText(t.confirmFreezeVault)
+					.setWarning()
+					.onClick(async () => {
+						this.close();
+						await this.plugin.freezeVaultNumbering();
 					}),
 			);
 	}

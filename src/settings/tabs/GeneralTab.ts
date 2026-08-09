@@ -13,6 +13,23 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 	const t = tab.t;
 	const plugin = tab.plugin;
 
+	// —— 已交还所有权时的提示条（M12，见 spec.md §3.18）——
+	// 放在最前、且**必须存在**：离场后下面那个「全局自动编号」开关即便是开着的也不会有任何效果，
+	// 没有这条提示用户只会觉得「插件坏了」，这是本功能最容易砸掉信任的地方。
+	if (plugin.settings.retired) {
+		const banner = containerEl.createDiv({ cls: "ah-retired-banner" });
+		banner.createEl("h4", { text: t.retiredBannerTitle });
+		banner.createEl("p", { text: t.retiredBannerBody });
+		new Setting(banner).addButton((btn) =>
+			btn
+				.setButtonText(t.resumeBtn)
+				.setCta()
+				.onClick(async () => {
+					await plugin.resumeFromRetired();
+				}),
+		);
+	}
+
 	// —— 语言选择（Milestone 6）——
 	new Setting(containerEl)
 		.setName(t.languageName)
@@ -45,17 +62,6 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 		.addToggle((toggle) =>
 			toggle.setValue(plugin.settings.updateBacklinks).onChange(async (value) => {
 				plugin.settings.updateBacklinks = value;
-				await plugin.saveSettings();
-			}),
-		);
-
-	// —— 复制净化开关（M11，默认开：copy/cut 出口剥 WJ + 同会话粘贴回还原，见 spec.md §2.8）——
-	new Setting(containerEl)
-		.setName(t.sanitizeClipboardName)
-		.setDesc(t.sanitizeClipboardDesc)
-		.addToggle((toggle) =>
-			toggle.setValue(plugin.settings.sanitizeClipboard).onChange(async (value) => {
-				plugin.settings.sanitizeClipboard = value;
 				await plugin.saveSettings();
 			}),
 		);

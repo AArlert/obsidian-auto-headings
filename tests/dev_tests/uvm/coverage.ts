@@ -25,6 +25,14 @@ export class Coverage {
 	/** 曾在「前缀或后缀非空」的状态下触发编号。 */
 	affixNonEmptyTrigger = false;
 	fencePresent = false;
+	/** 曾插入独立注释块（`insertComment`，三颗雷之一，M12 注释块跳过压测）。 */
+	commentPresent = false;
+	/** 注释块内曾嵌套围栏（`与围栏交错`覆盖，撞 R5 反向的已知限制）。 */
+	commentFenceInterleaved = false;
+	/** `deleteLine` 曾删掉一行注释定界符（三颗雷之二：暴露/遮蔽反转）。 */
+	commentDelimiterDeleted = false;
+	/** Backlink 往返记分板曾在**含注释定界符**的标题（R3 形态）上真正算出改名（三颗雷之三）。 */
+	backlinkRenameWithComment = false;
 	whitelistHit = false;
 	/** 白名单三种匹配方式各自曾被设入模板（真实 whitelist 驱动，0.6.5）。 */
 	whitelistExact = false;
@@ -99,6 +107,7 @@ export class Coverage {
 			"insertHeading",
 			"insertRaw",
 			"insertFence",
+			"insertComment",
 			"deleteLine",
 			"retitle",
 			"editTitleInPlace",
@@ -146,6 +155,10 @@ export class Coverage {
 		if (!this.affixToggled) missing.push("affix-toggled");
 		if (!this.affixNonEmptyTrigger) missing.push("affix-nonempty-trigger");
 		if (!this.fencePresent) missing.push("fence");
+		if (!this.commentPresent) missing.push("comment");
+		if (!this.commentFenceInterleaved) missing.push("comment-fence-interleaved");
+		if (!this.commentDelimiterDeleted) missing.push("comment-delimiter-deleted");
+		if (!this.backlinkRenameWithComment) missing.push("backlink-rename-with-comment");
 		if (!this.whitelistHit) missing.push("whitelist-hit");
 		if (!this.whitelistExact) missing.push("whitelist-exact");
 		if (!this.whitelistPartial) missing.push("whitelist-partial");

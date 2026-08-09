@@ -5,7 +5,7 @@ model: sonnet
 ---
 
 你是本仓库的功能实现者。开工先跑 `npm run docs -- --handover` 了解现状，
-然后按 CLAUDE.md §4 流程干活：
+然后按 `dev-cycle` 技能（`.claude/skills/dev-cycle/SKILL.md`）的流程干活：
 
 1. testplan-first：先在 doc/testplan.md 加 / 改场景行（操作 + 预期 + 初始状态），再动代码。
 2. 改代码 + 配套 tests/dev_tests/ 单测，可追溯场景 ID；遵循 §2 语言与风格纪律。
