@@ -7,6 +7,7 @@ import {
 	TFile,
 	type App,
 	type EditorChange,
+	type EditorRangeOrCaret,
 	type MetadataCache,
 } from "obsidian";
 import {
@@ -1409,6 +1410,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * @param extraChanges 额外并入本次事务的变更（目前仅 frontmatter 单文件开关的增删，见
 	 * {@link switchEditToChange}）。它们**会**改变行数，故不能走上面的逐行比对，只能由调用方按
 	 * 原文档坐标直接给出；CM6 的变更集一律相对原文档计算，与行替换互不干扰。
+	 * @param selection 随本次事务显式设置的光标 / 选区（见 {@link cursorSelectionForEmptyHeading}）；
+	 * 缺省时不覆盖，交给 CM6 按插入点做默认位置映射。
 	 * @returns 是否实际发生了写入（无任何变更时为 `false`，不发起空事务）。
 	 */
 	private writeLineDiff(
@@ -1416,6 +1419,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		oldContent: string,
 		newContent: string,
 		extraChanges: EditorChange[] = [],
+		selection?: EditorRangeOrCaret,
 	): boolean {
 		const changes: EditorChange[] = [];
 		if (newContent !== oldContent) {
@@ -1431,7 +1435,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (changes.length === 0) {
 			return false;
 		}
-		editor.transaction({ changes });
+		editor.transaction(selection ? { changes, selection } : { changes });
 		return true;
 	}
 
@@ -1529,7 +1533,18 @@ export default class AutoHeadingsPlugin extends Plugin {
 		// 未变（M14 纯文本改名）也要折，写回时的行级 diff 会自然识别出这一变化并写回。
 		const fold = this.foldSelfBacklinks(target, oldContent, newContent);
 		newContent = fold.content;
-		const changed = this.writeLineDiff(editor, oldContent, newContent, opts.extraChanges);
+		const selection = this.cursorSelectionForEmptyHeading(
+			oldContent,
+			newContent,
+			opts.protectLine,
+		);
+		const changed = this.writeLineDiff(
+			editor,
+			oldContent,
+			newContent,
+			opts.extraChanges,
+			selection,
+		);
 		// Backlink 同步 + 快照刷新：**即便本轮编号没改动任何行也要做**（M14）——用户可能在上个
 		// 同步点之后改了标题正文（编号不变），只有对照快照基线才看得见这类改名。
 		this.syncAndSnapshot(target, newContent, fold.renames, fold.selfCount);
@@ -1579,12 +1594,66 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return newContent;
 		}
 		const trailing = /\s+$/.exec(oldLines[line])?.[0];
-		// 用户没在这行留下行尾空白，或本轮压根没动这行的行尾 → 无需干预。
-		if (!trailing || newLines[line].endsWith(trailing)) {
-			return newContent;
+		if (!trailing) {
+			return newContent; // 用户没在这行留下行尾空白 → 无需干预。
+		}
+		// 编号前缀以不可见的 WORD_JOINER 哨兵收尾（标题文本为空时，它就是这一行字面上的最后一个
+		// 字符，见 {@link buildPrefix}）。直接 `endsWith` 会被这个哨兵挡住、误判成"新内容没有这段
+		// 行尾空白"而重复补一份，叠成两个空格——去掉尾部哨兵后再比较，只看真正的可见字符
+		// （用户实机反馈，2026-08-10，testplan J21）。
+		const visibleTail = newLines[line].replace(new RegExp(`${WORD_JOINER}+$`), "");
+		if (visibleTail.endsWith(trailing)) {
+			return newContent; // 本轮压根没动这行的行尾 → 无需干预。
 		}
 		newLines[line] += trailing;
 		return newLines.join("\n");
+	}
+
+	/**
+	 * 光标所在行若被本轮重排为**刚生成、标题仍为空**的编号标题行（如快捷键刚把空行 / 半成品行
+	 * 转成标题），显式把光标钉在该行末尾（编号写完之后），不再交给 CM6 按插入点默认映射。
+	 *
+	 * **动机**（testplan J21，用户实机反馈，2026-08-10）：这种情形下新旧内容在该行的差异是**纯
+	 * 追加**——旧内容整体是新内容的前缀（`## ` → `## 1.1 `），{@link lineChange} 算出的插入点与
+	 * 光标恰好落在同一坐标。CM6 对"插入点=光标位置"的默认关联是**光标留在插入文本之前**，于是
+	 * 编号写完后光标反倒卡在数字前面，用户接着打的字会插到编号中间。
+	 *
+	 * 只在"标题仍为空"时介入——已有标题正文的行，用户光标通常在正文末尾、插入点在其前，CM6 的
+	 * 默认映射本就正确（{@link lineChange} 头部注释所述），不需要（也不该）覆盖，以免打断正在
+	 * 编辑中间位置的用户光标。
+	 *
+	 * 判定"标题仍为空"不依赖模板细节：{@link buildPrefix} 永远以不可见的 WORD_JOINER 收尾、紧接
+	 * 标题正文；标题为空时它就是整行字面上的最后一个字符，`text.endsWith(WORD_JOINER)` 因此是与
+	 * 模板前缀 / 后缀 / 分隔符风格无关的通用判据。
+	 *
+	 * @returns 该行本轮无变化、非标题、或标题已有正文时返回 `undefined`（不覆盖光标）；否则返回
+	 * 落在该行末尾的插入符选区，供 {@link writeLineDiff} 随写回事务一并设置。
+	 */
+	private cursorSelectionForEmptyHeading(
+		oldContent: string,
+		newContent: string,
+		protectLine: number | undefined,
+	): EditorRangeOrCaret | undefined {
+		if (protectLine === undefined) {
+			return undefined;
+		}
+		const oldLines = oldContent.split("\n");
+		const newLines = newContent.split("\n");
+		if (
+			protectLine < 0 ||
+			protectLine >= newLines.length ||
+			oldLines.length !== newLines.length
+		) {
+			return undefined;
+		}
+		if (oldLines[protectLine] === newLines[protectLine]) {
+			return undefined; // 该行本轮未变，不干预用户当前光标/选区。
+		}
+		const heading = parseHeadings(newContent).find((h) => h.lineIndex === protectLine);
+		if (!heading || !heading.text.endsWith(WORD_JOINER)) {
+			return undefined;
+		}
+		return { from: { line: protectLine, ch: newLines[protectLine].length } };
 	}
 
 	/**

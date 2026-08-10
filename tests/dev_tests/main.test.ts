@@ -28,6 +28,8 @@ class FakeEditor {
 	txnCount = 0;
 	/** 最近一次事务的变更清单，供断言写回范围（J19：最小范围改写，不整行替换）。 */
 	lastChanges: Array<{ from: Pos; to?: Pos; text: string }> = [];
+	/** 最近一次事务显式带的选区（J21：空标题行编号后光标应落在编号之后）；未带则为 `undefined`。 */
+	lastSelection: { from: Pos; to?: Pos } | undefined;
 	/** 光标位置。默认 `-1` 行 = 不在任何行上，使既有用例不触发「光标所在行保护」（J11）。 */
 	private cursor: Pos = { line: -1, ch: 0 };
 
@@ -58,9 +60,13 @@ class FakeEditor {
 	 * **会改变行数**的 frontmatter 增删（清除即暂停 / 重新编号即恢复），逐行赋值已不够用。
 	 * 故按**原文档**坐标折算成绝对偏移、从后往前施加——与 CM6 变更集的语义一致。
 	 */
-	transaction(tx: { changes: Array<{ from: Pos; to?: Pos; text: string }> }): void {
+	transaction(tx: {
+		changes: Array<{ from: Pos; to?: Pos; text: string }>;
+		selection?: { from: Pos; to?: Pos };
+	}): void {
 		this.txnCount++;
 		this.lastChanges = tx.changes;
+		this.lastSelection = tx.selection;
 		const offset = (p: Pos) => {
 			let o = 0;
 			for (let i = 0; i < p.line; i++) {
@@ -75,6 +81,11 @@ class FakeEditor {
 			out = out.slice(0, from) + c.text + out.slice(c.to ? offset(c.to) : from);
 		}
 		this.lines = out.split("\n");
+		// 真实 Obsidian/CM6 会真的把光标挪到显式给定的 selection——这里同步一份，
+		// 让测试能直接用 getCursor() 断言最终落点，不必都去翻 lastSelection。
+		if (tx.selection) {
+			this.cursor = tx.selection.from;
+		}
 	}
 }
 
@@ -1936,6 +1947,47 @@ describe("新敲出的标题当轮即编号（1.0.23 真机反馈，testplan J19
 		expect(change.from.ch).toBe(3);
 		expect(change.to?.ch).toBe(3); // 纯插入：起止相同，一个字符都没被替换掉。
 		expect(change.text).toBe(`${WORD_JOINER}1 ${WORD_JOINER}`);
+	});
+});
+
+describe("空标题行编号写入的光标与行尾空白（2026-08-10 用户实机反馈，testplan J21）", () => {
+	it("J21：快捷键把空行转成标题（`## `，光标停在行尾）→ 编号后行尾不再多出一个空格", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor("## ");
+		ed.setCursor(0, 3);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		// 只有一个间隔符空格（紧跟在收尾哨兵之前），不是「preserveCursorLineTrailingSpace」
+		// 把旧的那个 `## ` 里的空格重复补了一份。
+		expect(ed.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}`);
+	});
+
+	it("J21：同一轮把光标显式钉在编号之后（标题正文起始处），不再卡在数字前面", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor("## ");
+		ed.setCursor(0, 3);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		const finalLine = ed.getValue();
+		expect(ed.lastSelection).toEqual({ from: { line: 0, ch: finalLine.length } });
+		expect(ed.getCursor()).toEqual({ line: 0, ch: finalLine.length });
+	});
+
+	it("J21：已有标题正文的行不受影响——不显式覆盖光标，交给编辑器按插入点自然映射", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["## 章一", ""].join("\n"));
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		const typed = "## 新标题";
+		ed.setValue([ed.getValue().split("\n")[0], typed].join("\n"));
+		ed.setCursor(1, typed.length);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		expect(ed.lastSelection).toBeUndefined();
 	});
 });
 

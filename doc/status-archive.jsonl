@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-08-09","version":"1.0.15","summary":"CLAUDE.md 瘦身 46 行：开发周期十步与版本号规则下沉为按需加载的 .claude/skills/dev-cycle 技能，§4 只留一句话流程 + 指针；删 §1 仓库结构与两段 monorepo 迁移备注，§7 压成三行；feature-coder 引用改指技能。纯文档，未 bump。"}
 {"type":"log","date":"2026-07-29","version":"1.0.15","summary":"清除当前编号即暂停该文件（写 fm:false，并入同一事务）+ preserveLine 保护光标所在行不被重写 + 修迁移守卫被行尾空白误判（J12）+ fm:false 不再关闭 backlink 独立触发（I8）。细节见 log.md。"}
 {"type":"log","date":"2026-07-19","version":"1.0.14","summary":"注释块跳过（%%…%% 与 <!-- -->，十条边界裁决；新增 src/scan.ts 收敛重复围栏状态机）+ 区域内残留分区域分治（注释块自动清、围栏仅清除命令清）+ 固化编号并交还所有权（保号离场，全文级剥 WJ 否则内链全断；retired 硬闸凌驾 fm:true）。test 438、fuzz 5000×80 全绿。"}
 {"type":"log","date":"2026-07-19","version":"1.0.13","summary":"M11 导出验证矩阵实测完成（pandoc 3.10 + typst，O5a–O5e ✅）：复现双重编号、交付可用的 strip-autoheadings.lua、证实该路径 PDF 无 WJ 残留。订正两处已上架错误承诺（Dataview 无 file.headers、旧 filter 压平标题格式）。未 bump。"}
