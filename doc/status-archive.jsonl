@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-08-09","version":"1.0.21","summary":"会话收尾（纯文档）：竞品调研的采纳清单 8 项立项进 spec Roadmap M9（含不可照抄的点）；未解决问题总账、发版/tag 状态、四轮 bug 的教训写进 log.md 收尾块；testplan J13/J14/J15 回填用户真机确认。"}
 {"type":"log","date":"2026-08-09","version":"1.0.21","summary":"renumberOnOpen 改用 vault.cachedRead(file) 做判断（时序无关），不再读 editor.getValue()——1.0.20 的 setTimeout(0) 不够，实测滞后不止一个事件循环。写入侧加 editor 内容一致性闸，堵死「把 A 的编号写进 B」。J15 重写 6 例，去掉修复实测变红。"}
 {"type":"log","date":"2026-08-09","version":"1.0.20","summary":"file-open 同步读到的是上一篇的编辑器内容 ⇒ 用 A 的内容判断、把守卫提示挂到 B 的路径上（点进去说没什么可清理、切回 A 又不弹）。renumberOnOpen 推迟一个宏任务 + 重新确认活动文件；防抖计时器加 info.file 路径作废闸（此前写入侧无保护，可能把 A 的编号写进 B）。J15 三例，去掉修复实测变红。"}
 {"type":"log","date":"2026-08-09","version":"1.0.19","summary":"迁移守卫提示改为只为 getActiveFile() 那个文件发声 + 单条 activeGuardNotice 按路径去重 + 失效即收起；删 1.0.18 的 lastGuardedPath。根因：防抖计时器/批量刷新的发起方不保证是活动文件。测试替身补 getActiveFile（缺它正是两版没测出来的原因）。"}

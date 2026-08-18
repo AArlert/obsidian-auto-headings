@@ -41,6 +41,51 @@
 
 ---
 
+## 2026-08-19 i18n 与面板文案全面瘦身（1.1.1）
+
+### 做了什么
+
+用户反馈设置面板与弹窗说明「过于繁琐、文字看得头疼」，本轮把 `src/i18n.ts` 的**全部长文案
+（中英双语同步）**压缩为「一眼看出关键句」的精要版：
+
+- **设置项 desc**：`autoNumberDesc` / `debounceDesc` / `updateBacklinksDesc` /
+  `headingLinkSuggestDesc` / `vcCoexistDesc` / `vcModeDesc` / 模板编辑各字段 desc /
+  白名单 desc / 危险区各 desc 等，删冗余从句与括号补述，只留动作 + 关键警告（如
+  「不在撤销历史内」）。
+- **分区导语**：`sectionSuggestDesc` 等压成一句；`vcCoexistFallbackHint` 去掉后半句
+  「开启联动后即会真让路」（选项行本身已讲）。
+- **确认框**：`vcAutoConfirmPoints` 五点各压到一行（保留「上限 2 万条 / 只抬不降 /
+  全局项」等关键约束）；`freezeVaultModalBody` 五件事保留①②③④⑤编号但逐条砍到最短；
+  `batchModalBody` / `foreignGuardModalBody` 同理。
+- **Notice**：`noticeBacklinksIntro` / `noticeClearedAndPaused` / `noticeFrozenVault` 等
+  缩短；**测试断言的短语一字未动**（`noticeRenumberedAndResumed` / `noticeNoRule` /
+  `noticeClearedVault` / `noticeBatchDone` / `noticeBacklinksUpdated` / 「已清除编号」/
+  「词典已截断」等），单测零改动。
+- 鸣谢段（About TAB）三条各压成一句，去掉「——」长破折号补述。
+
+英文版逐条镜像中文，删冗余从句与破折号补述，保留全部关键信息（警告/默认值/边界）。
+
+### 没做什么
+
+- **没动任何行为逻辑**：纯文案改动，键集与函数签名不变（`Messages` 接口零改动）。
+- 没动短标签/按钮/tooltip（本就精要）。
+- 未打 tag（用户未要求发版；`doc/release-notes/` 未新增）。
+
+### 下一步
+
+- 用户真机复测：过一遍设置面板四个 TAB + 各确认框，确认「一眼看清关键句」的观感达标。
+- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互；
+  M13 收官的「重跑自动配置后打『交』应见两条同名标题」真机复测。
+
+### 验证方式
+
+`npm run format` / `npm run lint` 绿；`npm test` 623 通过，唯一失败仍是
+`whitelist.test.ts:406` Windows ICU 已知假红（localeCompare 排序差异，与本次改动无关）；
+`npm run bump 1.1.1` 已同步 package.json / manifest.json / versions.json / lockfile /
+release/manifest.json；`npm run release` 重建产物入库。本周期派发 0 次。
+
+---
+
 ## 2026-08-19 M13 收官：同名标题被 VC 的条数上限挤出列表（1.1.0，发版）
 
 ### 做了什么
@@ -171,76 +216,6 @@ VC 自己的也有本插件的标题，同时出现，不管本文件还是其�
 四例；同步改了 `main.test.ts` 里断言词典条目形状的旧用例（新增字段属语义变更，必须显式改期望值而
 不是只加新用例）。`npm run test:fuzz`（5000×80）三块记分板全绿；lint / format:check / release
 重建单独复跑。本周期派发 3 次（Explore ×2 查 VC 词条模型与渲染机制、Plan ×1 出实施方案）。
-
----
-
-## 2026-08-19 M13 第六轮：消灭「让路死角」+ 本插件优先时隐藏 VC 配置（1.0.31）
-
-### 做了什么
-
-用户带着一个新 vault 形态实测 1.0.30 并报了三件事，其中一件是**我在 1.0.29 埋的设计错误**。
-
-**用户的观察**：库里 `axi.md` 与 `交叉矩阵.md` 各有一个标题【交叉矩阵】，在 `axi.md` 里打字，
-建议里「没有 `交叉矩阵.md` 的那个，只有本文件的，而且 icon 也不对」。
-
-**先排除索引 bug**：vault 的 create / modify / delete / rename 四个事件都已接线
-（`main.ts:318-346`），新建文件会被索引；`headingindex.test.ts` 也早有「多文件同名标题：全部
-收录、path 次级排序确定」这条。所以不是索引漏收。追问后用户确认：**那个框是 VC 的**——
-于是一切对上了：默认让路 + VC 已启用 ⇒ 我们的 `onTrigger` 恒返回 null，我们的框根本没机会
-出现，用户看到的自始至终是 VC 的框，icon 自然也是 VC 的。
-
-**根因（1.0.29 的设计错误）**：让路默认开（`headingSuggestWhenVcActive = "yield"`）+ 词典联动
-默认关（`vcIntegrationMode = "off"`）——**两个默认叠在一起，装了 VC 的用户一开箱标题建议就
-整个消失**。1.0.29 我意识到了这个死角，但用「设置面板弹一条警告」去兜——用户不打开设置就
-永远看不到，等于静默失效。这是典型的「用提示去补设计缺陷」。
-
-**修法：从判定条件上消灭，而不是提示**。`shouldYieldSuggestToVc` 加第三个条件——让路还要求
-词典联动**确实开着**：
-
-- 让路 + VC 启用 + 联动开 → 让路（VC 框里有标题条目，两边候选同框可见）
-- 让路 + VC 启用 + **联动关** → **不让路**，由本插件的框接管（让给一个拿不出标题候选的框
-  等于让用户什么都看不到）
-- 本插件优先 / VC 未装未启用 → 一律不让路
-
-死角从此不可达，面板那条「标题建议将无处出现」的警告随之改成如实告知
-（`vcCoexistFallbackHint`：「当前仍由本插件的建议框接管……开启词典联动后即会真正让路」）。
-`vcCoexistDesc` 同步补上「只有词典联动开着时才会真的让路」（中英双语）。
-
-**用户明确要求的第二件事**：「本插件优先的时候，就不要出现 VC 的相关配置（联动选项、词典
-按钮）」。已照做，但留了两条例外——照字面全隐会出事：
-
-1. **词典联动已经开着**时照常渲染。否则会留下「词典还在按节流重写、用户却既看不见也关不掉」
-   的隐身状态。
-2. **VC 未安装**时不受影响。共存下拉本就只在 VC 已安装时渲染，此时 `headingSuggestWhenVcActive`
-   的历史值不该反过来遮住手动联动——手动联动允许未装 VC 时先生成词典（testplan Q10）。
-
-**第三件事（不是 bug）**：「本插件优先、不重启，打『交』出的是 VC 的框，打『交叉』才出本插件
-的」——符合预期：`MIN_QUERY_LENGTH = 2`，单字符我们不触发，那一轮自然归 VC；两字符起我们接管。
-顺带验证了共存开关**运行期切换即时生效、无需重启**。
-
-用户另确认：Q22 的「一个交叉矩阵」接受后「一个」确实还在——1.0.29 的修复成立。
-
-### 没做什么
-
-- **没有改 icon 实现**：用户报的 icon 问题出在 VC 的框上，我们的 `setIcon("heading")` 这轮才
-  第一次真正有机会显示（此前默认让路把它挡在门外）。等用户看到本插件的框再判断 `heading`
-  这个 id 在其 Obsidian 版本里是否存在——存在则是 H，不存在会按 `ICON_CANDIDATES` 退到 `#`。
-  不在没看到实物前反复改猜。
-- 没有新增索引层测试：「多文件同名标题全部收录」早有单测，不重复造第二份（单一事实源）。
-- 没有动 `MIN_QUERY_LENGTH`（单字符不触发是刻意的噪音防护）。
-
-### 下一步
-
-- 用户真机复测：默认设置下（联动关）本插件的框现在应当出现，且 `axi.md` / `交叉矩阵.md` 两条
-  同名标题都在列 —— 顺便确认 icon 到底是 H 还是 `#`；「本插件优先」时 VC 配置应消失。
-- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互。
-
-### 验证方式
-
-`npx tsc --noEmit` 干净；`vcintegration.test.ts` 30 例（`shouldYieldSuggestToVc` 扩为
-两模式 × 三安装态 × 三联动态）、`i18n.test.ts` 键位对齐、`headingindex.test.ts` 全通过；
-`npm test` 全量 611 通过（唯一失败仍是 `whitelist.test.ts:406` Windows ICU 已知假红）；
-lint / format:check / release 重建单独复跑。本周期派发 0 次。
 
 ---
 

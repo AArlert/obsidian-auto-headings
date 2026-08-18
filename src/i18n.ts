@@ -363,76 +363,75 @@ const zh: Messages = {
 	langAuto: "自动（跟随 Obsidian）",
 	langZh: "中文",
 	langEn: "English",
-	languageChangeHint: "命令名称将在下次重载插件后更新为新语言。",
+	languageChangeHint: "命令名在重载插件后更新为新语言。",
 
 	autoNumberName: "全局自动编号",
 	autoNumberDesc:
-		"开启后编辑文件即自动为标题编号；关闭后仍可按文件用 frontmatter 强制开启，或用「立即重新编号」命令手动触发。",
+		"编辑文件时自动为标题编号。关闭后可用「立即重新编号」命令手动触发（或经 frontmatter 按文件强制开启）。",
 
 	debounceName: "防抖延迟",
-	debounceDesc: (min, max, def) =>
-		`编辑停顿后多少毫秒触发自动编号。范围 ${min}–${max} ms，默认 ${def} ms。`,
+	debounceDesc: (min, max, def) => `编辑停顿 ${min}–${max} ms 后触发自动编号（默认 ${def} ms）。`,
 	resetTooltip: (def) => `恢复默认 ${def} ms`,
 
 	updateBacklinksName: "同步内部链接（Backlink）",
 	updateBacklinksDesc:
-		"标题文字一旦改动，自动更新其它文件里指向它的内部链接（如 [[文件#标题]]），避免断链——全局生效，与是否编号无关（改标题不加编号、或笔记未命中任何模板，链接照样同步）；注意会修改引用文件、改动不在其撤销历史内。",
+		"标题文字改动时，自动更新其它文件里指向它的内部链接（如 [[文件#标题]]），避免断链。与编号无关、全局生效；改动不在引用文件的撤销历史内。",
 
 	headingLinkSuggestName: "标题链接建议",
 	headingLinkSuggestDesc:
-		"在正文里打出与库内某标题原文匹配的文字时，弹出建议；接受后替换为指向该标题的链接，文字自动补全为该标题的完整名称。这项能力完全自带、不依赖任何其它插件。默认开启；关闭后标题索引完全不构建，内存/CPU 成本降为零。",
+		"打字匹配库内标题即弹建议，接受后替换为指向该标题的链接。完全自带、默认开启；关闭后不构建标题索引，内存/CPU 成本归零。",
 	headingSuggestThisFile: "（本文件）",
 	noticeHeadingIndexTruncated: (indexed) =>
-		`标题索引因 vault 规模过大未完整构建，已索引 ${indexed} 个标题；建议功能在已索引范围内可用。`,
+		`vault 过大，标题索引未完整构建（已索引 ${indexed} 个）；建议功能在已索引范围内可用。`,
 	vcCoexistName: "Various Complements 启用时",
 	vcCoexistDesc:
-		"两个插件共用同一个建议框位置（Obsidian 同一时刻只显示一个），所以得选一个赢家。默认让路给 VC——配合下方的词典联动，标题候选会并进 VC 的建议框，两边的候选同框可见，这是最完整的组合。**只有词典联动开着时才会真的让路**：联动关着时让路等于让给一个给不出标题候选的框，所以此时仍由本插件的建议框接管。VC 未安装或未启用时本项无效。",
+		"两插件共用同一个建议框，只能留一个。默认让路给 VC：配合词典联动，两边候选同框可见（最完整）。**仅当词典联动开启时才真让路**，否则仍由本插件接管。VC 未安装/未启用时本项无效。",
 	vcCoexistYield: "让路给 Various Complements（推荐）",
 	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
 	vcCoexistFallbackHint:
-		"当前仍由本插件的建议框接管：下方的词典联动尚未开启，VC 词典里没有标题条目，这时让路只会让你什么都看不到。开启词典联动后即会真正让路给 VC。",
+		"当前仍由本插件接管：词典联动未开启，VC 词典里没有标题，让路会什么都看不到。开启联动后即真让路。",
 
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
 	sectionSuggest: "标题链接建议",
 	sectionSuggestDesc:
-		"打字即出标题链接，不依赖任何其它插件，开箱即用。只有当你同时装了 Various Complements 时，才需要关心下面两项——它们决定两个插件的建议框怎么共处。",
+		"打字即出标题链接，不依赖其它插件。只有装了 Various Complements 才需要关心下面两项。",
 
 	vcModeName: "Various Complements 联动",
 	vcModeDesc:
-		"让标题候选出现在 Various Complements 的建议框里：把标题索引导出为 VC 的自定义词典文件——这是把两边候选合并进同一个建议框的唯一官方入口（VC 自身尚不支持标题级补全）。没装 VC 就用不上它，标题建议本来就独立可用。默认关闭，任何开启方式都需要你显式确认；关闭时一个字节都不生成。",
+		"把标题索引导出为 VC 自定义词典，让标题候选出现在 VC 的建议框里（合并两边候选的唯一官方入口）。没装 VC 用不上；默认关闭、开启需显式确认、关闭时零写入。",
 	vcModeOff: "不联动",
 	vcModeManual: "手动配置",
 	vcModeAuto: "自动配置",
 	vcNotInstalledNotice:
-		"未检测到 Various Complements（未安装或未启用），自动配置已取消；请先安装并启用它，或改用「手动配置」。",
+		"未检测到 Various Complements（未安装或未启用），自动配置已取消；请先安装并启用，或改用「手动配置」。",
 	vcDictionaryPathLabel: "词典文件路径",
 	vcCopyPathButton: "复制路径",
 	noticeVcPathCopied: "词典文件路径已复制。",
 	vcManualConfirmTitle: "开启手动联动",
 	vcManualConfirmBody:
-		"将在插件目录下生成/维护 JSON 标题词典文件，并在此显示其路径；不会修改 Various Complements 的任何配置。请复制路径，自行粘贴到 VC 的「Custom dictionary paths」设置并启用「Custom dictionary complement」。另建议把 VC 的「Displayed text suffix」清空，否则标题候选会显示成「标题 => ...」。",
+		"将在插件目录生成/维护标题词典文件，不改 VC 任何配置。复制路径，粘贴到 VC 的「Custom dictionary paths」并启用「Custom dictionary complement」；建议清空「Displayed text suffix」，否则候选显示为「标题 => ...」。",
 	vcManualConfirmButton: "生成词典文件",
 	vcAutoConfirmTitle: "开启自动联动",
 	vcAutoConfirmBody:
-		"将生成标题词典并自动配置 Various Complements，全程安全校验：无法安全写入会自动放弃，不改动 VC 现有配置。确认继续？",
+		"将生成标题词典并自动配置 VC（全程安全校验，写不了即放弃，不改动现有配置）。确认继续？",
 	vcAutoConfirmPoints: [
-		"生成/维护标题词典文件（最多 2 万条标题，超出自动截断）",
-		"写入 VC 配置：词典路径 + 开启「自定义词典补全」+ 触发阈值调为 1 个字符",
-		"清空 VC 的「补全候选显示后缀」——这是全局项，你其它自定义词典的候选也不再带「 => ...」",
-		"把 VC 的「建议框最多显示条数」抬到至少 10（默认仅 5，同名标题会被挤出列表）——全局项，只抬不降",
-		"写入完成后自动重载 VC 词典（失败会另行提示）",
+		"生成/维护标题词典（上限 2 万条，超出截断）",
+		"写 VC 配置：词典路径 + 开「自定义词典补全」+ 触发阈值 1 字符",
+		"清空 VC「补全候选显示后缀」（全局项，其它词典候选同样生效）",
+		"VC「建议框最多显示条数」抬到至少 10（全局项，只抬不降）",
+		"写入后自动重载 VC 词典（失败会另行提示）",
 	],
 	vcDescriptionOffHint:
-		"Various Complements 的「Description on suggestion」当前为 None，标题候选下方的来源路径行不会显示（同名标题仍可凭标题行括号里的文件名区分）。这是 VC 的全局显示偏好，本插件不代改。",
+		"VC 的「Description on suggestion」为 None，候选下方的来源路径行不显示（同名标题仍可凭括号里的文件名区分）。VC 全局显示偏好，本插件不代改。",
 	vcAutoConfirmButton: "确认并自动配置",
 	noticeVcAutoWriteSuccess: "已自动配置 Various Complements 联动。",
 	noticeVcAutoWriteInvalidShape:
-		"Various Complements 的配置格式与预期不符，已放弃自动写入（未改动其配置）；请改用「手动配置」，或检查其配置文件。",
+		"VC 配置格式与预期不符，已放弃自动写入（未改动其配置）；请改用「手动配置」或检查其配置文件。",
 	noticeVcAutoWriteNotInstalled:
-		"未能自动配置 Various Complements（未安装 / 未启用 / 数据文件缺失）；请先安装并启用它，或改用「手动配置」。",
+		"未能自动配置 VC（未安装 / 未启用 / 数据文件缺失）；请先安装并启用，或改用「手动配置」。",
 	noticeVcReloadFailed:
-		"词典与 VC 配置已写入，但自动重载 VC 词典失败；请在命令面板手动执行 Various Complements 的「Reload custom dictionaries」命令（或重启 Obsidian）。",
+		"词典与 VC 配置已写入，但自动重载词典失败；请手动执行 VC 的「Reload custom dictionaries」命令（或重启 Obsidian）。",
 	noticeVcDictionaryTruncated: (total) =>
 		`标题总数（${total}）超过词典条数上限，词典已截断；建议功能在已收录范围内可用。`,
 
@@ -451,7 +450,7 @@ const zh: Messages = {
 	deleteRuleTooltip: "删除此规则",
 	dragHandleTooltip: "拖动以排序",
 	pathDuplicateWarn: (otherRow) =>
-		`该路径已被第 ${otherRow} 条规则使用，不能与不同模板重复关联同一路径；请先修改或删除其中一条。`,
+		`该路径已被第 ${otherRow} 条规则占用；一条路径只能关联一个模板，请先修改或删除其中一条。`,
 	pathSuggestEmptyFolder: "（此文件夹为空）",
 	pathSuggestBackTooltip: "返回上一级",
 	pathSuggestDescendTooltip: "查看子项",
@@ -461,9 +460,8 @@ const zh: Messages = {
 	batchRenumberNoneTooltip: "该规则已设为「不编号」，无可批量编号的内容",
 	batchModalTitle: "批量重编号",
 	batchModalBody: (pattern, count) =>
-		`将对匹配「${pattern}」的 ${count} 个 Markdown 文件按各自生效的模板重新编号。` +
-		"已设为「不编号」、frontmatter 关闭、或含未接管外来编号的文件会被自动跳过；" +
-		"已打开的文件可撤销，未打开的文件直接改写，建议先确认影响范围。",
+		`按各自生效模板重新编号匹配「${pattern}」的 ${count} 个文件；` +
+		"「不编号」、frontmatter 关闭或含未接管外来编号的文件自动跳过。已打开的文件可撤销，未打开的直接改写。",
 	batchModalConfirm: "重新编号",
 	batchModalCancel: "取消",
 
@@ -479,16 +477,15 @@ const zh: Messages = {
 	templateNameName: "模板名称",
 	templateNameDesc: "重命名后将自动更新对应的模板文件与引用它的路径规则。",
 	topLevelName: "起始编号层级",
-	topLevelDesc: "从这一级开始编号：比它浅的标题不编号、也不会被改写（默认 H2，H1 作标题/分节）。",
+	topLevelDesc: "从这一级开始编号，更浅的标题不动（默认 H2，H1 作标题/分节）。",
 	bottomLevelName: "结束编号层级",
 	bottomLevelDesc:
-		"编号到这一级为止：更深的标题不编号（须 ≥ 起始层级，配合起始层级可只编号 H2–H4 这样的区间）。",
+		"编号到这一级为止，更深的标题不动；须 ≥ 起始层级（两者配合可只编号 H2–H4 区间）。",
 	startIndexName: "起始编号数字",
-	startIndexDesc:
-		"首个编号标题从这个数字起，仅作用于首段（默认 1；设 0 得 0.1.1，更深层级仍从 1 起）。",
+	startIndexDesc: "首个编号标题从该数字起，仅作用于首段（默认 1，设 0 得 0.1.1）。",
 	ancestorName: "祖先序号渲染",
 	ancestorDesc:
-		"继承前级时祖先段的样式：「各自样式」每个祖先套用自身样式；「统一阿拉伯」祖先一律阿拉伯、仅当前级套自身样式（适合中文书）。",
+		"继承时祖先段的样式：「各自样式」每个祖先套自身样式；「统一阿拉伯」祖先一律阿拉伯、仅当前级套自身样式（适合中文书）。",
 	ancestorSelf: "各自样式（1.a.①）",
 	ancestorArabic: "统一阿拉伯（一 / 1.1）",
 
@@ -511,14 +508,13 @@ const zh: Messages = {
 	previewHeadingWord: "标题",
 
 	skipFillName: "跳级缺失层级",
-	skipFillDesc:
-		"标题跳级（如 H3 后直接跟 H5）时：补占位符（H5 得四段）、省略缺失段（H5 与 H4 同形）、或该标题完全不编号（保持原样，适合把深层标题当小标题用）。",
+	skipFillDesc: "标题跳级（如 H3 后跟 H5）时：补占位符、省略缺失段、或该标题不编号（保持原样）。",
 	skipFillFill: "补位",
 	skipFillDrop: "不补位（省略该段）",
 	skipFillNone: "不编号（保持原样）",
 	placeholderName: "占位字符",
 	placeholderDesc:
-		"补位时填入缺失段的数字（如 0 得 1.1.0.1）；仅限数字以确保编号可被干净剥离，留空按 0 处理。",
+		"补位时填入缺失段的数字（如 0 得 1.1.0.1）；仅限数字、留空按 0，确保编号可干净剥离。",
 
 	numeralArabic: "1, 2, 3",
 	numeralCjk: "一, 二, 三",
@@ -534,7 +530,7 @@ const zh: Messages = {
 
 	whitelistName: "白名单",
 	whitelistDesc:
-		"命中的标题不编号、不占号；「全部」完全相等、「部分」包含该词、「子树」整块豁免且块后编号重新开始（如附录后的新章节）。",
+		"命中的标题不编号、不占号：「全部」完全相等、「部分」包含该词、「子树」整块豁免且之后编号重新开始。",
 	wlInputPlaceholder: "输入词语后按 Enter 添加…",
 	wlFilterPlaceholder: "搜索条目…",
 	wlSortAdded: "按添加顺序",
@@ -544,14 +540,13 @@ const zh: Messages = {
 	wlEmpty: "还没有条目——在上方输入词语按 Enter 添加，命中的标题将不被编号。",
 	wlEditTitle: "点击编辑词语",
 	wlChipWarnTitle:
-		"命中的标题下还有子标题，子标题不会被豁免、会错挂到上一已编号祖先。建议改用「子树」整块豁免。",
+		"命中标题下还有子标题时，子标题不会豁免、会错挂到上一已编号祖先；建议改用「子树」。",
 	wlPreviewNoFile: "（打开一个含标题的 Markdown 文件以预览本白名单的命中）",
 	wlPreviewNone: "当前文件无标题被本白名单豁免。",
 	wlPreviewSome: (count, titles) => `当前文件将豁免 ${count} 个标题：${titles}`,
 	wlPreviewOtherTemplate: (appliedName) =>
-		`⚠ 当前文件按路径规则实际使用模板「${appliedName}」，不是正在编辑的这个模板；下方预览仅为「假如本文件用此模板」的假设，实际编号以「${appliedName}」的白名单为准。`,
-	wlPreviewNoTemplate:
-		"⚠ 当前文件未命中任何路径规则（无可用模板），不会被自动编号；下方预览仅为假设。",
+		`⚠ 当前文件实际使用模板「${appliedName}」，不是正在编辑的这个；下方预览仅为假设。`,
+	wlPreviewNoTemplate: "⚠ 当前文件未命中任何路径规则，不会被自动编号；下方预览仅为假设。",
 
 	dangerHeading: "危险区域",
 	dangerExpandHint: "（点击展开）",
@@ -565,15 +560,15 @@ const zh: Messages = {
 	clearForeignBtn: "清理外来编号",
 	clearVaultName: "清除全库编号",
 	clearVaultDesc:
-		"剥离全库所有 Markdown 文件中本插件写入的编号前缀（不在撤销历史内，建议先备份）；确认后会先关闭「全局自动编号」再清除，避免一编辑又被编回去，需要时可再手动开启。",
+		"剥离全库中本插件写入的编号前缀（不在撤销历史内，建议先备份）；确认后先关闭「全局自动编号」再清除，避免清完又被编回去。",
 	clearVaultBtn: "清除全库编号…",
 	freezeVaultName: "固化编号并交还所有权（全库）",
 	freezeVaultDesc:
-		"**保留**全库现有编号、只移除插件的不可见标记，此后插件停止一切自动编号。适合「喜欢现在的编号，但不想再被插件管着」或「准备卸载但要留住编号成果」。标记移除后插件自己也认不出这些编号是它写的（不可逆）；不在撤销历史内，建议先备份。",
+		"**保留**现有编号、只移除不可见标记，此后插件停止一切自动编号。适合「想留住编号但不想再被管」或准备卸载；不可逆、不在撤销历史内，建议先备份。",
 	freezeVaultBtn: "固化编号并交还所有权…",
 	retiredBannerTitle: "插件已交还编号所有权",
 	retiredBannerBody:
-		"编号已作为普通文本保留在你的文件里，插件当前**不做任何自动编号**。想让插件重新接管：点下面的按钮，然后对相关文件跑一次「清理非本插件的标题编号」——否则现有编号会被当成外来编号，再叠一层新前缀变成双重编号。",
+		"编号已保留为普通文本，插件当前**不做任何自动编号**。恢复接管：点下面按钮，再对相关文件跑「清理非本插件的标题编号」；否则现有编号会被当外来编号，叠成双重编号。",
 	resumeBtn: "恢复接管",
 
 	aboutVersionLabel: "版本",
@@ -583,11 +578,11 @@ const zh: Messages = {
 	aboutCreditsHeading: "鸣谢",
 	aboutCreditsIntro: "开发过程中参考了以下开源插件的实现思路，在此致谢：",
 	aboutCreditPathSuggest:
-		"路径输入的文件夹/文件建议弹窗与匹配思路——本插件在此基础上补充了「文件级精确规则」，并加入了漏打尾斜杠时的自动补全。",
+		"路径输入的文件夹/文件建议弹窗与匹配思路；本插件补充了「文件级精确规则」与漏打尾斜杠时的自动补全。",
 	aboutCreditBacklinks:
-		"Backlink 同步的最初参考实现（反查引用方 + 重写锚点）——本插件补充了别名/嵌入链接解析，并升级为标题编号与正文文本的全覆盖同步。",
+		"Backlink 同步的最初参考（反查引用方 + 重写锚点）；本插件补充别名/嵌入解析，升级为编号与文本全覆盖同步。",
 	aboutCreditWordJoiner:
-		"用不可见 Word Joiner 字符标记编号前缀边界的最初参考——本插件升级为「首尾双哨兵」，具备残缺前缀自愈能力。",
+		"用不可见 Word Joiner 标记编号边界的最初参考；本插件升级为「首尾双哨兵」，可自愈残缺前缀。",
 
 	defaultTemplateDisplay: "默认",
 
@@ -601,17 +596,17 @@ const zh: Messages = {
 
 	clearVaultModalTitle: "清除全库编号",
 	clearVaultModalBody:
-		"这将先关闭「全局自动编号」，再从全库所有 Markdown 文件中剥离本插件写入的编号前缀，把标题还原为裸标题。此操作通过 Vault API 写回、不在 Obsidian 撤销历史内，建议先备份。确认继续？",
+		"将先关闭「全局自动编号」，再从全库剥离本插件写入的编号前缀，还原为裸标题。不在撤销历史内，建议先备份。确认继续？",
 	confirmClearVault: "确认清除全库",
 
 	freezeVaultModalTitle: "固化编号并交还所有权（全库）",
 	freezeVaultModalBody:
-		"确认后将发生五件事：① 全库现有编号**原样保留**，变成普通文本；② 全库的不可见标记（U+2060）一并移除——**包括写在内部链接锚点里的**，故 [[笔记#标题]] 仍能正常解析；③ 此操作通过 Vault API 写回、**不在 Obsidian 撤销历史内**，建议先备份；④ 插件将**停止一切自动编号**（该状态凌驾于 frontmatter 开关）；⑤ 之后若想恢复接管，须先对相关文件跑「清理非本插件的标题编号」，否则现有编号会被当成外来编号、再叠一层新前缀。确认继续？",
+		"确认后：① 全库编号**原样保留**为普通文本；② 移除全部不可见标记（含链接锚点内的，[[笔记#标题]] 仍可解析）；③ 插件**停止一切自动编号**（凌驾于 frontmatter 开关）；④ 不在撤销历史内，建议先备份；⑤ 恢复接管前须先跑「清理非本插件的标题编号」，否则会叠成双重编号。确认继续？",
 	confirmFreezeVault: "确认固化并交还",
 
 	foreignGuardModalTitle: "疑似非本插件的编号",
 	foreignGuardModalBody: (count) =>
-		`以下 ${count} 处标题看起来带编号，但插件不确定是不是你自己写的（如「API 设计」「TODO 清单」这类标题也可能被误判）。默认全部勾选清理；取消勾选的会保留原文，插件仍会照常在前面按模板加上自己的编号：`,
+		`以下 ${count} 处标题看起来带编号，但无法确认是否你手写（如「API 设计」「TODO 清单」可能误判）。默认全勾清理；取消勾选则保留原文，插件仍会按模板加上自己的编号：`,
 	foreignGuardModalConfirm: "确认清理",
 	foreignGuardItemToggle: (before) => `清理「${before}」的外来编号`,
 	foreignGuardSearchPlaceholder: "搜索标题…",
@@ -627,11 +622,11 @@ const zh: Messages = {
 	noticeNothingToClear: "当前文件无可清除的编号前缀",
 	noticeCleared: "已清除编号",
 	noticeClearedAndPaused:
-		"已清除编号，并暂停本文件的自动编号（属性 obsidian-auto-headings: false）。跑「立即重新编号」即可恢复接管。",
+		"已清除编号并暂停本文件的自动编号（属性 obsidian-auto-headings: false）；跑「立即重新编号」即可恢复接管。",
 	noticeRenumberedAndResumed: "已重新编号，并恢复本文件的自动编号",
 	noticeClearedVault: (count) => `已清除全库编号（共修改 ${count} 个文件）`,
 	noticeFrozenVault: (count) =>
-		`已固化编号并交还所有权（共修改 ${count} 个文件）；编号已保留为普通文本，插件停止自动编号`,
+		`已固化编号并交还所有权（修改 ${count} 个文件）；编号保留为普通文本，插件停止自动编号`,
 	noticeResumed: "已恢复接管；若文件里留有固化过的编号，请先跑「清理非本插件的标题编号」",
 	noticeNoRule: "当前文件未匹配任何路径规则，无法编号",
 	noticeNoNumberingRule: "当前文件所在路径已设为「不编号」",
@@ -648,7 +643,7 @@ const zh: Messages = {
 			: `已清理非本插件的标题编号（${cleaned} 条）`,
 	noticeBacklinksUpdated: (count) => `已更新 ${count} 处内部链接`,
 	noticeBacklinksIntro:
-		"Auto Headings 已自动更新了其它文件里指向本文件标题的内部链接（避免断链）。这些改动不在被改文件的撤销历史内；不需要此功能可在 设置 → 全局设置 关闭「同步内部链接」。本提示只出现一次。",
+		"已自动更新其它文件里指向本文件标题的内部链接（避免断链；改动不在被改文件的撤销历史内）。不需要可在 设置 → 全局设置 关闭；本提示只出现一次。",
 	noticeNoActiveFile: "没有打开的 Markdown 文件",
 	noticeForeignNumberingGuard:
 		"这些标题看起来带编号，但插件不确定是不是你自己写的，已跳过本次自动编号。",
@@ -669,76 +664,76 @@ const en: Messages = {
 	langAuto: "Auto (follow Obsidian)",
 	langZh: "中文",
 	langEn: "English",
-	languageChangeHint: "Command names update to the new language after the plugin is reloaded.",
+	languageChangeHint: "Command names update after the plugin is reloaded.",
 
 	autoNumberName: "Global auto-numbering",
 	autoNumberDesc:
-		'When on, headings are numbered automatically as you edit; when off, you can still force single files on via frontmatter or trigger manually with "Renumber now".',
+		'Headings are numbered automatically as you edit. When off, trigger manually with "Renumber now" (or force files on via frontmatter).',
 
 	debounceName: "Debounce delay",
 	debounceDesc: (min, max, def) =>
-		`How many milliseconds after you stop editing before auto-numbering runs. Range ${min}–${max} ms, default ${def} ms.`,
+		`Auto-numbering runs ${min}–${max} ms after you stop typing (default ${def} ms).`,
 	resetTooltip: (def) => `Reset to default ${def} ms`,
 
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc:
-		"Whenever a heading's text changes, automatically update internal links in other files that point to it (e.g. [[file#heading]]) so they don't break — this works globally, regardless of numbering (edits with no numbering added, or notes matching no template, still sync); note this modifies the referencing files outside their undo history.",
+		"When a heading's text changes, update internal links to it in other files (e.g. [[file#heading]]) so they don't break. Global and independent of numbering; edits land outside the referencing files' undo history.",
 
 	headingLinkSuggestName: "Heading link suggestions",
 	headingLinkSuggestDesc:
-		"While typing in any note, suggest vault headings that match what you typed; accept to replace your text with a clickable link to that heading, expanding your text to the heading's full name. Fully self-contained — no other plugin required. On by default; when off, the heading index is never built and memory/CPU cost drops to zero.",
+		"Typing a heading's text suggests matching vault headings; accept to replace your text with a link to it. Self-contained and on by default; when off, no heading index is built and memory/CPU cost drops to zero.",
 	headingSuggestThisFile: "(this file)",
 	noticeHeadingIndexTruncated: (indexed) =>
-		`The heading index was not fully built because the vault is too large (${indexed} headings indexed); suggestions work within the indexed range.`,
+		`Vault too large: heading index built partially (${indexed} headings indexed); suggestions work within the indexed range.`,
 	vcCoexistName: "When Various Complements is enabled",
 	vcCoexistDesc:
-		"Both plugins share the same suggestion popup slot (Obsidian shows only one at a time), so one of them has to win. The default is to yield to VC — combined with the dictionary integration below, heading candidates are merged into VC's popup and you see both sides at once, which is the most complete setup. **Yielding only takes effect while the dictionary integration is on**: with it off, yielding would hand the slot to a popup that has no heading candidates, so this plugin keeps serving them instead. Has no effect when VC is not installed or not enabled.",
+		"Both plugins share the single suggestion popup, so only one can win. Default: yield to VC — with the dictionary integration below, both sides' candidates appear in one popup (the most complete setup). **Yielding only takes effect while the dictionary integration is on**; otherwise this plugin keeps serving. No effect when VC is not installed or not enabled.",
 	vcCoexistYield: "Yield to Various Complements (recommended)",
 	vcCoexistOwn: "This plugin wins (hides VC's popup)",
 	vcCoexistFallbackHint:
-		"This plugin is still serving heading suggestions: the dictionary integration below is off, so VC's dictionary holds no headings and yielding would leave you with nothing. Turn the dictionary integration on and yielding takes effect.",
+		"This plugin is still serving: the dictionary integration is off, so VC's dictionary holds no headings and yielding would leave you with nothing.",
 
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",
 	sectionSuggest: "Heading link suggestions",
 	sectionSuggestDesc:
-		"Heading links as you type, self-contained — no other plugin required. The two settings below only matter if you also have Various Complements installed; they decide how the two plugins share the suggestion popup.",
+		"Heading links as you type, no other plugin required. The two settings below only matter if Various Complements is installed.",
 
 	vcModeName: "Various Complements integration",
 	vcModeDesc:
-		"Make heading candidates show up inside Various Complements' popup: the heading index is exported as a VC custom dictionary file — the only officially supported way to merge both sides into a single suggestion popup (VC itself still lacks heading-level completion). Not needed without VC; heading suggestions work on their own regardless. Off by default; enabling always requires your explicit confirmation, and nothing at all is written while it is off.",
+		"Export the heading index as a VC custom dictionary so heading candidates appear in VC's popup — the only official way to merge both sides. Not needed without VC; off by default, enabling requires explicit confirmation, and nothing is written while off.",
 	vcModeOff: "Off",
 	vcModeManual: "Manual",
 	vcModeAuto: "Automatic",
 	vcNotInstalledNotice:
-		"Various Complements was not detected (not installed or not enabled); automatic configuration was cancelled. Install and enable it first, or use Manual mode.",
+		"Various Complements not detected (not installed or not enabled); automatic configuration cancelled. Install and enable it, or use Manual mode.",
 	vcDictionaryPathLabel: "Dictionary file path",
 	vcCopyPathButton: "Copy path",
 	noticeVcPathCopied: "Dictionary file path copied.",
 	vcManualConfirmTitle: "Enable manual integration",
 	vcManualConfirmBody:
-		'A JSON heading dictionary file will be generated and maintained inside this plugin\'s folder, and its path will be shown here. No Various Complements setting will be modified. Copy the path, paste it into VC\'s "Custom dictionary paths" setting, and enable its "Custom dictionary complement" feature. Clearing VC\'s "Displayed text suffix" is also recommended, otherwise heading candidates render as "heading => ...".',
+		'A heading dictionary file will be generated and maintained in this plugin\'s folder (no VC setting is modified). Copy the path into VC\'s "Custom dictionary paths" and enable "Custom dictionary complement"; clearing VC\'s "Displayed text suffix" is recommended, otherwise candidates render as "heading => ...".',
 	vcManualConfirmButton: "Generate dictionary",
 	vcAutoConfirmTitle: "Enable automatic integration",
 	vcAutoConfirmBody:
-		"A heading dictionary will be generated and Various Complements configured automatically, with safety checks throughout: if it cannot write safely it will abort without touching your existing VC settings. Continue?",
+		"A heading dictionary will be generated and VC configured automatically (safety-checked; aborts without touching your VC settings if it can't write safely). Continue?",
 	vcAutoConfirmPoints: [
-		"Generate/maintain the heading dictionary file (capped at 20,000 headings, truncated beyond that)",
-		'Write to VC settings: dictionary path + enable "Custom dictionary complement" + set its trigger threshold to 1 character',
-		'Clear VC\'s "Displayed text suffix" — this is a global setting, so candidates from your other custom dictionaries will no longer carry " => ..." either',
-		'Raise VC\'s "Max number of suggestions" to at least 10 (its default of 5 pushes same-named headings out of the list) — a global setting, only ever raised, never lowered',
-		"Reload VC dictionaries automatically after writing (you'll be told if that fails)",
+		"Generate/maintain the heading dictionary (capped at 20,000 headings)",
+		'Write VC settings: dictionary path + "Custom dictionary complement" + trigger threshold of 1 character',
+		'Clear VC\'s "Displayed text suffix" (global: affects your other custom dictionaries too)',
+		'Raise VC\'s "Max number of suggestions" to at least 10 (global; only raised, never lowered)',
+		"Reload VC dictionaries after writing (failure is reported separately)",
 	],
 	vcDescriptionOffHint:
-		'Various Complements\' "Description on suggestion" is currently None, so the source-path line under each heading candidate will not be shown (headings with the same name can still be told apart by the file name in parentheses on the title line). This is a global VC display preference; this plugin does not change it for you.',
+		"VC's \"Description on suggestion\" is None, so the source-path line under candidates is hidden (same-named headings can still be told apart by the file name in parentheses). Global VC display preference; this plugin won't change it.",
 	vcAutoConfirmButton: "Confirm & configure",
 	noticeVcAutoWriteSuccess: "Various Complements integration configured automatically.",
 	noticeVcAutoWriteInvalidShape:
-		"Various Complements' configuration shape did not match expectations; the automatic write was aborted (its settings were not touched). Use Manual mode instead, or inspect its config file.",
+		"VC's configuration shape did not match expectations; automatic write aborted (its settings untouched). Use Manual mode or inspect VC's config.",
 	noticeVcAutoWriteNotInstalled:
-		"Could not configure Various Complements automatically (not installed / not enabled / missing data file); install and enable it first, or use Manual mode.",
+		"Could not configure VC automatically (not installed / not enabled / data file missing); install and enable it, or use Manual mode.",
 	noticeVcReloadFailed:
-		'The dictionary and VC settings were written, but reloading VC dictionaries failed; run VC\'s "Reload custom dictionaries" command from the command palette (or restart Obsidian).',
+		'The dictionary and VC settings were written, but reloading VC dictionaries failed; run VC\'s "Reload custom dictionaries" command (or restart Obsidian).',
 	noticeVcDictionaryTruncated: (total) =>
 		`The total number of headings (${total}) exceeds the dictionary cap; the dictionary was truncated and works within the included range.`,
 
@@ -758,7 +753,7 @@ const en: Messages = {
 	deleteRuleTooltip: "Delete this rule",
 	dragHandleTooltip: "Drag to reorder",
 	pathDuplicateWarn: (otherRow) =>
-		`This path is already used by rule #${otherRow}; two rules can't map the same path to different templates. Edit or delete one of them first.`,
+		`This path is already used by rule #${otherRow}; one path can map to only one template. Edit or delete one of them first.`,
 	pathSuggestEmptyFolder: "(This folder is empty)",
 	pathSuggestBackTooltip: "Go up one level",
 	pathSuggestDescendTooltip: "View contents",
@@ -768,9 +763,9 @@ const en: Messages = {
 	batchRenumberNoneTooltip: "This rule is set to “No numbering” — nothing to renumber",
 	batchModalTitle: "Batch renumber",
 	batchModalBody: (pattern, count) =>
-		`This will renumber ${count} Markdown file(s) matching “${pattern}”, each with its own effective template. ` +
-		"Files set to “No numbering”, disabled via frontmatter, or containing unclaimed foreign numbering are skipped automatically; " +
-		"open files support undo, closed files are rewritten directly — make sure you know the scope.",
+		`Renumbers ${count} Markdown file(s) matching “${pattern}”, each with its own effective template. ` +
+		"Files set to “No numbering”, disabled via frontmatter, or holding unclaimed foreign numbering are skipped; " +
+		"open files support undo, closed files are rewritten directly.",
 	batchModalConfirm: "Renumber",
 	batchModalCancel: "Cancel",
 
@@ -789,16 +784,16 @@ const en: Messages = {
 		"Renaming automatically updates the matching template file and any path rules that reference it.",
 	topLevelName: "Start level",
 	topLevelDesc:
-		"The shallowest heading level to number: shallower headings are neither numbered nor rewritten (default H2, so H1 acts as the title/section).",
+		"The shallowest level to number; shallower headings are left alone (default H2, so H1 acts as the title/section).",
 	bottomLevelName: "End level",
 	bottomLevelDesc:
-		"The deepest heading level to number: deeper headings are left alone (must be ≥ the Start level; combine to number a range like H2–H4).",
+		"The deepest level to number; deeper headings are left alone (must be ≥ Start level; combine both to number a range like H2–H4).",
 	startIndexName: "Start number",
 	startIndexDesc:
-		"The number the first numbered heading starts from; applies to the first segment only (default 1; 0 gives 0.1.1, deeper levels still start at 1).",
+		"The number the first numbered heading starts from; first segment only (default 1; 0 gives 0.1.1).",
 	ancestorName: "Ancestor numeral rendering",
 	ancestorDesc:
-		'How ancestor segments render when inheriting: "Own style" uses each ancestor\'s own style; "All Arabic" renders ancestors as Arabic and only the current level in its own style (suited to Chinese books).',
+		'How ancestor segments render when inheriting: "Own style" uses each ancestor\'s own style; "All Arabic" renders ancestors as Arabic, only the current level in its own style.',
 	ancestorSelf: "Own style (1.a.①)",
 	ancestorArabic: "All Arabic (一 / 1.1)",
 
@@ -823,13 +818,13 @@ const en: Messages = {
 
 	skipFillName: "Skipped levels",
 	skipFillDesc:
-		"When headings skip a level (e.g. H5 right after H3): fill the missing segment with the placeholder (H5 gets four segments), drop it (H5 matches H4's shape), or leave the heading unnumbered entirely (for deep headings used as styled labels).",
+		"When headings skip a level (e.g. H5 right after H3): fill the missing segment, drop it, or leave the heading unnumbered.",
 	skipFillFill: "Fill",
 	skipFillDrop: "Drop (omit the segment)",
 	skipFillNone: "Don't number (leave as-is)",
 	placeholderName: "Placeholder",
 	placeholderDesc:
-		"The digits used to fill a missing level (e.g. 0 gives 1.1.0.1); digits-only keeps numbering cleanly strippable, empty is treated as 0.",
+		"The digit filling a missing level (e.g. 0 gives 1.1.0.1); digits-only keeps numbering cleanly strippable, empty = 0.",
 
 	numeralArabic: "1, 2, 3",
 	numeralCjk: "一, 二, 三",
@@ -845,7 +840,7 @@ const en: Messages = {
 
 	whitelistName: "Whitelist",
 	whitelistDesc:
-		"Matched headings are not numbered and take no counter slot; Exact = fully equal, Partial = contains the word, Subtree = the whole block is exempt and numbering restarts after it (like chapters after an appendix).",
+		"Matched headings are not numbered and take no counter slot: Exact = fully equal, Partial = contains the word, Subtree = whole block exempt, numbering restarts after it.",
 	wlInputPlaceholder: "Type a word and press Enter to add…",
 	wlFilterPlaceholder: "Filter entries…",
 	wlSortAdded: "By added order",
@@ -856,15 +851,15 @@ const en: Messages = {
 		"No entries yet — type a word above and press Enter; matched headings stay unnumbered.",
 	wlEditTitle: "Click to edit",
 	wlChipWarnTitle:
-		"The matched heading has child headings; the children stay numbered and would attach to the previous numbered ancestor. Use “Subtree” to exempt the whole block.",
+		"The matched heading has children; they stay numbered and would attach to the previous numbered ancestor. Use “Subtree” to exempt the whole block.",
 	wlPreviewNoFile: "(Open a Markdown file with headings to preview this whitelist's matches.)",
 	wlPreviewNone: "No heading in the current file is exempted by this whitelist.",
 	wlPreviewSome: (count, titles) =>
 		`This whitelist will exempt ${count} heading(s) in the current file: ${titles}`,
 	wlPreviewOtherTemplate: (appliedName) =>
-		`⚠ By the path rules, the current file actually uses template "${appliedName}", not the one you're editing. The preview below is hypothetical ("if this file used this template"); actual numbering follows "${appliedName}"'s whitelist.`,
+		`⚠ By the path rules this file actually uses template "${appliedName}", not the one you're editing; the preview below is hypothetical.`,
 	wlPreviewNoTemplate:
-		"⚠ The current file matches no path rule (no template applies), so it won't be auto-numbered. The preview below is hypothetical.",
+		"⚠ The current file matches no path rule and won't be auto-numbered; the preview below is hypothetical.",
 
 	dangerHeading: "Danger zone",
 	dangerExpandHint: "(click to expand)",
@@ -880,15 +875,15 @@ const en: Messages = {
 	clearForeignBtn: "Clear foreign numbering",
 	clearVaultName: "Clear numbering in the whole vault",
 	clearVaultDesc:
-		"Strip the numbering prefixes this plugin wrote from every Markdown file in the vault (NOT in undo history — back up first). Confirming first turns OFF global auto-numbering so edits don't re-number cleared files; re-enable it manually when wanted.",
+		"Strip the prefixes this plugin wrote from every Markdown file (NOT in undo history — back up first). Confirming first turns OFF global auto-numbering so cleared files don't get re-numbered.",
 	clearVaultBtn: "Clear vault numbering…",
 	freezeVaultName: "Freeze numbering and release ownership (entire vault)",
 	freezeVaultDesc:
-		"**Keeps** every number you already have and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For when you like the current numbering but no longer want the plugin managing it — or you're uninstalling and want to keep the result. Once the markers are gone the plugin can no longer tell those numbers were its own (irreversible). NOT in undo history — back up first.",
+		"**Keeps** your numbers and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For “keep the numbers, drop the plugin” (e.g. before uninstalling). Irreversible and NOT in undo history — back up first.",
 	freezeVaultBtn: "Freeze numbering and release ownership…",
 	retiredBannerTitle: "The plugin has released ownership of your numbering",
 	retiredBannerBody:
-		"Your numbers remain in your files as ordinary text, and the plugin is currently doing **no** automatic numbering. To hand control back: press the button below, then run **Clean foreign numbering** on the affected files — otherwise the existing numbers count as foreign numbering and a fresh prefix gets stacked on top of them.",
+		"Your numbers remain as ordinary text and the plugin is currently doing **no** automatic numbering. To hand control back: press the button below, then run **Clean foreign numbering** on the affected files, or existing numbers get stacked with a fresh prefix.",
 	resumeBtn: "Resume managing numbering",
 
 	aboutVersionLabel: "Version",
@@ -898,11 +893,11 @@ const en: Messages = {
 	aboutCreditsHeading: "Credits",
 	aboutCreditsIntro: "Development referenced the following open-source plugins:",
 	aboutCreditPathSuggest:
-		"Folder/file suggestion popup and matching approach for path input — extended here with exact-file rules and automatic trailing-slash completion when a folder name is typed without one.",
+		"Folder/file suggestion popup and matching approach for path input; extended here with exact-file rules and automatic trailing-slash completion.",
 	aboutCreditBacklinks:
-		"Original reference implementation for backlink sync (reverse-lookup references + rewrite anchors) — extended here with alias/embed link parsing and full coverage of both the heading number and its text.",
+		"Original reference for backlink sync (reverse-lookup references + rewrite anchors); extended here with alias/embed parsing and full coverage of number and text.",
 	aboutCreditWordJoiner:
-		'Original reference for marking numbering prefixes with an invisible Word Joiner boundary — upgraded here to a "double sentinel" (head + tail) scheme with self-healing for damaged prefixes.',
+		'Original reference for marking numbering prefixes with an invisible Word Joiner boundary; upgraded here to a "double sentinel" scheme that self-heals damaged prefixes.',
 
 	defaultTemplateDisplay: "Default",
 
@@ -916,17 +911,17 @@ const en: Messages = {
 
 	clearVaultModalTitle: "Clear vault numbering",
 	clearVaultModalBody:
-		"This will first turn OFF global auto-numbering, then strip the numbering prefixes this plugin wrote from every Markdown file in the vault, restoring bare headings. It writes back via the Vault API and is NOT in Obsidian's undo history — back up first. Continue?",
+		"First turns OFF global auto-numbering, then strips this plugin's prefixes from every Markdown file, restoring bare headings. NOT in Obsidian's undo history — back up first. Continue?",
 	confirmClearVault: "Confirm clear vault",
 
 	freezeVaultModalTitle: "Freeze numbering and release ownership (entire vault)",
 	freezeVaultModalBody:
-		"Confirming does five things: (1) every number you already have is **kept as-is**, becoming ordinary text; (2) the invisible markers (U+2060) are removed vault-wide — **including the ones inside internal link anchors**, so [[note#heading]] links keep resolving; (3) this writes back via the Vault API and is **NOT in Obsidian's undo history** — back up first; (4) the plugin will **stop all automatic numbering** (this overrides the per-file frontmatter switch); (5) if you later want the plugin to take over again, run **Clean foreign numbering** on the affected files first, otherwise your existing numbers count as foreign numbering and a new prefix gets stacked on top. Continue?",
+		"Confirming: (1) your numbers are **kept as-is**, becoming ordinary text; (2) the invisible markers (U+2060) are removed vault-wide — **including inside link anchors**, so [[note#heading]] still resolves; (3) the plugin **stops all automatic numbering** (overrides frontmatter); (4) NOT in undo history — back up first; (5) to take over again later, run **Clean foreign numbering** first, or a fresh prefix gets stacked on top. Continue?",
 	confirmFreezeVault: "Confirm freeze and release",
 
 	foreignGuardModalTitle: "Possible non-plugin numbering",
 	foreignGuardModalBody: (count) =>
-		`The following ${count} heading(s) look numbered, but the plugin isn't sure you wrote that yourself (headings like "API design" or "TODO list" can trigger a false positive too). All are checked to clean up by default; unchecking one keeps its original text as-is — the plugin will still add its own numbering in front of it using the current template:`,
+		`The following ${count} heading(s) look numbered, but the plugin can't be sure you wrote them yourself ("API design", "TODO list", etc. can false-positive). All are checked by default; unchecking one keeps its text as-is (the plugin will still add its own numbering):`,
 	foreignGuardModalConfirm: "Confirm cleanup",
 	foreignGuardItemToggle: (before) => `Clean up foreign numbering in "${before}"`,
 	foreignGuardSearchPlaceholder: "Search headings…",
@@ -942,11 +937,11 @@ const en: Messages = {
 	noticeNothingToClear: "No numbering prefix to clear in the current file",
 	noticeCleared: "Numbering cleared",
 	noticeClearedAndPaused:
-		"Numbering cleared, and auto-numbering paused for this note (property obsidian-auto-headings: false). Run “Renumber now” to resume.",
+		"Numbering cleared and auto-numbering paused for this note (property obsidian-auto-headings: false); run “Renumber now” to resume.",
 	noticeRenumberedAndResumed: "Renumbered, and auto-numbering resumed for this note",
 	noticeClearedVault: (count) => `Vault numbering cleared (${count} file(s) changed)`,
 	noticeFrozenVault: (count) =>
-		`Numbering frozen and ownership released (${count} file(s) changed); the numbers stay as plain text and automatic numbering is now off`,
+		`Numbering frozen and ownership released (${count} file(s) changed); numbers stay as plain text, auto-numbering is off`,
 	noticeResumed:
 		"Now managing numbering again; if any frozen numbering is still in your files, run Clean foreign numbering first",
 	noticeNoRule: "The current file matches no path rule; cannot number it",
@@ -964,7 +959,7 @@ const en: Messages = {
 			: `Cleared non-plugin heading numbering (${cleaned})`,
 	noticeBacklinksUpdated: (count) => `Updated ${count} internal link(s)`,
 	noticeBacklinksIntro:
-		"Auto Headings just updated internal links in other files that point to headings in this file (so they don't break). Those edits are NOT in the modified files' undo history; you can turn off \"Sync internal links\" under Settings → General. This notice appears only once.",
+		"Auto Headings updated internal links in other files that point to headings in this file (so they don't break). Those edits are NOT in the modified files' undo history; turn off \"Sync internal links\" under Settings → General. Shown once.",
 	noticeNoActiveFile: "No open Markdown file",
 	noticeForeignNumberingGuard:
 		"These headings look numbered, but the plugin isn't sure you wrote that yourself — skipped auto-numbering this time.",
