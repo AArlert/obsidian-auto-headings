@@ -5,6 +5,79 @@
 
 ---
 
+## 2026-08-11 M13 实测反馈修复：alias 完整标题名 + VC 词典格式/阈值/轻量化（1.0.27）
+
+### 做了什么
+
+用户人工测试 1.0.26 后给出 5 条反馈，逐条处理：
+
+1. **基础建议框正常**——确认，无改动。
+2. **自动联动确认框太长** → 精简：长段 ①②③ 文案改为「一句总述 + `ul` 三点要点列表」
+   （i18n 新增 `vcAutoConfirmPoints: string[]`，Modal 按列表渲染），手动模式文案同步精简。
+3. **词典体积 / iCloud 同步担忧** → 研究 + 轻量三件套落地（详见下）。
+4. **alias 是残缺前缀**（打「交叉矩」补出 `[[…|交叉矩]]`，用户要完整标题名）→ **产品决策变更**：
+   `buildHeadingLink` 去掉 `typedText` 参数，alias 恒为剥编号前缀后的完整标题名
+   `displayText`（与 VC 词典 value 的 alias 形态一致）；i18n desc / README 双语 / testplan Q4
+   预期同步更新。
+5. **VC 框只打一个「交」无候选** → **根因是词典 JSON 格式不兼容**（见下），叠加 VC 默认触发
+   阈值问题，一并修复。
+
+**VC 源码核实（clone 留档 `doc/research/vc-source-verification.md`，不入库）**：
+`tadashi-aikawa/obsidian-various-complements-plugin` main 分支，逐条核实原方案 §12 的
+[C：未核实] 项：
+
+- **词典 JSON 格式（原调研结论有误，本次更正）**：VC 当前版本的 `JsonDictionary` 顶层必须是
+  `words` 数组（`{ words: [{ value, displayed }] }`，`CustomDictionaryWordProvider.ts:16-48`）。
+  我们 1.0.26 写的**裸数组**会让 `json.words.map` 抛 TypeError → VC 弹「Fail to load」且词典
+  **0 词**——这就是用户实测 #5「打『交』无任何候选」的根因。1.0.27 修复为 `{"words":[...]}`。
+- **触发阈值**：VC 默认 `tokenizeStrategy`（default）的 `triggerThreshold = 3`
+  （`TokenizeStrategy.ts:19`），且 `customDictionaryMinNumberOfCharactersForTrigger` 默认 0
+  （跟随全局阈值）——即使格式修好，1–2 字符也不触发。自动配置现在把该字段置 1
+  （`Math.min(全局阈值, 1) = 1`，只放宽自定义词典类补全），兑现「只打一个字也出标题建议」。
+- 其余确认：插件 id `various-complements`、`customDictionaryPaths: string`（换行分隔）、
+  `enableCustomDictionaryComplement: boolean`、活体 `.settings` + `saveData`（`VariousComponents
+  extends Plugin`）、reload 命令 id `reload-custom-dictionaries`——全部与 1.0.26 实现一致。
+
+**词典轻量三件套**（回应用户 #3：VC 自己的 current-vault 补全不落盘，我们却生成一个词典文件，
+是否太重）：
+
+1. 紧凑 JSON（去掉 `\t` 缩进，体积 -30~40%）。
+2. **内容未变不写盘**：`main.ts` 缓存上次写出的 JSON，相同则跳过 `adapter.write`
+   （标题无变化时 iCloud/同步零流量）；关闭联动/开关时清缓存，下次开启必落盘。
+3. **词典独立条数上限 `MAX_VC_DICTIONARY_ENTRIES = 20,000`**：超出截断 + 一次性 Notice
+   （`noticeVcDictionaryTruncated`，新 i18n 键）。20,000 条 ≈ 2.2MB 封顶，几千条时几百 KB。
+
+`vcintegration.ts`：`VcSettingsShape` 增 `customDictionaryMinNumberOfCharactersForTrigger`
+（存在才校验类型）；`buildVcDictionaryJson` 返回 `{ json, truncated, total }`；两条写入路径
+统一 `applyTriggerThreshold`（现值 ≠1 才写）。测试：`vcintegration.test.ts` 改格式断言 +
+新增 20,001 条截断用例 + 阈值断言（含「已是 1 不动」）；`main.test.ts` 新增「VC 词典写盘」
+describe 4 例（节流写盘 / 内容未变不重写 / 内容变化重写 / 截断 Notice，makePlugin 假 vault
+补 `adapter`）。testplan 新增 **Q20** 行覆盖上述四件事，Q4/Q11/Q12 预期同步更新。spec.md M13
+条目更新（决策变更 + 核实结论 + 轻量三件套）。
+
+### 没做什么
+
+- **词典分片**（按 matchKey 首字符拆多个小文件，VC 的 `customDictionaryPaths` 天然支持多路径）：
+  单次写盘更小、iCloud 增量更友好，但总大小不变、重写逻辑复杂化（需 per-file 变更定位分片），
+  列入 research 留档的后续候选，v1 不做。
+- VC 加载失败 Notice 的乱码（「鈿?」）是 VC 自身显示问题，不在我们侧修。
+- 真机手验项不变：Tab 行为 / `.suggestions.useSelectedItem` / compositionend 重触发 /
+  移动端点按 / 真实 VC 加载行为仍需用户实机确认（testplan Q4/Q5/Q9/Q10–Q15 保持 🔲/⚠️）。
+
+### 下一步
+
+- 用户实机复测重点：① VC 框打「交」应出候选（格式 + 阈值双修复的验证点，Q12/Q20）；
+  ② 插件框打「交叉矩」接受后应补出完整标题名 `[[交叉矩阵#1 交叉矩阵|交叉矩阵]]`（Q4）；
+  ③ 自动联动确认框是否整洁（#2）；④ 大库下词典文件体积与 iCloud 同步感受（Q20）。
+
+### 验证方式
+
+`npm test` 596 通过（唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红，与本次
+无关）；lint / build / format:check 走 preflight 统一验证。本周期派发 0 次（VC 源码核实为
+主模型直接 clone + grep，无 SubAgent）。
+
+---
+
 ## 2026-08-11 M13 落地：标题链接建议 + Various Complements 联动（1.0.26）
 
 ### 做了什么

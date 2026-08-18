@@ -115,6 +115,9 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 		.setName(t.sectionSuggest)
 		.setHeading()
 		.settingEl.addClass("ah-section-head");
+	// 分区导语（1.0.30）：先讲清「本功能自带、不依赖别的插件」，再说下面两项只有装了 VC 才
+	// 需要关心——否则用户容易把「VC 联动」误读成本功能的前置条件（沿用 PathRules 的 p.ah-section-desc）。
+	containerEl.createEl("p", { cls: "ah-section-desc", text: t.sectionSuggestDesc });
 
 	// —— 标题链接建议开关（默认开，见 spec.md Roadmap M13）——
 	new Setting(containerEl)
