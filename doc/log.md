@@ -41,6 +41,65 @@
 
 ---
 
+## 2026-08-19 M13 第五轮：设置面板叙述重写——把「共存」讲成产品选择而非实现细节（1.0.30）
+
+### 做了什么
+
+**只改文案与面板渲染，零行为改动**（用户明确圈定范围）。
+
+起因是用户对 1.0.29 的共存方案追问了两轮，且两次都问在点子上：
+
+1. 「VC 没开启时我们自己的标题补齐是非常完善的，这本身是插件的一大卖点」——对，而且**它一个
+   字节词典都不用**（走内存 `HeadingIndex`），`vcIntegrationMode === "off"` 时词典完全不生成。
+2. 「你说 VC 先挑，但两边都命中时不还是只有 VC 的候选框？」——**对，我上一轮把「按需让路」
+   （改 EditorSuggest 排序，VC 先挑、它不接才轮到我们）排在推荐位是判断偏了**。它只是把「谁被
+   盖住」换了个方向，两边都命中时标题候选照样消失；而「两边都命中」很可能是常态不是边角——
+   只要那个标题恰好也是个文件名（用户截图里的「交叉矩阵」正是），VC 的内部链接补全必然命中。
+   该路线已放弃，不为它去碰内部的 `workspace.editorSuggest.suggests` 排序（`obsidian.d.ts` 里
+   只有 `registerEditorSuggest`，排序全无公开 API）。
+
+由此得到的**结构性结论**（本轮要写进面板的那句话）：一个弹框位是 Obsidian 的硬限制，想让
+两边候选**同时可见**就必须有人合并；合并只有两个方向，而把 VC 的条目并进我们的框需要读 VC
+的 provider 并复刻其插入语义（内部 API，不可行），所以**官方支持的合并入口只有 VC 的自定义
+词典**。词典的职责是「合并」，不是「补全」——这正是它删不掉又显得重的原因。
+
+文案据此重写（中英双语同步）：
+
+- `sectionSuggestDesc`（**新增**，「标题链接建议」分区导语，沿用 PathRules 的 `p.ah-section-desc`）：
+  先讲「打字即出、不依赖任何其它插件、开箱即用」，再讲「下面两项只有同时装了 VC 才需要关心」。
+  防的是用户把「VC 联动」误读成本功能的前置条件。
+- `headingLinkSuggestDesc`：补一句「这项能力完全自带、不依赖任何其它插件」。
+- `vcCoexistDesc`：从「Obsidian 同一时刻只显示一个建议框……」这种实现细节，改写成三种处境的
+  后果——让路 + 开词典 = 两边同框可见（最完整）；不开词典 = 只能二选一，且明说各自看不到什么。
+- `vcModeDesc`：从「联动增强」改成「**让标题候选出现在 VC 的建议框里**……这是把两边候选合并
+  进同一个建议框的唯一官方入口」，并补「没装 VC 就用不上它，标题建议本来就独立可用」「关闭时
+  一个字节都不生成」。
+
+### 没做什么
+
+- **没有动任何行为逻辑**：`shouldYieldSuggestToVc` / `headingSuggestWhenVcActive` / 词典生成与
+  写入 / 触发解析全部原样，本轮 diff 只有 i18n 文案 + GeneralTab 多渲染一个 `<p>`。
+- **没有实现「按需让路」（VC 先挑）**——见上，已论证其无法解决「两边都命中」，明确放弃。
+- 没有删词典、没有改共存默认值（仍是 `"yield"`）。
+- 词典分片、VC 内存注入（`suggester.customDictionaryWordProvider` 虽是公开字段且匹配走它的
+  `wordsByFirstLetter`，但 `refreshCustomWords()` 开头就 `clearWords()`，任何 reload 都会清空
+  我们塞的词条，且属伸手改他人插件内存状态）——两条都明确不做。
+
+### 下一步
+
+- 用户真机复测 1.0.29 的功能项（Q22 出候选且前半截保留 / Q23 弹框归属与开关切换 / icon 是否
+  真渲染成 H / 面板分区观感）+ 本轮新文案的可读性。
+- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互。
+
+### 验证方式
+
+`npx tsc --noEmit` 干净；`i18n.test.ts` 中英键位对齐 10 例通过；`npm test` 611 通过（唯一失败
+仍是 `whitelist.test.ts:406` Windows ICU 排序已知假红）；lint / format:check / release 重建单独复跑
+（注意 `preflight` 是串联的，test 一红后面的 lint / format:check 根本不会执行，不能只看它的退出码）。
+本周期派发 0 次。
+
+---
+
 ## 2026-08-19 M13 第四轮：无标点连写触发（Q22）+ 与 VC 的建议框共存（Q23）+ 面板分区（1.0.29）
 
 ### 做了什么
@@ -164,79 +223,6 @@
 `npm test` 599 通过（唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红）；`npm run
 test:fuzz`（5000×80）三块记分板全绿；lint / build / format:check 走 preflight 统一验证。
 本周期派发 0 次（全部主模型直接实现）。
-
----
-
-## 2026-08-11 M13 实测反馈修复：alias 完整标题名 + VC 词典格式/阈值/轻量化（1.0.27）
-
-### 做了什么
-
-用户人工测试 1.0.26 后给出 5 条反馈，逐条处理：
-
-1. **基础建议框正常**——确认，无改动。
-2. **自动联动确认框太长** → 精简：长段 ①②③ 文案改为「一句总述 + `ul` 三点要点列表」
-   （i18n 新增 `vcAutoConfirmPoints: string[]`，Modal 按列表渲染），手动模式文案同步精简。
-3. **词典体积 / iCloud 同步担忧** → 研究 + 轻量三件套落地（详见下）。
-4. **alias 是残缺前缀**（打「交叉矩」补出 `[[…|交叉矩]]`，用户要完整标题名）→ **产品决策变更**：
-   `buildHeadingLink` 去掉 `typedText` 参数，alias 恒为剥编号前缀后的完整标题名
-   `displayText`（与 VC 词典 value 的 alias 形态一致）；i18n desc / README 双语 / testplan Q4
-   预期同步更新。
-5. **VC 框只打一个「交」无候选** → **根因是词典 JSON 格式不兼容**（见下），叠加 VC 默认触发
-   阈值问题，一并修复。
-
-**VC 源码核实（clone 留档 `doc/research/vc-source-verification.md`，不入库）**：
-`tadashi-aikawa/obsidian-various-complements-plugin` main 分支，逐条核实原方案 §12 的
-[C：未核实] 项：
-
-- **词典 JSON 格式（原调研结论有误，本次更正）**：VC 当前版本的 `JsonDictionary` 顶层必须是
-  `words` 数组（`{ words: [{ value, displayed }] }`，`CustomDictionaryWordProvider.ts:16-48`）。
-  我们 1.0.26 写的**裸数组**会让 `json.words.map` 抛 TypeError → VC 弹「Fail to load」且词典
-  **0 词**——这就是用户实测 #5「打『交』无任何候选」的根因。1.0.27 修复为 `{"words":[...]}`。
-- **触发阈值**：VC 默认 `tokenizeStrategy`（default）的 `triggerThreshold = 3`
-  （`TokenizeStrategy.ts:19`），且 `customDictionaryMinNumberOfCharactersForTrigger` 默认 0
-  （跟随全局阈值）——即使格式修好，1–2 字符也不触发。自动配置现在把该字段置 1
-  （`Math.min(全局阈值, 1) = 1`，只放宽自定义词典类补全），兑现「只打一个字也出标题建议」。
-- 其余确认：插件 id `various-complements`、`customDictionaryPaths: string`（换行分隔）、
-  `enableCustomDictionaryComplement: boolean`、活体 `.settings` + `saveData`（`VariousComponents
-  extends Plugin`）、reload 命令 id `reload-custom-dictionaries`——全部与 1.0.26 实现一致。
-
-**词典轻量三件套**（回应用户 #3：VC 自己的 current-vault 补全不落盘，我们却生成一个词典文件，
-是否太重）：
-
-1. 紧凑 JSON（去掉 `\t` 缩进，体积 -30~40%）。
-2. **内容未变不写盘**：`main.ts` 缓存上次写出的 JSON，相同则跳过 `adapter.write`
-   （标题无变化时 iCloud/同步零流量）；关闭联动/开关时清缓存，下次开启必落盘。
-3. **词典独立条数上限 `MAX_VC_DICTIONARY_ENTRIES = 20,000`**：超出截断 + 一次性 Notice
-   （`noticeVcDictionaryTruncated`，新 i18n 键）。20,000 条 ≈ 2.2MB 封顶，几千条时几百 KB。
-
-`vcintegration.ts`：`VcSettingsShape` 增 `customDictionaryMinNumberOfCharactersForTrigger`
-（存在才校验类型）；`buildVcDictionaryJson` 返回 `{ json, truncated, total }`；两条写入路径
-统一 `applyTriggerThreshold`（现值 ≠1 才写）。测试：`vcintegration.test.ts` 改格式断言 +
-新增 20,001 条截断用例 + 阈值断言（含「已是 1 不动」）；`main.test.ts` 新增「VC 词典写盘」
-describe 4 例（节流写盘 / 内容未变不重写 / 内容变化重写 / 截断 Notice，makePlugin 假 vault
-补 `adapter`）。testplan 新增 **Q20** 行覆盖上述四件事，Q4/Q11/Q12 预期同步更新。spec.md M13
-条目更新（决策变更 + 核实结论 + 轻量三件套）。
-
-### 没做什么
-
-- **词典分片**（按 matchKey 首字符拆多个小文件，VC 的 `customDictionaryPaths` 天然支持多路径）：
-  单次写盘更小、iCloud 增量更友好，但总大小不变、重写逻辑复杂化（需 per-file 变更定位分片），
-  列入 research 留档的后续候选，v1 不做。
-- VC 加载失败 Notice 的乱码（「鈿?」）是 VC 自身显示问题，不在我们侧修。
-- 真机手验项不变：Tab 行为 / `.suggestions.useSelectedItem` / compositionend 重触发 /
-  移动端点按 / 真实 VC 加载行为仍需用户实机确认（testplan Q4/Q5/Q9/Q10–Q15 保持 🔲/⚠️）。
-
-### 下一步
-
-- 用户实机复测重点：① VC 框打「交」应出候选（格式 + 阈值双修复的验证点，Q12/Q20）；
-  ② 插件框打「交叉矩」接受后应补出完整标题名 `[[交叉矩阵#1 交叉矩阵|交叉矩阵]]`（Q4）；
-  ③ 自动联动确认框是否整洁（#2）；④ 大库下词典文件体积与 iCloud 同步感受（Q20）。
-
-### 验证方式
-
-`npm test` 596 通过（唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红，与本次
-无关）；lint / build / format:check 走 preflight 统一验证。本周期派发 0 次（VC 源码核实为
-主模型直接 clone + grep，无 SubAgent）。
 
 ---
 

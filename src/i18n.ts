@@ -91,6 +91,8 @@ export interface Messages {
 	sectionNumbering: string;
 	sectionLinking: string;
 	sectionSuggest: string;
+	/** 「标题链接建议」分区的一句话导语：先说独立可用，再说什么时候才需要关心 VC 那两项。 */
+	sectionSuggestDesc: string;
 
 	// —— Various Complements 联动（M13）——
 	vcModeName: string;
@@ -376,13 +378,13 @@ const zh: Messages = {
 
 	headingLinkSuggestName: "标题链接建议",
 	headingLinkSuggestDesc:
-		"在正文里打出与库内某标题原文匹配的文字时，弹出建议；接受后替换为指向该标题的链接，文字自动补全为该标题的完整名称。默认开启；关闭后标题索引完全不构建，内存/CPU 成本降为零。",
+		"在正文里打出与库内某标题原文匹配的文字时，弹出建议；接受后替换为指向该标题的链接，文字自动补全为该标题的完整名称。这项能力完全自带、不依赖任何其它插件。默认开启；关闭后标题索引完全不构建，内存/CPU 成本降为零。",
 	headingSuggestThisFile: "（本文件）",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`标题索引因 vault 规模过大未完整构建，已索引 ${indexed} 个标题；建议功能在已索引范围内可用。`,
 	vcCoexistName: "Various Complements 启用时",
 	vcCoexistDesc:
-		"Obsidian 同一时刻只显示一个建议框，本插件与 Various Complements 抢的是同一个位置——本插件一旦命中，VC 自己的文件链接等建议就整个看不见了。默认让路给 VC：标题建议改由 VC 的建议框统一呈现（需开启下方的词典联动）。VC 未安装或未启用时本项无效。",
+		"两个插件共用同一个建议框位置（Obsidian 同一时刻只显示一个），所以得选一个赢家。默认让路给 VC——配合下方的词典联动，标题候选会并进 VC 的建议框，两边的候选同框可见，这是最完整的组合。不开词典联动就只能二选一：让路则看不到标题候选，选「本插件优先」则看不到 VC 的候选。VC 未安装或未启用时本项无效。",
 	vcCoexistYield: "让路给 Various Complements（推荐）",
 	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
 	vcCoexistDeadEndWarn:
@@ -391,10 +393,12 @@ const zh: Messages = {
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
 	sectionSuggest: "标题链接建议",
+	sectionSuggestDesc:
+		"打字即出标题链接，不依赖任何其它插件，开箱即用。只有当你同时装了 Various Complements 时，才需要关心下面两项——它们决定两个插件的建议框怎么共处。",
 
 	vcModeName: "Various Complements 联动",
 	vcModeDesc:
-		"把标题索引导出为词典文件喂给 Various Complements 的自定义词典补全，让它的建议框也能补全标题链接（VC 自身尚不支持标题级补全）。联动默认关闭，任何开启方式都需要你显式确认。",
+		"让标题候选出现在 Various Complements 的建议框里：把标题索引导出为 VC 的自定义词典文件——这是把两边候选合并进同一个建议框的唯一官方入口（VC 自身尚不支持标题级补全）。没装 VC 就用不上它，标题建议本来就独立可用。默认关闭，任何开启方式都需要你显式确认；关闭时一个字节都不生成。",
 	vcModeOff: "不联动",
 	vcModeManual: "手动配置",
 	vcModeAuto: "自动配置",
@@ -676,13 +680,13 @@ const en: Messages = {
 
 	headingLinkSuggestName: "Heading link suggestions",
 	headingLinkSuggestDesc:
-		"While typing in any note, suggest vault headings that match what you typed; accept to replace your text with a clickable link to that heading, expanding your text to the heading's full name. On by default; when off, the heading index is never built and memory/CPU cost drops to zero.",
+		"While typing in any note, suggest vault headings that match what you typed; accept to replace your text with a clickable link to that heading, expanding your text to the heading's full name. Fully self-contained — no other plugin required. On by default; when off, the heading index is never built and memory/CPU cost drops to zero.",
 	headingSuggestThisFile: "(this file)",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`The heading index was not fully built because the vault is too large (${indexed} headings indexed); suggestions work within the indexed range.`,
 	vcCoexistName: "When Various Complements is enabled",
 	vcCoexistDesc:
-		"Obsidian shows only one suggestion popup at a time, and this plugin competes with Various Complements for that single slot — whenever this plugin matches, VC's own file-link and word suggestions become entirely invisible. The default is to yield: heading suggestions are then served through VC's popup instead (requires the dictionary integration below). Has no effect when VC is not installed or not enabled.",
+		"Both plugins share the same suggestion popup slot (Obsidian shows only one at a time), so one of them has to win. The default is to yield to VC — combined with the dictionary integration below, heading candidates are merged into VC's popup and you see both sides at once, which is the most complete setup. Without the dictionary integration it is strictly one or the other: yielding hides heading candidates, “this plugin wins” hides VC's. Has no effect when VC is not installed or not enabled.",
 	vcCoexistYield: "Yield to Various Complements (recommended)",
 	vcCoexistOwn: "This plugin wins (hides VC's popup)",
 	vcCoexistDeadEndWarn:
@@ -691,10 +695,12 @@ const en: Messages = {
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",
 	sectionSuggest: "Heading link suggestions",
+	sectionSuggestDesc:
+		"Heading links as you type, self-contained — no other plugin required. The two settings below only matter if you also have Various Complements installed; they decide how the two plugins share the suggestion popup.",
 
 	vcModeName: "Various Complements integration",
 	vcModeDesc:
-		"Export the heading index as a dictionary file for Various Complements' custom dictionary complement, so its suggestion popup can also complete heading links (VC itself still lacks heading-level completion). Off by default; enabling always requires your explicit confirmation.",
+		"Make heading candidates show up inside Various Complements' popup: the heading index is exported as a VC custom dictionary file — the only officially supported way to merge both sides into a single suggestion popup (VC itself still lacks heading-level completion). Not needed without VC; heading suggestions work on their own regardless. Off by default; enabling always requires your explicit confirmation, and nothing at all is written while it is off.",
 	vcModeOff: "Off",
 	vcModeManual: "Manual",
 	vcModeAuto: "Automatic",
