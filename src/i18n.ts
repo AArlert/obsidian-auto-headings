@@ -84,8 +84,8 @@ export interface Messages {
 	vcCoexistDesc: string;
 	vcCoexistYield: string;
 	vcCoexistOwn: string;
-	/** 让路 + 词典联动未开 = 标题建议无处出现，面板上的显式警告（不静默失效）。 */
-	vcCoexistDeadEndWarn: string;
+	/** 选了让路但词典联动还没开：此时不会真让路，如实告知当前由本插件接管（1.0.31）。 */
+	vcCoexistFallbackHint: string;
 
 	// —— 设置面板分区标题（1.0.29）——
 	sectionNumbering: string;
@@ -384,11 +384,11 @@ const zh: Messages = {
 		`标题索引因 vault 规模过大未完整构建，已索引 ${indexed} 个标题；建议功能在已索引范围内可用。`,
 	vcCoexistName: "Various Complements 启用时",
 	vcCoexistDesc:
-		"两个插件共用同一个建议框位置（Obsidian 同一时刻只显示一个），所以得选一个赢家。默认让路给 VC——配合下方的词典联动，标题候选会并进 VC 的建议框，两边的候选同框可见，这是最完整的组合。不开词典联动就只能二选一：让路则看不到标题候选，选「本插件优先」则看不到 VC 的候选。VC 未安装或未启用时本项无效。",
+		"两个插件共用同一个建议框位置（Obsidian 同一时刻只显示一个），所以得选一个赢家。默认让路给 VC——配合下方的词典联动，标题候选会并进 VC 的建议框，两边的候选同框可见，这是最完整的组合。**只有词典联动开着时才会真的让路**：联动关着时让路等于让给一个给不出标题候选的框，所以此时仍由本插件的建议框接管。VC 未安装或未启用时本项无效。",
 	vcCoexistYield: "让路给 Various Complements（推荐）",
 	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
-	vcCoexistDeadEndWarn:
-		"当前标题建议不会出现在任何地方：本插件已让路给 Various Complements，而下方的词典联动尚未开启（VC 词典里没有标题条目）。请开启词典联动，或把上一项改为「本插件优先」。",
+	vcCoexistFallbackHint:
+		"当前仍由本插件的建议框接管：下方的词典联动尚未开启，VC 词典里没有标题条目，这时让路只会让你什么都看不到。开启词典联动后即会真正让路给 VC。",
 
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
@@ -686,11 +686,11 @@ const en: Messages = {
 		`The heading index was not fully built because the vault is too large (${indexed} headings indexed); suggestions work within the indexed range.`,
 	vcCoexistName: "When Various Complements is enabled",
 	vcCoexistDesc:
-		"Both plugins share the same suggestion popup slot (Obsidian shows only one at a time), so one of them has to win. The default is to yield to VC — combined with the dictionary integration below, heading candidates are merged into VC's popup and you see both sides at once, which is the most complete setup. Without the dictionary integration it is strictly one or the other: yielding hides heading candidates, “this plugin wins” hides VC's. Has no effect when VC is not installed or not enabled.",
+		"Both plugins share the same suggestion popup slot (Obsidian shows only one at a time), so one of them has to win. The default is to yield to VC — combined with the dictionary integration below, heading candidates are merged into VC's popup and you see both sides at once, which is the most complete setup. **Yielding only takes effect while the dictionary integration is on**: with it off, yielding would hand the slot to a popup that has no heading candidates, so this plugin keeps serving them instead. Has no effect when VC is not installed or not enabled.",
 	vcCoexistYield: "Yield to Various Complements (recommended)",
 	vcCoexistOwn: "This plugin wins (hides VC's popup)",
-	vcCoexistDeadEndWarn:
-		"Heading suggestions currently appear nowhere: this plugin yields to Various Complements, but the dictionary integration below is off, so VC's dictionary holds no headings. Turn on the dictionary integration, or switch the setting above to “This plugin wins”.",
+	vcCoexistFallbackHint:
+		"This plugin is still serving heading suggestions: the dictionary integration below is off, so VC's dictionary holds no headings and yielding would leave you with nothing. Turn the dictionary integration on and yielding takes effect.",
 
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",
