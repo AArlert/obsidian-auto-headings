@@ -41,6 +41,76 @@
 
 ---
 
+## 2026-08-19 M13 第四轮：无标点连写触发（Q22）+ 与 VC 的建议框共存（Q23）+ 面板分区（1.0.29）
+
+### 做了什么
+
+接手 DS（另一 agent）留下的 1.0.28 与其交接报告 `doc/research/handover-m13-1.0.28.md`，
+用户判断「不够好」。三件事：解决 bug、搞定 UI、收拾残局。
+
+1. **Q22 无标点连写的尾部词触发**（用户实测：「一笔事务」「一个交叉矩阵」，以及光标停在行中间
+   的「一笔事务|拆成」）。中文正文没有词边界，`extractTriggerToken` 把连续字母数字段整段吞成
+   一个 token，前缀匹配必然落空（「哈哈，事务」有逗号断开故一直正常）。
+   **没有照搬交接报告 §5.1 的方案**——那个方案把放宽做在索引层（新增 `HeadingIndex.
+   queryBySuffix` / `hasAnySuffixMatch`），并明写「alias/排序/上下文屏蔽逻辑不变」，
+   **漏了替换区间**：`onTrigger` 返回的 `start` 仍是整个 token 的起点，而 `selectSuggestion`
+   替换的是 `[start, 光标)`——按那个方案接受【事务】会把前面的「一笔」一起删掉；`sortEntries`
+   的「精确匹配优先」判据拿整段 token 去比也永远不成立。根因不在索引查询，在**触发词边界**。
+   实际修法落在 `headingtrigger.ts` 的两个纯函数：`suffixCandidates`（整段 + 逐级后缀，长度
+   ≥ `MIN_QUERY_LENGTH`，按码点切分不劈代理对，每个候选带自己的列偏移）+ `resolveTriggerQuery`
+   （取第一个命中者 = 用户输入量最多者优先，注入索引判定保持纯函数可测）。索引 API 一行未动。
+2. **Q23 与 Various Complements 的建议框共存**（用户实测截图指认：「VC 自身的文件链接建议被本
+   插件覆盖了，都看不到」）。根因是 Obsidian 的 `EditorSuggest` **同一时刻只显示一个**弹框，
+   先返回非 null 触发信息的那个赢；VC 与本插件都以普通 `EditorSuggest` 注册（VC 侧已核实：
+   `doc/research/various-complements-src/src/main.ts:86` + `ui/AutoCompleteSuggest.ts:76`），
+   本插件一命中，VC 的文件链接/词补全建议就整个看不见。**这不是「两个都显示」的取舍，是二选一**，
+   且 Q22 修完命中面变大会让冲突更频繁——故先用 `AskUserQuestion` 摆出三个选项，用户选了
+   「默认让路 + 给个开关」。落地：新设置 `headingSuggestWhenVcActive`（`"yield"` 默认 / `"own"`），
+   判定抽成纯函数 `shouldYieldSuggestToVc(mode, status)` 便于单测，`HeadingLinkSuggest.onTrigger`
+   开头调用。仅 VC **已启用**时才让路（未安装/已禁用没有竞争者，让路只会白丢功能）。
+   **让路 + 词典联动关闭 = 标题建议无处出现**，这是该策略唯一的坑，设置面板就此显式警告
+   （`vcCoexistDeadEndWarn`），不静默失效。
+3. **UI（用户逐条指定）**：① 建议框 icon 由 `link` 改为标题的 H 标志——`setIcon` 的 id 只是
+   字符串、官方 .d.ts 不枚举也不校验，传了内置集里没有的 id 会**静默留空**，故写成
+   `ICON_CANDIDATES = ["heading","hash","link"]` 逐个试 + 检查是否真渲染出子元素；
+   ② 全局设置面板按功能区分节（用户猜「也许用 `---`」）——用的是仓库既有惯例
+   `setHeading() + .ah-section-head`（左侧强调色竖条），比 `<hr>` 多了「这组是干什么的」这句话：
+   语言（不挂节头）→ 自动编号（全局开关 + 防抖延迟）→ 链接维护（Backlink 同步）→
+   标题链接建议（建议开关 + VC 共存策略 + VC 词典联动）。防抖延迟从原来夹在建议开关后面
+   挪回自动编号组。
+4. **压测扩展**：`uvm/heading-index.ts` 每步对拍新增 Q22 解析——DUT 走「候选序列 + 索引二分」，
+   参考走「候选序列 + 全量扫描」，两侧须选出同一候选；并断言 `sample.slice(start) === text`
+   （替换区间自洽，即「不吃掉用户已打的前半截」这条地基）。
+5. **收拾残局**：`doc/log-archive.md` 有一整块 1.0.25 周期块是上一轮 `npm run docs` 归档出来
+   但**没被提交**的（工作区脏了一整轮），本次一并入库；其余 25 个「已修改」文件全是 CRLF
+   行尾噪音、无内容差异（见 `windows-env-quirks` 记忆）。
+
+### 没做什么
+
+- **没有实现交接报告 §5.1 的 `queryBySuffix` / `hasAnySuffixMatch` 索引 API**——见上，那是错
+  的落点；索引层保持 1.0.28 的形状不动。
+- **没有回答「词典机制是否过于 heavy」**（用户本轮提出）：结论与取舍已在会话里给出，但它牵动
+  的是 M13 联动的产品形态（要不要保留词典这条路），需用户拍板后才动代码，本轮未改。
+- 真机手验项不变：Q4/Q5/Q9/Q10–Q15/Q21 仍 🔲/⚠️；Q23 新增的真机项（两插件同装切换共存策略）
+  同样待手验。
+- 词典分片仍不做。
+
+### 下一步
+
+- 用户真机复测：Q22（「一个交叉矩阵」出候选且接受后「一个」保留）、Q23（VC 同装时弹框归属、
+  切「本插件优先」能切回旧行为）、icon 是否真的渲染成 H、面板分区观感。
+- 待用户拍板：VC 词典机制的去留（heavy 与否），决定后可能重塑 M13 联动形态。
+- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互。
+
+### 验证方式
+
+`npm test` 611 通过（唯一失败仍是 `whitelist.test.ts:406` Windows ICU 排序已知假红，与本次改动
+无关）；`npm run test:fuzz`（5000×80）三块记分板全绿，含新增的 Q22 解析对拍；`npx tsc --noEmit`
+干净；lint / format:check / release 重建走 preflight 统一验证。
+本周期派发 0 次（本次会话的 harness 限制 Agent 调用，长输出改用管道过滤压缩，未走 SubAgent）。
+
+---
+
 ## 2026-08-11 M13 第三轮：UVM 压测拓展（抓出 3 个索引 bug）+ 启动词典同步 + 建议框 icon（1.0.28）
 
 ### 做了什么
@@ -167,95 +237,6 @@ describe 4 例（节流写盘 / 内容未变不重写 / 内容变化重写 / 截
 `npm test` 596 通过（唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红，与本次
 无关）；lint / build / format:check 走 preflight 统一验证。本周期派发 0 次（VC 源码核实为
 主模型直接 clone + grep，无 SubAgent）。
-
----
-
-## 2026-08-11 M13 落地：标题链接建议 + Various Complements 联动（1.0.26）
-
-### 做了什么
-
-按 `doc/research/gitignore-axi-md-3-1-1-tab-axi-declarative-whistle.md` 完整执行（该目录已被
-`.gitignore` 排除不入库）。方案 §0 的 `.gitignore` 改动（排除 `doc/research/`）已由上一会话
-先行提交（`4af7ec3`），本周期核对时已在库，无需重复。本轮实现完整 M13。
-
-**功能一：标题链接建议（默认开）**——在任意笔记正文里打出与 vault 内标题「剥编号前缀后的
-原文」匹配的文字时弹出建议，Tab/点按接受后替换为指向该标题的链接（视觉保留用户打的原文）。
-
-- 新增 `src/headingindex.ts`：`HeadingIndexEntry` + `buildEntriesForFile`（复用 `parseHeadings` /
-  `stripPrefix` / `displayAnchor` / `normalizeForWhitelist`，与编号引擎完全解耦——白名单豁免、
-  「不编号」文件夹的标题照常可链）+ `HeadingIndex`（按 matchKey 排序数组 + 二分查找；
-  `loadInitial` 一次排序避免 O((N·H)²)；上限 50,000 条 / 单文件 500 条，截断置位 + 一次性
-  Notice，不静默丢弃；构造参数可调上限供测试模拟截断）。
-- 新增 `src/headingtrigger.ts`：`extractTriggerToken`（`\p{L}\p{N}` 向左回溯，最短 2 码点 /
-  上限 80）、`isBlockedContext`（标题行 / `#` 标签 / 未闭合 `[[` / 紧邻 `[` 四类礼貌规则）、
-  `sortEntries`（精确优先 → matchKey 长度升序 → path 兜底）、`buildHeadingLink`（同文件省略
-  文件名，alias 恒为用户打的原文）。
-- 新增 `src/headingsuggest.ts`：`HeadingLinkSuggest extends EditorSuggest`，四个生命周期方法
-  薄委托纯函数（方案 §8.2 选项 A：类本身不伪造测试，留真机手验）；IME 组合期间 `onTrigger`
-  首行短路（复用既有 `imeComposing`）；Tab 接受走 `Scope.register`（[] 修饰键，不误吃
-  Shift+Tab），内部 `.suggestions.useSelectedItem` 包 try/catch 静默降级——Obsidian 内部 API，
-  已登记为未来升级最优先复查点。
-- `main.ts` 接线：`headingIndex` 字段 + 按文件去抖 `headingIndexTimers`；`onload` 注册
-  EditorSuggest + `onLayoutReady` 内**先挂** `vault.on(create/modify/delete/rename)` **再起**
-  初始扫描（`buildInitialHeadingIndex`，按 200 文件/批让出主线程，复用 `debounceDelay` 不新增
-  设置项）；`setHeadingLinkSuggestEnabled` 运行期补建/清空（关闭即零成本）；`onunload` 清理。
-  **架构承诺修订**：spec.md §4「触发的性能边界」追加 M13 例外（全生命周期一次懒加载全库只读
-  扫描，此后仅按文件增量维护）——这是方案 §2.1 明确要求正面处理的冲突，不能假装没发生。
-
-**功能二：Various Complements 联动（默认关，需显式确认）**——把标题索引导出为 JSON 词典喂给
-VC 的自定义词典补全（VC 自身标题级补全 issue #72 开了 4 年多没做，本联动是真实的获客角度，
-前提是足够稳、不破坏用户已有 VC 配置）。
-
-- 新增 `src/vcintegration.ts`：探测三态（not-installed / disabled / enabled，`app.plugins`
-  结构化收窄不用 any）+ 分层防御写入——Layer 1 活体实例（`.settings` + `saveData`，不碰文件、
-  无竞态）→ Layer 2 文件级读改写（JSON.parse 全量、只改 `customDictionaryPaths` /
-  `enableCustomDictionaryComplement` 两字段、JSON.stringify 全量写回，**绝不重建对象**）→
-  Layer 3 schema 校验失败整体放弃（`isValidVcSettingsShape` 存在才校验类型，并拒绝数组）；
-  `mergeDictionaryPath`（换行分隔字符串合并，最易错一步单独成纯函数）；`buildVcDictionaryJson`
-  （displayed 用**不含 WJ** 的干净原文——顺带消解 spec 附录 A.2 记录的「VC 精确匹配被 WJ
-  打穿」风险，已回填该节）；reload 命令调用与失败兜底（与「写入失败」提示分离）。
-- 设置：`headingLinkSuggestEnabled`（默认 true）+ `vcIntegrationMode`（off/manual/auto，默认
-  off）+ 三态下拉（沿用 `languageName` 的 addDropdown 先例）；**任何离开 off 的切换必须过确认
-  框**（新建 `src/settings/tabs/VcIntegrationSection.ts`，两个 Modal 照抄 DangerTab 结构）；
-  词典路径展示 + 一键复制（Clipboard API + execCommand 兜底）。
-- i18n 中英 23 个新键（含最高风险的自动配置确认文案，逐句列明会读写 VC 配置）；styles.css
-  建议框样式；README 双语各加一条卖点 + 快速上手补一行。
-
-**测试**：新增 `tests/dev_tests/headingindex.test.ts`（16 例）/ `headingtrigger.test.ts`
-（16 例）/ `vcintegration.test.ts`（24 例）；`main.test.ts` 追加 M13 两个 describe（8 例：
-去抖窗口/重置/切走作废/剥前缀收录/关闭不构建/运行期补建/截断 Notice）；
-`obsidian-mock.ts` 补 `EditorSuggest`/`PopoverSuggest`/`Scope` 最小替身 + Plugin 的
-`registerEditorSuggest`（headingsuggest 模块加载必需）。`doc/testplan.md` 新增 Q 分类 19 行
-（Q1–Q19），dev 可覆盖的逻辑行已回填 ✅/⚠️，真机项（Q4/Q5/Q9/Q10–Q15）保持 🔲 待用户手验。
-spec.md 落 M13 Roadmap 条目 + 执行顺序表第 6 位 + A.2 消解回填。
-
-### 没做什么
-
-- 方案 §10 Out of scope 全部未做：块级 `#^blockid`、模糊/拼音匹配、跨 vault、标题内标点触发、
-  围栏跨行检测、VC 联动关闭时的反向清理、其他补全插件联动、批量转换存量正文、索引持久化缓存。
-- `HeadingLinkSuggest` 类本身（Tab 键、DOM 渲染、移动端点按）未做自动化测试——方案 §8.2
-  选项 A 明确推荐：`EditorSuggest` 真实交互是 DOM/CM6 行为，伪造容易造出「测试通过但真实行为
-  对不上」的假安全感。
-- VC 侧 [C：未核实] 项（插件 id / `app.plugins` 形状 / data.json 字段名与类型 / 活体 `.settings`
-  字段 / reload 命令 id / Tab 默认行为 / compositionend 后是否立即重触发）全部按调研值实现，
-  在 testplan Q 行与代码注释标注，需真实环境逐条核对（方案 §12）。
-
-### 下一步
-
-- 真机手验（对照 testplan Q1–Q19 与方案 §11 清单）：建议框 DOM/Tab 接受、**已编号标题锚点
-  含 WORD_JOINER 时链接可点**（本功能最核心的正确性要求）、移动端点按、中文输入法组合、
-  真实 VC 手动/自动两条路径 + 至少一次刻意构造的失败场景（临时改坏 VC data.json 验证
-  Layer 3 兜底不写坏文件）。
-- 若实测发现 [C：未核实] 项与实现不符：修正 `vcintegration.ts`/`headingsuggest.ts` 对应实现，
-  不得为「让代码能跑」绕过 schema 校验或静默吞错（方案 §12 处理原则）。
-
-### 验证方式
-
-`npm run lint` 全绿 / `npm run build`（tsc -noEmit + esbuild）通过 / `npm test` 590 通过，
-唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红（与本次改动无关）/ `npm run
-format:check` 与 `npm run release` 在 preflight 内统一验证。未做真机手验（本环境无 Obsidian
-实体），按仓库惯例保持 testplan 对应行 🔲 并写明「待用户真机手验」。本周期派发 0 次（无
-SubAgent，全部主模型直接实现）。
 
 ---
 

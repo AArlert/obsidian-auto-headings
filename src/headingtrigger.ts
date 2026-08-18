@@ -9,6 +9,7 @@
  */
 
 import type { HeadingIndexEntry } from "./headingindex";
+import { normalizeForWhitelist } from "./whitelist";
 
 const WORD_CHAR_RE = /[\p{L}\p{N}]/u;
 /** 触发词回溯扫描的安全上限（码点数），防御无标点大段文本的病态情形（方案 §3.4，可调常量）。 */
@@ -40,6 +41,61 @@ export function extractTriggerToken(
 		return null;
 	}
 	return { token, start: i };
+}
+
+/**
+ * 把触发词展开为「按用户已输入量从多到少」的匹配候选：整段优先，其后是逐字剥掉开头字符
+ * 得到的各级后缀（长度 ≥ {@link MIN_QUERY_LENGTH}）。
+ *
+ * 为什么需要后缀（testplan Q22，用户实测「一笔事务」）：触发词提取只认「连续字母数字段」，
+ * 而中文正文没有词边界——已有「一笔」再接着打「事务」会被整段吞成一个 token「一笔事务」，
+ * 与标题【事务】的前缀匹配必然失败（换成「哈哈，事务」则因逗号断开而正常）。放宽到后缀即可
+ * 命中；后缀下限沿用 {@link MIN_QUERY_LENGTH} 挡单字符噪音（打「交叉」不会因后缀「叉」
+ * 命中【叉烧包】）。
+ *
+ * `start` 是该候选在**原行**中的列偏移（UTF-16 code unit），由调用方用作替换区间起点。
+ * 按**码点**切分（`Array.from`）而非 code unit，避免把代理对劈成半个字符。
+ */
+export function suffixCandidates(
+	token: string,
+	tokenStart: number,
+): Array<{ text: string; start: number }> {
+	const chars = Array.from(token);
+	const out: Array<{ text: string; start: number }> = [];
+	for (let cut = 0; cut <= chars.length - MIN_QUERY_LENGTH; cut++) {
+		const text = chars.slice(cut).join("");
+		out.push({ text, start: tokenStart + (token.length - text.length) });
+	}
+	return out;
+}
+
+/**
+ * 在 {@link suffixCandidates} 里挑出「用户输入量最多、且索引中确有前缀匹配」的那一个，
+ * 返回它的原文、替换起点与归一化查询串；全都落空时返回 null（onTrigger 让路）。
+ *
+ * **`start` 必须是被匹配上的那一段的起点，不是整个 token 的起点**——接受建议时
+ * `selectSuggestion` 替换的是 `[start, 光标)` 区间，用整段起点会把没参与匹配的前半截
+ * （「一笔事务」里的「一笔」）连带吃掉。同理，归一化查询串取的是**该后缀**而非整段，
+ * 否则 {@link sortEntries} 的「精确匹配优先」判据永远不成立。
+ *
+ * @param hasAnyPrefixMatch 索引侧的廉价判定（`HeadingIndex.hasAnyPrefixMatch`），注入进来
+ *   使本函数保持纯函数可测；onTrigger 每次按键都跑，故用它而非收集结果的 `queryPrefix`。
+ */
+export function resolveTriggerQuery(
+	token: string,
+	tokenStart: number,
+	hasAnyPrefixMatch: (normalizedQuery: string) => boolean,
+): { text: string; start: number; query: string } | null {
+	for (const candidate of suffixCandidates(token, tokenStart)) {
+		const query = normalizeForWhitelist(candidate.text);
+		if (!query) {
+			continue;
+		}
+		if (hasAnyPrefixMatch(query)) {
+			return { ...candidate, query };
+		}
+	}
+	return null;
 }
 
 /**

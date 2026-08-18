@@ -13,6 +13,7 @@ import {
 	enableAutoIntegration,
 	isValidVcSettingsShape,
 	mergeDictionaryPath,
+	shouldYieldSuggestToVc,
 	tryReloadVcDictionaries,
 	vcDictionaryPath,
 } from "../../src/vcintegration";
@@ -365,5 +366,22 @@ describe("tryReloadVcDictionaries：reload 命令调用与兜底（Q14 逻辑面
 			},
 		});
 		expect(await tryReloadVcDictionaries(app)).toBe(false);
+	});
+});
+
+describe("shouldYieldSuggestToVc：建议框共存策略（1.0.29，Q23）", () => {
+	it("让路模式 + VC 已启用：放弃触发，把唯一的弹框位置交给 VC", () => {
+		expect(shouldYieldSuggestToVc("yield", "enabled")).toBe(true);
+	});
+
+	it("让路模式但 VC 未安装 / 已禁用：没有竞争者，照常弹自己的框", () => {
+		expect(shouldYieldSuggestToVc("yield", "not-installed")).toBe(false);
+		expect(shouldYieldSuggestToVc("yield", "disabled")).toBe(false);
+	});
+
+	it("本插件优先模式：无论 VC 什么状态都不让路（1.0.28 及以前的行为）", () => {
+		expect(shouldYieldSuggestToVc("own", "enabled")).toBe(false);
+		expect(shouldYieldSuggestToVc("own", "disabled")).toBe(false);
+		expect(shouldYieldSuggestToVc("own", "not-installed")).toBe(false);
 	});
 });

@@ -37,6 +37,18 @@ export const MAX_VC_DICTIONARY_ENTRIES = 20000;
 export type VcInstallStatus = "not-installed" | "disabled" | "enabled";
 
 /**
+ * 本插件的标题建议框是否应当放弃触发、把弹框位置让给 VC（1.0.29，纯判定，便于单测）。
+ *
+ * Obsidian 的 `EditorSuggest` 同一时刻**只显示一个**弹框（先返回非 null 触发信息的那个赢），
+ * 而 VC 与本插件都以普通 `EditorSuggest` 注册——本插件一命中，VC 自己的文件链接/词补全建议
+ * 就整个看不见。仅在 VC **确实已启用**（`"enabled"`）时才需要让路：未安装/已禁用时没有竞争者，
+ * 让路只会白白丢掉功能。
+ */
+export function shouldYieldSuggestToVc(mode: "yield" | "own", status: VcInstallStatus): boolean {
+	return mode === "yield" && status === "enabled";
+}
+
+/**
  * VC data.json 的最小已知形状——只声明我们要读写的字段，其余字段原样透传，绝不重建对象
  * （重建对象会把 VC 的其余配置全部清空，是一次真正的数据破坏）。字段名/类型已对照 VC
  * 源码核实（doc/research/vc-source-verification.md）。

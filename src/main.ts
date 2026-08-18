@@ -1550,6 +1550,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (merged.vcIntegrationMode !== "manual" && merged.vcIntegrationMode !== "auto") {
 			merged.vcIntegrationMode = "off";
 		}
+		// 1.0.29：VC 启用时的让路策略。默认 "yield"——EditorSuggest 同一时刻只显示一个弹框，
+		// 老行为（本插件恒优先）会把 VC 自己的文件链接建议整个盖掉（用户实测）。
+		if (merged.headingSuggestWhenVcActive !== "own") {
+			merged.headingSuggestWhenVcActive = "yield";
+		}
 		// 迁移：历史独立开关 `backlinkStandaloneTrigger`（0.7.8–1.0.8，CR-18）已并入 `updateBacklinks`
 		// （1.0.9 起单开关全局生效，与是否命中编号模板无关）；旧字段不再读取，随迁移一并清理。
 		delete merged.backlinkStandaloneTrigger;
