@@ -5,6 +5,62 @@
 
 ---
 
+## 2026-08-11 M13 第三轮：UVM 压测拓展（抓出 3 个索引 bug）+ 启动词典同步 + 建议框 icon（1.0.28）
+
+### 做了什么
+
+用户提醒：新功能须按项目规定拓展 `tests/dev_tests/uvm` 压测引擎并跑压力测试（此前 1.0.26/1.0.27
+未做）。本轮补上，并顺带处理用户实测反馈的另外两点：
+
+1. **UVM 压测拓展（`tests/dev_tests/uvm/heading-index.ts`）**：M13 标题索引的「约束随机序列 +
+   参考模型记分板」压测——DUT 是 `HeadingIndex`（排序数组 + 二分 + 增量维护），参考模型是
+   「裸 `Map<path, 条目>` + 全量 filter + 稳定排序」的朴素实现；操作池 = setFile（新建/更新）/
+   removeFile / renameFile（含不存在、覆盖已有路径、自身改名）/ loadInitial；每步后对拍
+   `queryPrefix`（13 组查询）/ `hasAnyPrefixMatch` / `size` / `allEntries`。入口挂在
+   `random_sequence.test.ts`（随 `npm test` 跑 500×60，`test:fuzz` 跑 5000×80，全绿）。
+   **立刻抓出并修复 3 个真实 bug（testplan §3.3 登记 U5–U7）**：
+   - U5：`setFile` 用 lowerBound（相等区间开头）前插，反复更新同一文件时同 (matchKey, path)
+     条目顺序反转、与参考模型稳定排序不一致 → 改 `upperBoundEntry`（相等区间末尾）插入。
+   - U6：`renameFile` 到已存在路径（覆盖改名）残留被覆盖文件的旧条目、`totalCount` 漂移
+     （seed=4 复现，DUT=39 vs 参考=46）→ filter 同时移除 oldPath 与 newPath + 计数修正。
+   - U7：`renameFile(p, p)` 自身改名时 `replaced` 与 `entries` 是同一数组、totalCount 多扣
+     → 自身改名按无操作提前返回。
+   压测另增强：rename 操作 30% 概率显式覆盖已有路径（稳定覆盖 U6 分支）。
+2. **启动词典同步（升级/重启场景，Q21）**：VC 只在「启动」与「Reload custom dictionaries」命令
+   两个时机加载词典（已对照 VC 源码核实）——已自动联动的用户升级插件后，VC 内存里仍是旧/失败
+   的词典，这就是 1.0.27 修复格式后用户实测「VC 框仍无条目」的根因。修法：`onLayoutReady` 里若
+   `vcIntegrationMode !== "off"`，主动重写词典 + 调 reload，命令未就绪时按 2s 间隔重试 5 次、
+   耗尽静默（`syncVcDictionaryAfterStartup`）。
+3. **建议框 icon（用户实测「候选前没有 icon，和原生 VC 不一致」）**：`HeadingLinkSuggest.
+   renderSuggestion` 改为「icon 列（`setIcon("link")`）+ 标题/来源两行」布局，styles.css 配
+   flex 样式。注：VC 框里 custom-dictionary 条目**自带 icon**（VC styles.css 的内联 SVG），
+   用户看到的无 icon 候选是本插件自己的建议框。
+4. 用户新场景「一笔事务」（已有文本「一笔」→ 写成「一笔事务」，本文件标题【事务】应出候选；
+   VC 的 current-vault 能识别）——**登记 testplan Q22（未实现）**：现触发词提取把「一笔事务」
+   整段当查询词，前缀匹配「事务」失败；「哈哈，事务」因逗号分隔 token 即「事务」故正常。
+   已给出实现方案（整段前缀或长度 ≥2 后缀的前缀匹配：`HeadingIndex.queryBySuffix` +
+   onTrigger/getSuggestions 接线 + 压测对拍扩展），留给 CLAUDE 落地。
+
+### 没做什么
+
+- **Q22「一笔事务」后缀匹配未实现**（用户要求登记，方案已写进 testplan Q22 与交接报告）。
+- 真机手验项不变（Tab / .suggestions.useSelectedItem / compositionend / 移动端点按 / 真实 VC
+  加载），testplan Q4/Q5/Q9/Q10–Q15 保持 🔲/⚠️。
+- 词典分片（research 留档的后续候选）仍不做。
+
+### 下一步
+
+- CLAUDE 接手：按 testplan Q22 实现「一笔事务」后缀匹配（含压测对拍扩展）；真机复测
+  Q4/Q5/Q9/Q10–Q15 与 Q21（升级场景 VC 自动拿到新词典）。
+
+### 验证方式
+
+`npm test` 599 通过（唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红）；`npm run
+test:fuzz`（5000×80）三块记分板全绿；lint / build / format:check 走 preflight 统一验证。
+本周期派发 0 次（全部主模型直接实现）。
+
+---
+
 ## 2026-08-11 M13 实测反馈修复：alias 完整标题名 + VC 词典格式/阈值/轻量化（1.0.27）
 
 ### 做了什么

@@ -41,6 +41,76 @@
 
 ---
 
+## 2026-08-19 M13 第六轮：消灭「让路死角」+ 本插件优先时隐藏 VC 配置（1.0.31）
+
+### 做了什么
+
+用户带着一个新 vault 形态实测 1.0.30 并报了三件事，其中一件是**我在 1.0.29 埋的设计错误**。
+
+**用户的观察**：库里 `axi.md` 与 `交叉矩阵.md` 各有一个标题【交叉矩阵】，在 `axi.md` 里打字，
+建议里「没有 `交叉矩阵.md` 的那个，只有本文件的，而且 icon 也不对」。
+
+**先排除索引 bug**：vault 的 create / modify / delete / rename 四个事件都已接线
+（`main.ts:318-346`），新建文件会被索引；`headingindex.test.ts` 也早有「多文件同名标题：全部
+收录、path 次级排序确定」这条。所以不是索引漏收。追问后用户确认：**那个框是 VC 的**——
+于是一切对上了：默认让路 + VC 已启用 ⇒ 我们的 `onTrigger` 恒返回 null，我们的框根本没机会
+出现，用户看到的自始至终是 VC 的框，icon 自然也是 VC 的。
+
+**根因（1.0.29 的设计错误）**：让路默认开（`headingSuggestWhenVcActive = "yield"`）+ 词典联动
+默认关（`vcIntegrationMode = "off"`）——**两个默认叠在一起，装了 VC 的用户一开箱标题建议就
+整个消失**。1.0.29 我意识到了这个死角，但用「设置面板弹一条警告」去兜——用户不打开设置就
+永远看不到，等于静默失效。这是典型的「用提示去补设计缺陷」。
+
+**修法：从判定条件上消灭，而不是提示**。`shouldYieldSuggestToVc` 加第三个条件——让路还要求
+词典联动**确实开着**：
+
+- 让路 + VC 启用 + 联动开 → 让路（VC 框里有标题条目，两边候选同框可见）
+- 让路 + VC 启用 + **联动关** → **不让路**，由本插件的框接管（让给一个拿不出标题候选的框
+  等于让用户什么都看不到）
+- 本插件优先 / VC 未装未启用 → 一律不让路
+
+死角从此不可达，面板那条「标题建议将无处出现」的警告随之改成如实告知
+（`vcCoexistFallbackHint`：「当前仍由本插件的建议框接管……开启词典联动后即会真正让路」）。
+`vcCoexistDesc` 同步补上「只有词典联动开着时才会真的让路」（中英双语）。
+
+**用户明确要求的第二件事**：「本插件优先的时候，就不要出现 VC 的相关配置（联动选项、词典
+按钮）」。已照做，但留了两条例外——照字面全隐会出事：
+
+1. **词典联动已经开着**时照常渲染。否则会留下「词典还在按节流重写、用户却既看不见也关不掉」
+   的隐身状态。
+2. **VC 未安装**时不受影响。共存下拉本就只在 VC 已安装时渲染，此时 `headingSuggestWhenVcActive`
+   的历史值不该反过来遮住手动联动——手动联动允许未装 VC 时先生成词典（testplan Q10）。
+
+**第三件事（不是 bug）**：「本插件优先、不重启，打『交』出的是 VC 的框，打『交叉』才出本插件
+的」——符合预期：`MIN_QUERY_LENGTH = 2`，单字符我们不触发，那一轮自然归 VC；两字符起我们接管。
+顺带验证了共存开关**运行期切换即时生效、无需重启**。
+
+用户另确认：Q22 的「一个交叉矩阵」接受后「一个」确实还在——1.0.29 的修复成立。
+
+### 没做什么
+
+- **没有改 icon 实现**：用户报的 icon 问题出在 VC 的框上，我们的 `setIcon("heading")` 这轮才
+  第一次真正有机会显示（此前默认让路把它挡在门外）。等用户看到本插件的框再判断 `heading`
+  这个 id 在其 Obsidian 版本里是否存在——存在则是 H，不存在会按 `ICON_CANDIDATES` 退到 `#`。
+  不在没看到实物前反复改猜。
+- 没有新增索引层测试：「多文件同名标题全部收录」早有单测，不重复造第二份（单一事实源）。
+- 没有动 `MIN_QUERY_LENGTH`（单字符不触发是刻意的噪音防护）。
+
+### 下一步
+
+- 用户真机复测：默认设置下（联动关）本插件的框现在应当出现，且 `axi.md` / `交叉矩阵.md` 两条
+  同名标题都在列 —— 顺便确认 icon 到底是 H 还是 `#`；「本插件优先」时 VC 配置应消失。
+- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互。
+
+### 验证方式
+
+`npx tsc --noEmit` 干净；`vcintegration.test.ts` 30 例（`shouldYieldSuggestToVc` 扩为
+两模式 × 三安装态 × 三联动态）、`i18n.test.ts` 键位对齐、`headingindex.test.ts` 全通过；
+`npm test` 全量 611 通过（唯一失败仍是 `whitelist.test.ts:406` Windows ICU 已知假红）；
+lint / format:check / release 重建单独复跑。本周期派发 0 次。
+
+---
+
 ## 2026-08-19 M13 第五轮：设置面板叙述重写——把「共存」讲成产品选择而非实现细节（1.0.30）
 
 ### 做了什么
@@ -167,62 +237,6 @@
 无关）；`npm run test:fuzz`（5000×80）三块记分板全绿，含新增的 Q22 解析对拍；`npx tsc --noEmit`
 干净；lint / format:check / release 重建走 preflight 统一验证。
 本周期派发 0 次（本次会话的 harness 限制 Agent 调用，长输出改用管道过滤压缩，未走 SubAgent）。
-
----
-
-## 2026-08-11 M13 第三轮：UVM 压测拓展（抓出 3 个索引 bug）+ 启动词典同步 + 建议框 icon（1.0.28）
-
-### 做了什么
-
-用户提醒：新功能须按项目规定拓展 `tests/dev_tests/uvm` 压测引擎并跑压力测试（此前 1.0.26/1.0.27
-未做）。本轮补上，并顺带处理用户实测反馈的另外两点：
-
-1. **UVM 压测拓展（`tests/dev_tests/uvm/heading-index.ts`）**：M13 标题索引的「约束随机序列 +
-   参考模型记分板」压测——DUT 是 `HeadingIndex`（排序数组 + 二分 + 增量维护），参考模型是
-   「裸 `Map<path, 条目>` + 全量 filter + 稳定排序」的朴素实现；操作池 = setFile（新建/更新）/
-   removeFile / renameFile（含不存在、覆盖已有路径、自身改名）/ loadInitial；每步后对拍
-   `queryPrefix`（13 组查询）/ `hasAnyPrefixMatch` / `size` / `allEntries`。入口挂在
-   `random_sequence.test.ts`（随 `npm test` 跑 500×60，`test:fuzz` 跑 5000×80，全绿）。
-   **立刻抓出并修复 3 个真实 bug（testplan §3.3 登记 U5–U7）**：
-   - U5：`setFile` 用 lowerBound（相等区间开头）前插，反复更新同一文件时同 (matchKey, path)
-     条目顺序反转、与参考模型稳定排序不一致 → 改 `upperBoundEntry`（相等区间末尾）插入。
-   - U6：`renameFile` 到已存在路径（覆盖改名）残留被覆盖文件的旧条目、`totalCount` 漂移
-     （seed=4 复现，DUT=39 vs 参考=46）→ filter 同时移除 oldPath 与 newPath + 计数修正。
-   - U7：`renameFile(p, p)` 自身改名时 `replaced` 与 `entries` 是同一数组、totalCount 多扣
-     → 自身改名按无操作提前返回。
-   压测另增强：rename 操作 30% 概率显式覆盖已有路径（稳定覆盖 U6 分支）。
-2. **启动词典同步（升级/重启场景，Q21）**：VC 只在「启动」与「Reload custom dictionaries」命令
-   两个时机加载词典（已对照 VC 源码核实）——已自动联动的用户升级插件后，VC 内存里仍是旧/失败
-   的词典，这就是 1.0.27 修复格式后用户实测「VC 框仍无条目」的根因。修法：`onLayoutReady` 里若
-   `vcIntegrationMode !== "off"`，主动重写词典 + 调 reload，命令未就绪时按 2s 间隔重试 5 次、
-   耗尽静默（`syncVcDictionaryAfterStartup`）。
-3. **建议框 icon（用户实测「候选前没有 icon，和原生 VC 不一致」）**：`HeadingLinkSuggest.
-   renderSuggestion` 改为「icon 列（`setIcon("link")`）+ 标题/来源两行」布局，styles.css 配
-   flex 样式。注：VC 框里 custom-dictionary 条目**自带 icon**（VC styles.css 的内联 SVG），
-   用户看到的无 icon 候选是本插件自己的建议框。
-4. 用户新场景「一笔事务」（已有文本「一笔」→ 写成「一笔事务」，本文件标题【事务】应出候选；
-   VC 的 current-vault 能识别）——**登记 testplan Q22（未实现）**：现触发词提取把「一笔事务」
-   整段当查询词，前缀匹配「事务」失败；「哈哈，事务」因逗号分隔 token 即「事务」故正常。
-   已给出实现方案（整段前缀或长度 ≥2 后缀的前缀匹配：`HeadingIndex.queryBySuffix` +
-   onTrigger/getSuggestions 接线 + 压测对拍扩展），留给 CLAUDE 落地。
-
-### 没做什么
-
-- **Q22「一笔事务」后缀匹配未实现**（用户要求登记，方案已写进 testplan Q22 与交接报告）。
-- 真机手验项不变（Tab / .suggestions.useSelectedItem / compositionend / 移动端点按 / 真实 VC
-  加载），testplan Q4/Q5/Q9/Q10–Q15 保持 🔲/⚠️。
-- 词典分片（research 留档的后续候选）仍不做。
-
-### 下一步
-
-- CLAUDE 接手：按 testplan Q22 实现「一笔事务」后缀匹配（含压测对拍扩展）；真机复测
-  Q4/Q5/Q9/Q10–Q15 与 Q21（升级场景 VC 自动拿到新词典）。
-
-### 验证方式
-
-`npm test` 599 通过（唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红）；`npm run
-test:fuzz`（5000×80）三块记分板全绿；lint / build / format:check 走 preflight 统一验证。
-本周期派发 0 次（全部主模型直接实现）。
 
 ---
 

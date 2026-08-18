@@ -146,20 +146,31 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 				});
 			});
 
-		// 让路 + 词典联动未开 = 标题建议**哪儿都不会出现**。这是让路策略唯一的坑，必须
-		// 当面说清而不是静默失效（用户会以为插件坏了）。
-		const deadEnd =
+		// 选了让路、但词典联动还没开：此时**不会真的让路**（见 shouldYieldSuggestToVc），
+		// 由本插件的建议框接管。1.0.30 及以前这里是一条「标题建议将无处出现」的警告——
+		// 那个死角已在判定层消灭，现在只需如实告知当前谁在接管，不必再吓唬用户。
+		const yieldPending =
 			plugin.settings.headingLinkSuggestEnabled &&
 			plugin.settings.headingSuggestWhenVcActive === "yield" &&
 			vcStatus === "enabled" &&
 			plugin.settings.vcIntegrationMode === "off";
-		if (deadEnd) {
+		if (yieldPending) {
 			containerEl
-				.createDiv({ cls: "ah-path-warn" })
-				.createSpan({ text: t.vcCoexistDeadEndWarn });
+				.createEl("p", { cls: "ah-section-desc" })
+				.createSpan({ text: t.vcCoexistFallbackHint });
 		}
 	}
 
 	// —— Various Complements 词典联动（M13，见 spec.md Roadmap M13）——
-	renderVcIntegrationSection(tab, containerEl);
+	// 「本插件优先」且联动本就关着时**整块不渲染**（用户要求：这时 VC 的相关配置纯属噪音）。
+	// 两条例外：① 联动已经开着照常显示——否则会留下「还在写词典、用户却看不见也关不掉」的
+	// 隐身状态；② 没装 VC 时共存下拉根本不渲染，此时不该受它的历史值影响（手动联动本就允许
+	// 在未装 VC 的情况下先生成词典，见 testplan Q10）。
+	const hideVcSection =
+		vcStatus !== "not-installed" &&
+		plugin.settings.headingSuggestWhenVcActive === "own" &&
+		plugin.settings.vcIntegrationMode === "off";
+	if (!hideVcSection) {
+		renderVcIntegrationSection(tab, containerEl);
+	}
 }

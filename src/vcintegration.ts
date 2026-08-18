@@ -41,11 +41,24 @@ export type VcInstallStatus = "not-installed" | "disabled" | "enabled";
  *
  * Obsidian 的 `EditorSuggest` 同一时刻**只显示一个**弹框（先返回非 null 触发信息的那个赢），
  * 而 VC 与本插件都以普通 `EditorSuggest` 注册——本插件一命中，VC 自己的文件链接/词补全建议
- * 就整个看不见。仅在 VC **确实已启用**（`"enabled"`）时才需要让路：未安装/已禁用时没有竞争者，
- * 让路只会白白丢掉功能。
+ * 就整个看不见。
+ *
+ * 让路要同时满足三个条件，缺一不可：
+ * 1. 用户选了让路（`mode === "yield"`）；
+ * 2. VC **确实已启用**——未安装/已禁用时没有竞争者，让路只会白丢功能；
+ * 3. **词典联动确实开着**（`integrationMode !== "off"`）——否则 VC 的词典里根本没有标题条目，
+ *    让路等于「让给一个也给不出标题候选的框」，用户什么都看不到。
+ *
+ * 第 3 条是 1.0.31 补上的（用户实测撞上）：让路默认开 + 词典联动默认关，两个默认叠在一起，
+ * 装了 VC 的用户一开箱标题建议就整个消失。这种死角不能靠设置面板的警告去兜——用户不打开
+ * 设置就看不到——只能从判定条件上消灭。
  */
-export function shouldYieldSuggestToVc(mode: "yield" | "own", status: VcInstallStatus): boolean {
-	return mode === "yield" && status === "enabled";
+export function shouldYieldSuggestToVc(
+	mode: "yield" | "own",
+	status: VcInstallStatus,
+	integrationMode: "off" | "manual" | "auto",
+): boolean {
+	return mode === "yield" && status === "enabled" && integrationMode !== "off";
 }
 
 /**
