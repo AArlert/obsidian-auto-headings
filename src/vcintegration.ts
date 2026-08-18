@@ -82,6 +82,11 @@ export interface VcSettingsShape {
 	 * 见 {@link applyDisplayedTextSuffix}。**全局显示项**，影响用户全部自定义词典条目。
 	 */
 	displayedTextSuffix?: string;
+	/**
+	 * 建议框最多显示几条（VC 默认 **5**）。自动配置时按需抬到
+	 * {@link MIN_VC_MAX_SUGGESTIONS}，见 {@link applyMaxSuggestions}。**全局显示项**。
+	 */
+	maxNumberOfSuggestions?: number;
 	[key: string]: unknown;
 }
 
@@ -110,6 +115,9 @@ export function isValidVcSettingsShape(data: unknown): data is VcSettingsShape {
 		return false;
 	}
 	if ("displayedTextSuffix" in d && typeof d.displayedTextSuffix !== "string") {
+		return false;
+	}
+	if ("maxNumberOfSuggestions" in d && typeof d.maxNumberOfSuggestions !== "number") {
 		return false;
 	}
 	return true;
@@ -332,6 +340,7 @@ async function tryWriteViaLiveInstance(
 	settings.enableCustomDictionaryComplement = true;
 	applyTriggerThreshold(settings);
 	applyDisplayedTextSuffix(settings);
+	applyMaxSuggestions(settings);
 	await vc.saveData(settings);
 	return "ok";
 }
@@ -367,6 +376,7 @@ async function tryWriteViaAdapterFile(
 	settings.enableCustomDictionaryComplement = true;
 	applyTriggerThreshold(settings);
 	applyDisplayedTextSuffix(settings);
+	applyMaxSuggestions(settings);
 	await app.vault.adapter.write(vcDataPath, JSON.stringify(settings, null, "\t"));
 	return "ok";
 }
@@ -398,6 +408,28 @@ function applyTriggerThreshold(settings: VcSettingsShape): void {
 function applyDisplayedTextSuffix(settings: VcSettingsShape): void {
 	if (settings.displayedTextSuffix !== "") {
 		settings.displayedTextSuffix = "";
+	}
+}
+
+/**
+ * VC 建议框条数下限（1.1.0，可调常量）：自动配置时**只抬不降**到这个值。
+ *
+ * 为什么必须动它（用户实测：「要一直打到『交叉矩阵』全名，`交叉矩阵.md` 里那条同名标题才出现」）：
+ * VC 把**全部来源**（当前文件词 / 全库词 / 自定义词典 / 内部链接）混在一起，按**显示文本长度
+ * 升序**排序后直接 `slice(0, maxNumberOfSuggestions)`（`provider/suggester.ts:304-306` 与 `:319`），
+ * 而 VC 的默认值只有 **5**（`setting/settings.ts:156`）。同名标题为了绕开 VC 的去重必须带
+ * `(文件名)` 后缀（见 {@link disambiguateVcDisplayed}），后缀让它们成了最长的候选，于是短查询下
+ * 被「交叉」「交叉矩阵」这类短词挤出前 5；查询越长竞争者越少，才勉强挤进来。
+ *
+ * 抬高上限是我们这侧唯一能做的补偿——排序键是 VC 写死的长度升序，我们无法让带后缀的条目变短。
+ */
+export const MIN_VC_MAX_SUGGESTIONS = 10;
+
+/** 只抬不降：用户显式设得比下限更大就尊重原值，非数字（字段缺失/脏值）按需补齐。 */
+function applyMaxSuggestions(settings: VcSettingsShape): void {
+	const current = settings.maxNumberOfSuggestions;
+	if (typeof current !== "number" || current < MIN_VC_MAX_SUGGESTIONS) {
+		settings.maxNumberOfSuggestions = MIN_VC_MAX_SUGGESTIONS;
 	}
 }
 
