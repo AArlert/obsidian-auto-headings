@@ -1940,7 +1940,15 @@ i18n.ts                     // 中英双语文案（Messages 接口 + zh/en 两�
       整个看不见（用户实测截图）。新增设置 `headingSuggestWhenVcActive`：**默认 `"yield"`**
       （VC 已启用时本插件不触发，标题建议改由 VC 框经词典联动统一呈现），`"own"` 恢复旧行为。
       让路 + 词典联动关闭 = 标题建议无处出现，设置面板显式警告而非静默失效
-- [ ] `doc/testplan.md` §Q 场景回填（Q4/Q5/Q9/Q10–Q15/Q21/Q23 等真机手验项待用户实机确认）
+- [x] **VC 框里的标题候选补齐与观感统一（Q25/Q26，1.0.32）**：VC 的 `jsonToWords` 把
+      `value`/`displayed` 对调，去重谓词对 customDictionary 只比 `value` ⇒ **同名标题必被砍到
+      只剩一条**；`disambiguateVcDisplayed` 只给冲突项加 `(文件名)` 后缀（区分形态按组统一，
+      后缀只能在尾部——VC 首字母桶键取 `value.charAt(0)`）。词条加 `description = 路径` 作第二行
+      小字。自动配置额外清空 VC 的 `displayedTextSuffix`（其默认值就是字面量 `" => ..."`，是
+      **全局显示项**，确认框单列一条说明影响范围）。VC 侧图标按词条 type 的 CSS `::before` 决定、
+      无 per-词典钩子，覆盖会误伤用户自己的词典 ⇒ 不覆盖，改把**本插件建议框对齐 VC 观感**
+      （图标改书架语义、第二行 `0.75em`/`--text-muted`）
+- [ ] `doc/testplan.md` §Q 场景回填（Q4/Q5/Q9/Q10–Q15/Q21/Q23/Q25/Q26 等真机手验项待用户实机确认）
 
 不是本里程碑目标（见调研方案 §10 Out of scope）：块级 `#^blockid` 匹配、模糊/拼音匹配、跨 vault
 匹配、批量转换存量正文的命令、VC 联动关闭时的反向清理（不删除已生成词典、不撤销已写入 VC 的配置）。

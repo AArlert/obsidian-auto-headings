@@ -5,6 +5,76 @@
 
 ---
 
+## 2026-08-19 M13 第四轮：无标点连写触发（Q22）+ 与 VC 的建议框共存（Q23）+ 面板分区（1.0.29）
+
+### 做了什么
+
+接手 DS（另一 agent）留下的 1.0.28 与其交接报告 `doc/research/handover-m13-1.0.28.md`，
+用户判断「不够好」。三件事：解决 bug、搞定 UI、收拾残局。
+
+1. **Q22 无标点连写的尾部词触发**（用户实测：「一笔事务」「一个交叉矩阵」，以及光标停在行中间
+   的「一笔事务|拆成」）。中文正文没有词边界，`extractTriggerToken` 把连续字母数字段整段吞成
+   一个 token，前缀匹配必然落空（「哈哈，事务」有逗号断开故一直正常）。
+   **没有照搬交接报告 §5.1 的方案**——那个方案把放宽做在索引层（新增 `HeadingIndex.
+   queryBySuffix` / `hasAnySuffixMatch`），并明写「alias/排序/上下文屏蔽逻辑不变」，
+   **漏了替换区间**：`onTrigger` 返回的 `start` 仍是整个 token 的起点，而 `selectSuggestion`
+   替换的是 `[start, 光标)`——按那个方案接受【事务】会把前面的「一笔」一起删掉；`sortEntries`
+   的「精确匹配优先」判据拿整段 token 去比也永远不成立。根因不在索引查询，在**触发词边界**。
+   实际修法落在 `headingtrigger.ts` 的两个纯函数：`suffixCandidates`（整段 + 逐级后缀，长度
+   ≥ `MIN_QUERY_LENGTH`，按码点切分不劈代理对，每个候选带自己的列偏移）+ `resolveTriggerQuery`
+   （取第一个命中者 = 用户输入量最多者优先，注入索引判定保持纯函数可测）。索引 API 一行未动。
+2. **Q23 与 Various Complements 的建议框共存**（用户实测截图指认：「VC 自身的文件链接建议被本
+   插件覆盖了，都看不到」）。根因是 Obsidian 的 `EditorSuggest` **同一时刻只显示一个**弹框，
+   先返回非 null 触发信息的那个赢；VC 与本插件都以普通 `EditorSuggest` 注册（VC 侧已核实：
+   `doc/research/various-complements-src/src/main.ts:86` + `ui/AutoCompleteSuggest.ts:76`），
+   本插件一命中，VC 的文件链接/词补全建议就整个看不见。**这不是「两个都显示」的取舍，是二选一**，
+   且 Q22 修完命中面变大会让冲突更频繁——故先用 `AskUserQuestion` 摆出三个选项，用户选了
+   「默认让路 + 给个开关」。落地：新设置 `headingSuggestWhenVcActive`（`"yield"` 默认 / `"own"`），
+   判定抽成纯函数 `shouldYieldSuggestToVc(mode, status)` 便于单测，`HeadingLinkSuggest.onTrigger`
+   开头调用。仅 VC **已启用**时才让路（未安装/已禁用没有竞争者，让路只会白丢功能）。
+   **让路 + 词典联动关闭 = 标题建议无处出现**，这是该策略唯一的坑，设置面板就此显式警告
+   （`vcCoexistDeadEndWarn`），不静默失效。
+3. **UI（用户逐条指定）**：① 建议框 icon 由 `link` 改为标题的 H 标志——`setIcon` 的 id 只是
+   字符串、官方 .d.ts 不枚举也不校验，传了内置集里没有的 id 会**静默留空**，故写成
+   `ICON_CANDIDATES = ["heading","hash","link"]` 逐个试 + 检查是否真渲染出子元素；
+   ② 全局设置面板按功能区分节（用户猜「也许用 `---`」）——用的是仓库既有惯例
+   `setHeading() + .ah-section-head`（左侧强调色竖条），比 `<hr>` 多了「这组是干什么的」这句话：
+   语言（不挂节头）→ 自动编号（全局开关 + 防抖延迟）→ 链接维护（Backlink 同步）→
+   标题链接建议（建议开关 + VC 共存策略 + VC 词典联动）。防抖延迟从原来夹在建议开关后面
+   挪回自动编号组。
+4. **压测扩展**：`uvm/heading-index.ts` 每步对拍新增 Q22 解析——DUT 走「候选序列 + 索引二分」，
+   参考走「候选序列 + 全量扫描」，两侧须选出同一候选；并断言 `sample.slice(start) === text`
+   （替换区间自洽，即「不吃掉用户已打的前半截」这条地基）。
+5. **收拾残局**：`doc/log-archive.md` 有一整块 1.0.25 周期块是上一轮 `npm run docs` 归档出来
+   但**没被提交**的（工作区脏了一整轮），本次一并入库；其余 25 个「已修改」文件全是 CRLF
+   行尾噪音、无内容差异（见 `windows-env-quirks` 记忆）。
+
+### 没做什么
+
+- **没有实现交接报告 §5.1 的 `queryBySuffix` / `hasAnySuffixMatch` 索引 API**——见上，那是错
+  的落点；索引层保持 1.0.28 的形状不动。
+- **没有回答「词典机制是否过于 heavy」**（用户本轮提出）：结论与取舍已在会话里给出，但它牵动
+  的是 M13 联动的产品形态（要不要保留词典这条路），需用户拍板后才动代码，本轮未改。
+- 真机手验项不变：Q4/Q5/Q9/Q10–Q15/Q21 仍 🔲/⚠️；Q23 新增的真机项（两插件同装切换共存策略）
+  同样待手验。
+- 词典分片仍不做。
+
+### 下一步
+
+- 用户真机复测：Q22（「一个交叉矩阵」出候选且接受后「一个」保留）、Q23（VC 同装时弹框归属、
+  切「本插件优先」能切回旧行为）、icon 是否真的渲染成 H、面板分区观感。
+- 待用户拍板：VC 词典机制的去留（heavy 与否），决定后可能重塑 M13 联动形态。
+- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互。
+
+### 验证方式
+
+`npm test` 611 通过（唯一失败仍是 `whitelist.test.ts:406` Windows ICU 排序已知假红，与本次改动
+无关）；`npm run test:fuzz`（5000×80）三块记分板全绿，含新增的 Q22 解析对拍；`npx tsc --noEmit`
+干净；lint / format:check / release 重建走 preflight 统一验证。
+本周期派发 0 次（本次会话的 harness 限制 Agent 调用，长输出改用管道过滤压缩，未走 SubAgent）。
+
+---
+
 ## 2026-08-11 M13 第三轮：UVM 压测拓展（抓出 3 个索引 bug）+ 启动词典同步 + 建议框 icon（1.0.28）
 
 ### 做了什么
