@@ -13,6 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { Coverage, runSequence, DEFAULT_GEN, EXPLORE_GEN } from "./uvm/framework";
+import { runHeadingIndexSequence } from "./uvm/heading-index";
 
 const RUNS = Number(process.env.AAH_FUZZ_RUNS ?? 500);
 const OPS = Number(process.env.AAH_FUZZ_OPS ?? 60);
@@ -46,6 +47,17 @@ describe("约束随机序列（UVM 风格状态转移压测）", () => {
 		const cov = new Coverage();
 		for (let i = 0; i < RUNS; i++) {
 			runSequence(BASE_SEED + i, OPS, cov, EXPLORE_GEN);
+		}
+	}, 30000);
+
+	/**
+	 * M13 标题索引压测（uvm/heading-index.ts）：随机「setFile / removeFile / renameFile /
+	 * loadInitial」序列 + 参考模型（朴素 Map + filter + 排序）记分板对拍，专逮排序 / 二分 /
+	 * 增量更新不同步。内存操作很快，规模沿用 RUNS×OPS。
+	 */
+	it(`[M13] ${RUNS} 条 × ${OPS} 步：标题索引参考模型记分板全程一致`, () => {
+		for (let i = 0; i < RUNS; i++) {
+			runHeadingIndexSequence(BASE_SEED + i, OPS);
 		}
 	}, 30000);
 });

@@ -345,6 +345,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 				}),
 			);
 			void this.buildInitialHeadingIndex();
+			// M13（1.0.28）：已联动用户（升级/重启场景）的词典同步——VC 只在启动与
+			// 「Reload custom dictionaries」命令两个时机加载词典（已对照 VC 源码核实），
+			// 词典文件被我们重写后 VC 不会自动重读；启动时主动重写一次 + reload（带重试）。
+			if (this.settings.vcIntegrationMode !== "off") {
+				void this.syncVcDictionaryAfterStartup();
+			}
 		});
 	}
 
@@ -755,6 +761,23 @@ export default class AutoHeadingsPlugin extends Plugin {
 			// 词典条数上限（20,000）截断：一次性告知，不做静默丢弃。
 			this.vcTruncationNoticed = true;
 			new Notice(this.messages().noticeVcDictionaryTruncated(total));
+		}
+	}
+
+	/**
+	 * M13（1.0.28）：启动后的 VC 词典同步——把词典文件重写为当前索引内容（格式已是 VC 要求的
+	 * words 顶层），再调用 VC 的 reload 命令让 VC 重读。VC 插件可能晚于本插件加载（命令尚未
+	 * 注册），按 2s 间隔重试 5 次；耗尽后静默放弃（词典文件本身已是最新，用户手动执行 reload
+	 * 或重启 Obsidian 即生效，不打扰启动）。
+	 */
+	private async syncVcDictionaryAfterStartup(): Promise<void> {
+		await this.writeVcDictionary();
+		for (let attempt = 0; attempt < 5; attempt++) {
+			const ok = await tryReloadVcDictionaries(this.app);
+			if (ok) {
+				return;
+			}
+			await new Promise((resolve) => window.setTimeout(resolve, 2000));
 		}
 	}
 
