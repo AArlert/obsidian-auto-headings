@@ -420,6 +420,7 @@ const zh: Messages = {
 		"生成/维护标题词典文件（最多 2 万条标题，超出自动截断）",
 		"写入 VC 配置：词典路径 + 开启「自定义词典补全」+ 触发阈值调为 1 个字符",
 		"清空 VC 的「补全候选显示后缀」——这是全局项，你其它自定义词典的候选也不再带「 => ...」",
+		"把 VC 的「建议框最多显示条数」抬到至少 10（默认仅 5，同名标题会被挤出列表）——全局项，只抬不降",
 		"写入完成后自动重载 VC 词典（失败会另行提示）",
 	],
 	vcDescriptionOffHint:
@@ -725,6 +726,7 @@ const en: Messages = {
 		"Generate/maintain the heading dictionary file (capped at 20,000 headings, truncated beyond that)",
 		'Write to VC settings: dictionary path + enable "Custom dictionary complement" + set its trigger threshold to 1 character',
 		'Clear VC\'s "Displayed text suffix" — this is a global setting, so candidates from your other custom dictionaries will no longer carry " => ..." either',
+		'Raise VC\'s "Max number of suggestions" to at least 10 (its default of 5 pushes same-named headings out of the list) — a global setting, only ever raised, never lowered',
 		"Reload VC dictionaries automatically after writing (you'll be told if that fails)",
 	],
 	vcDescriptionOffHint:

@@ -124,6 +124,7 @@ describe("isValidVcSettingsShape：最小 schema 校验", () => {
 			isValidVcSettingsShape({ customDictionaryMinNumberOfCharactersForTrigger: "x" }),
 		).toBe(false);
 		expect(isValidVcSettingsShape({ displayedTextSuffix: 1 })).toBe(false);
+		expect(isValidVcSettingsShape({ maxNumberOfSuggestions: "10" })).toBe(false);
 	});
 
 	it("displayedTextSuffix 为字符串（含空串）时合法（1.0.32 新增字段）", () => {
@@ -270,6 +271,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		expect(liveSettings.enableCustomDictionaryComplement).toBe(true);
 		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1); // 触发阈值放宽到 1 字符
 		expect(liveSettings.displayedTextSuffix).toBe(""); // 1.0.32：清空「 => ...」显示后缀
+		expect(liveSettings.maxNumberOfSuggestions).toBe(10); // 1.1.0：默认 5 会把同名标题挤出列表
 		expect(liveSettings.other).toBe(1); // 其余字段原样保留
 		expect(saveData).toHaveBeenCalledOnce();
 		expect(app.vault.adapter.write).not.toHaveBeenCalled(); // 未走文件路径
@@ -288,6 +290,32 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		});
 		await enableAutoIntegration(app, DICT);
 		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1);
+	});
+
+	it("maxNumberOfSuggestions 只抬不降：用户设得更大时尊重原值", async () => {
+		const saveData = vi.fn(async () => {});
+		const liveSettings: Record<string, unknown> = { maxNumberOfSuggestions: 30 };
+		const app = makeApp({
+			installed: true,
+			enabled: true,
+			liveSettings,
+			liveSaveData: saveData,
+		});
+		await enableAutoIntegration(app, DICT);
+		expect(liveSettings.maxNumberOfSuggestions).toBe(30);
+	});
+
+	it("maxNumberOfSuggestions 低于下限（含 VC 默认的 5）：抬到 10", async () => {
+		const saveData = vi.fn(async () => {});
+		const liveSettings: Record<string, unknown> = { maxNumberOfSuggestions: 5 };
+		const app = makeApp({
+			installed: true,
+			enabled: true,
+			liveSettings,
+			liveSaveData: saveData,
+		});
+		await enableAutoIntegration(app, DICT);
+		expect(liveSettings.maxNumberOfSuggestions).toBe(10);
 	});
 
 	it("displayedTextSuffix 已是空串：保持不动（不做无谓写入）", async () => {

@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-08-09","version":"1.0.21","summary":"renumberOnOpen 改用 vault.cachedRead(file) 做判断（时序无关），不再读 editor.getValue()——1.0.20 的 setTimeout(0) 不够，实测滞后不止一个事件循环。写入侧加 editor 内容一致性闸，堵死「把 A 的编号写进 B」。J15 重写 6 例，去掉修复实测变红。"}
 {"type":"log","date":"2026-08-09","version":"1.0.20","summary":"file-open 同步读到的是上一篇的编辑器内容 ⇒ 用 A 的内容判断、把守卫提示挂到 B 的路径上（点进去说没什么可清理、切回 A 又不弹）。renumberOnOpen 推迟一个宏任务 + 重新确认活动文件；防抖计时器加 info.file 路径作废闸（此前写入侧无保护，可能把 A 的编号写进 B）。J15 三例，去掉修复实测变红。"}
 {"type":"log","date":"2026-08-09","version":"1.0.19","summary":"迁移守卫提示改为只为 getActiveFile() 那个文件发声 + 单条 activeGuardNotice 按路径去重 + 失效即收起；删 1.0.18 的 lastGuardedPath。根因：防抖计时器/批量刷新的发起方不保证是活动文件。测试替身补 getActiveFile（缺它正是两版没测出来的原因）。"}
 {"type":"log","date":"2026-08-09","version":"1.0.18","summary":"迁移守卫重新提示改按检查序列推导（lastGuardedPath 单变量），不再依赖 file-open——真机反馈 1.0.17 版本切标签页返回不一定重新提示。main.test.ts J13 重写+新增 4 例。发行说明改 1.0.18.md。"}
