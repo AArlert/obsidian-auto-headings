@@ -79,6 +79,18 @@ export interface Messages {
 	headingSuggestThisFile: string;
 	/** 标题索引因 vault 规模过大未完整构建时的一次性 Notice。 */
 	noticeHeadingIndexTruncated: (indexed: number) => string;
+	/** VC 启用时的让路策略（1.0.29）。 */
+	vcCoexistName: string;
+	vcCoexistDesc: string;
+	vcCoexistYield: string;
+	vcCoexistOwn: string;
+	/** 让路 + 词典联动未开 = 标题建议无处出现，面板上的显式警告（不静默失效）。 */
+	vcCoexistDeadEndWarn: string;
+
+	// —— 设置面板分区标题（1.0.29）——
+	sectionNumbering: string;
+	sectionLinking: string;
+	sectionSuggest: string;
 
 	// —— Various Complements 联动（M13）——
 	vcModeName: string;
@@ -368,6 +380,17 @@ const zh: Messages = {
 	headingSuggestThisFile: "（本文件）",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`标题索引因 vault 规模过大未完整构建，已索引 ${indexed} 个标题；建议功能在已索引范围内可用。`,
+	vcCoexistName: "Various Complements 启用时",
+	vcCoexistDesc:
+		"Obsidian 同一时刻只显示一个建议框，本插件与 Various Complements 抢的是同一个位置——本插件一旦命中，VC 自己的文件链接等建议就整个看不见了。默认让路给 VC：标题建议改由 VC 的建议框统一呈现（需开启下方的词典联动）。VC 未安装或未启用时本项无效。",
+	vcCoexistYield: "让路给 Various Complements（推荐）",
+	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
+	vcCoexistDeadEndWarn:
+		"当前标题建议不会出现在任何地方：本插件已让路给 Various Complements，而下方的词典联动尚未开启（VC 词典里没有标题条目）。请开启词典联动，或把上一项改为「本插件优先」。",
+
+	sectionNumbering: "自动编号",
+	sectionLinking: "链接维护",
+	sectionSuggest: "标题链接建议",
 
 	vcModeName: "Various Complements 联动",
 	vcModeDesc:
@@ -657,6 +680,17 @@ const en: Messages = {
 	headingSuggestThisFile: "(this file)",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`The heading index was not fully built because the vault is too large (${indexed} headings indexed); suggestions work within the indexed range.`,
+	vcCoexistName: "When Various Complements is enabled",
+	vcCoexistDesc:
+		"Obsidian shows only one suggestion popup at a time, and this plugin competes with Various Complements for that single slot — whenever this plugin matches, VC's own file-link and word suggestions become entirely invisible. The default is to yield: heading suggestions are then served through VC's popup instead (requires the dictionary integration below). Has no effect when VC is not installed or not enabled.",
+	vcCoexistYield: "Yield to Various Complements (recommended)",
+	vcCoexistOwn: "This plugin wins (hides VC's popup)",
+	vcCoexistDeadEndWarn:
+		"Heading suggestions currently appear nowhere: this plugin yields to Various Complements, but the dictionary integration below is off, so VC's dictionary holds no headings. Turn on the dictionary integration, or switch the setting above to “This plugin wins”.",
+
+	sectionNumbering: "Auto-numbering",
+	sectionLinking: "Link maintenance",
+	sectionSuggest: "Heading link suggestions",
 
 	vcModeName: "Various Complements integration",
 	vcModeDesc:

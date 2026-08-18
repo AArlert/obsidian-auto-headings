@@ -12,7 +12,10 @@
  * - `size` / `allEntries` 数量一致；
  * - 对一组**前缀查询**（含命中/未命中/大小写归一化冲突），DUT `queryPrefix(q, 20)` 的结果
  *   序列与参考「filter(startsWith) + (matchKey, path) 排序 + slice(0,20)」逐条一致；
- * - `hasAnyPrefixMatch` 一致。
+ * - `hasAnyPrefixMatch` 一致；
+ * - **Q22 后缀触发解析**（1.0.29）：对一组「无标点连写」样本，`resolveTriggerQuery` 经索引
+ *   二分选出的候选，与参考「候选序列 + 全量扫描」选出的候选一致，且 `start` 与 `text` 自洽
+ *   （替换区间不会吃掉用户已打的前半截）。
  *
  * 失败时抛错携带：种子 / 步号 / 操作轨迹 / 查询 / 两侧结果——照同一种子可复现（AAH_FUZZ_*）。
  */
@@ -22,6 +25,8 @@ import {
 	buildEntriesForFile,
 	type HeadingIndexEntry,
 } from "../../../src/headingindex";
+import { resolveTriggerQuery, suffixCandidates } from "../../../src/headingtrigger";
+import { normalizeForWhitelist } from "../../../src/whitelist";
 import { Rng } from "./rng";
 
 /** 文件路径池：含子目录路径，覆盖 path 次级排序与 rename 目标。 */
@@ -63,6 +68,22 @@ const QUERIES = [
 	"",
 ];
 
+/**
+ * 「用户连着打出来的一段无标点文字」样本（Q22，1.0.29）：中文正文没有词边界，触发词提取会把
+ * 前面已有的字一起吞进来，故这些样本的**整段**基本都不命中，靠后缀才可能命中。刻意混入
+ * 全落空样本（「一笔事务」——「事务」不在词池里）与整段直接命中样本（「交叉矩阵」）。
+ */
+const TYPED_SAMPLES = [
+	"一个交叉矩阵",
+	"前置附录",
+	"某某使用说明",
+	"这是总结",
+	"xxappendix",
+	"交叉矩阵",
+	"一笔事务",
+	"zzz",
+];
+
 /** 参考模型排序（与 DUT 的 sorted 同 key：matchKey 主键 + path 次级键）。 */
 function compareRef(a: HeadingIndexEntry, b: HeadingIndexEntry): number {
 	if (a.matchKey !== b.matchKey) {
@@ -88,6 +109,14 @@ function refQuery(
 }
 
 const basenameOf = (p: string) => p.split("/").pop()?.replace(/\.md$/i, "") ?? p;
+
+/** 参考模型：全量扫一遍，判断有没有 matchKey 以 query 开头的条目。 */
+function refHasPrefix(ref: Map<string, HeadingIndexEntry[]>, query: string): boolean {
+	if (!query) {
+		return false;
+	}
+	return [...ref.values()].flat().some((e) => e.matchKey.startsWith(query));
+}
 
 /** 用随机标题生成文件内容。 */
 function makeContent(rng: Rng): string {
@@ -139,6 +168,32 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 			if (dut.hasAnyPrefixMatch(q) !== expected.length > 0) {
 				throw new Error(
 					`[M13 压测] seed=${seed} ${label}：hasAnyPrefixMatch(${JSON.stringify(q)}) 不一致\n轨迹：${trace.join(" -> ")}`,
+				);
+			}
+		}
+		// —— Q22 后缀触发解析对拍（1.0.29）——
+		// DUT 走「候选序列 + 索引二分」，参考走「候选序列 + 全量扫描」，两侧必须选出同一个候选。
+		// 额外断言 start 自洽（`sample.slice(start) === text`）——这是「接受建议只替换被匹配上
+		// 的那一段、不吃掉前面已有的字」的地基，错了就是用户文本被吞。
+		for (const sample of TYPED_SAMPLES) {
+			const hit = resolveTriggerQuery(sample, 0, (q) => dut.hasAnyPrefixMatch(q));
+			const expected =
+				suffixCandidates(sample, 0).find((c) =>
+					refHasPrefix(ref, normalizeForWhitelist(c.text)),
+				) ?? null;
+			const shape = (v: { text: string; start: number } | null) =>
+				v ? `${v.text}@${v.start}` : "null";
+			if (shape(hit) !== shape(expected)) {
+				throw new Error(
+					`[M13 压测] seed=${seed} ${label}：resolveTriggerQuery(${JSON.stringify(sample)}) 不一致\n` +
+						`DUT: ${shape(hit)}\n参考: ${shape(expected)}\n轨迹：${trace.join(" -> ")}`,
+				);
+			}
+			if (hit && sample.slice(hit.start) !== hit.text) {
+				throw new Error(
+					`[M13 压测] seed=${seed} ${label}：resolveTriggerQuery(${JSON.stringify(sample)}) 的 ` +
+						`start 与 text 不自洽（替换区间会吃掉用户文本）：start=${hit.start} ` +
+						`text=${JSON.stringify(hit.text)}\n轨迹：${trace.join(" -> ")}`,
 				);
 			}
 		}

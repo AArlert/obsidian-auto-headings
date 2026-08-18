@@ -11,7 +11,9 @@ import {
 	buildHeadingLink,
 	extractTriggerToken,
 	isBlockedContext,
+	resolveTriggerQuery,
 	sortEntries,
+	suffixCandidates,
 } from "../../src/headingtrigger";
 import type { HeadingIndexEntry } from "../../src/headingindex";
 
@@ -57,6 +59,87 @@ describe("extractTriggerToken：触发词回溯提取", () => {
 	it(`回溯上限 ${MAX_TOKEN_LENGTH}：无标点大段文本只取末尾 ${MAX_TOKEN_LENGTH} 码点`, () => {
 		const long = "x".repeat(MAX_TOKEN_LENGTH + 10);
 		expect(extractTriggerToken(long)?.token).toHaveLength(MAX_TOKEN_LENGTH);
+	});
+});
+
+describe("suffixCandidates：整段 + 逐级后缀候选（Q22）", () => {
+	it("整段排第一，其后按用户输入量递减，start 指向各候选自身的起点", () => {
+		expect(suffixCandidates("一笔事务", 5)).toEqual([
+			{ text: "一笔事务", start: 5 },
+			{ text: "笔事务", start: 6 },
+			{ text: "事务", start: 7 },
+		]);
+	});
+
+	it(`后缀下限 ${MIN_QUERY_LENGTH}：不产出单字符候选（噪音防护）`, () => {
+		expect(suffixCandidates("交叉", 0)).toEqual([{ text: "交叉", start: 0 }]);
+		expect(suffixCandidates("交叉", 0).some((c) => c.text.length < MIN_QUERY_LENGTH)).toBe(
+			false,
+		);
+	});
+
+	it("按码点切分：代理对不会被劈成半个字符", () => {
+		// 「𠮷」是星平面字符（2 个 code unit），后缀 start 用 UTF-16 偏移换算。
+		expect(suffixCandidates("𠮷野家", 0)).toEqual([
+			{ text: "𠮷野家", start: 0 },
+			{ text: "野家", start: 2 },
+		]);
+	});
+});
+
+describe("resolveTriggerQuery：挑选命中的候选（Q22 核心）", () => {
+	/** 用一组 matchKey 模拟索引侧的 hasAnyPrefixMatch。 */
+	const indexOf =
+		(...keys: string[]) =>
+		(q: string) =>
+			keys.some((k) => k.startsWith(q));
+
+	it("「一笔事务」：整段不命中时退到后缀「事务」，start 指向后缀起点而非整段起点", () => {
+		// 起点必须是 7（「事务」的位置）——若返回 5（整段起点），接受建议会把「一笔」一起吃掉。
+		expect(resolveTriggerQuery("一笔事务", 5, indexOf("事务"))).toEqual({
+			text: "事务",
+			start: 7,
+			query: "事务",
+		});
+	});
+
+	it("整段本身命中时优先整段，不退化到更短后缀", () => {
+		expect(resolveTriggerQuery("交叉矩阵", 0, indexOf("交叉矩阵", "矩阵"))).toEqual({
+			text: "交叉矩阵",
+			start: 0,
+			query: "交叉矩阵",
+		});
+	});
+
+	it("整段与各级后缀全落空：返回 null（让路给原生补全）", () => {
+		expect(resolveTriggerQuery("一笔事务", 5, indexOf("交叉矩阵"))).toBeNull();
+	});
+
+	it(`长度 < ${MIN_QUERY_LENGTH} 的后缀不参与匹配：只有单字尾巴命中也不触发`, () => {
+		// 索引里只有【叉烧包】：打「交叉」不应因后缀「叉」而弹出建议。
+		expect(resolveTriggerQuery("交叉", 0, indexOf("叉烧包"))).toBeNull();
+	});
+
+	it("光标在行中间（「一笔事务|拆成」）：只看光标之前的文字，照样命中「事务」", () => {
+		// 提取只吃 lineTextBeforeCursor，光标后面还有字不影响；替换区间是 [事务起点, 光标)，
+		// 「拆成」原样留在后面。
+		const line = "一笔事务拆成";
+		const cursorCh = 4; // 「务」之后、「拆」之前
+		const extracted = extractTriggerToken(line.slice(0, cursorCh));
+		expect(extracted).toEqual({ token: "一笔事务", start: 0 });
+		expect(
+			resolveTriggerQuery(extracted!.token, extracted!.start, (q) => "事务".startsWith(q)),
+		).toEqual({ text: "事务", start: 2, query: "事务" });
+	});
+
+	it("查询串已归一化（大小写/全角）后再交给索引", () => {
+		const seen: string[] = [];
+		const hit = resolveTriggerQuery("ｘｘAPPENDIX", 0, (q) => {
+			seen.push(q);
+			return q === "appendix";
+		});
+		expect(hit).toEqual({ text: "APPENDIX", start: 2, query: "appendix" });
+		expect(seen[0]).toBe("xxappendix"); // NFKC 折全角 + 小写
 	});
 });
 

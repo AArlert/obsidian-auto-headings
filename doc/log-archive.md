@@ -5,6 +5,152 @@
 
 ---
 
+## 2026-08-11 M13 落地：标题链接建议 + Various Complements 联动（1.0.26）
+
+### 做了什么
+
+按 `doc/research/gitignore-axi-md-3-1-1-tab-axi-declarative-whistle.md` 完整执行（该目录已被
+`.gitignore` 排除不入库）。方案 §0 的 `.gitignore` 改动（排除 `doc/research/`）已由上一会话
+先行提交（`4af7ec3`），本周期核对时已在库，无需重复。本轮实现完整 M13。
+
+**功能一：标题链接建议（默认开）**——在任意笔记正文里打出与 vault 内标题「剥编号前缀后的
+原文」匹配的文字时弹出建议，Tab/点按接受后替换为指向该标题的链接（视觉保留用户打的原文）。
+
+- 新增 `src/headingindex.ts`：`HeadingIndexEntry` + `buildEntriesForFile`（复用 `parseHeadings` /
+  `stripPrefix` / `displayAnchor` / `normalizeForWhitelist`，与编号引擎完全解耦——白名单豁免、
+  「不编号」文件夹的标题照常可链）+ `HeadingIndex`（按 matchKey 排序数组 + 二分查找；
+  `loadInitial` 一次排序避免 O((N·H)²)；上限 50,000 条 / 单文件 500 条，截断置位 + 一次性
+  Notice，不静默丢弃；构造参数可调上限供测试模拟截断）。
+- 新增 `src/headingtrigger.ts`：`extractTriggerToken`（`\p{L}\p{N}` 向左回溯，最短 2 码点 /
+  上限 80）、`isBlockedContext`（标题行 / `#` 标签 / 未闭合 `[[` / 紧邻 `[` 四类礼貌规则）、
+  `sortEntries`（精确优先 → matchKey 长度升序 → path 兜底）、`buildHeadingLink`（同文件省略
+  文件名，alias 恒为用户打的原文）。
+- 新增 `src/headingsuggest.ts`：`HeadingLinkSuggest extends EditorSuggest`，四个生命周期方法
+  薄委托纯函数（方案 §8.2 选项 A：类本身不伪造测试，留真机手验）；IME 组合期间 `onTrigger`
+  首行短路（复用既有 `imeComposing`）；Tab 接受走 `Scope.register`（[] 修饰键，不误吃
+  Shift+Tab），内部 `.suggestions.useSelectedItem` 包 try/catch 静默降级——Obsidian 内部 API，
+  已登记为未来升级最优先复查点。
+- `main.ts` 接线：`headingIndex` 字段 + 按文件去抖 `headingIndexTimers`；`onload` 注册
+  EditorSuggest + `onLayoutReady` 内**先挂** `vault.on(create/modify/delete/rename)` **再起**
+  初始扫描（`buildInitialHeadingIndex`，按 200 文件/批让出主线程，复用 `debounceDelay` 不新增
+  设置项）；`setHeadingLinkSuggestEnabled` 运行期补建/清空（关闭即零成本）；`onunload` 清理。
+  **架构承诺修订**：spec.md §4「触发的性能边界」追加 M13 例外（全生命周期一次懒加载全库只读
+  扫描，此后仅按文件增量维护）——这是方案 §2.1 明确要求正面处理的冲突，不能假装没发生。
+
+**功能二：Various Complements 联动（默认关，需显式确认）**——把标题索引导出为 JSON 词典喂给
+VC 的自定义词典补全（VC 自身标题级补全 issue #72 开了 4 年多没做，本联动是真实的获客角度，
+前提是足够稳、不破坏用户已有 VC 配置）。
+
+- 新增 `src/vcintegration.ts`：探测三态（not-installed / disabled / enabled，`app.plugins`
+  结构化收窄不用 any）+ 分层防御写入——Layer 1 活体实例（`.settings` + `saveData`，不碰文件、
+  无竞态）→ Layer 2 文件级读改写（JSON.parse 全量、只改 `customDictionaryPaths` /
+  `enableCustomDictionaryComplement` 两字段、JSON.stringify 全量写回，**绝不重建对象**）→
+  Layer 3 schema 校验失败整体放弃（`isValidVcSettingsShape` 存在才校验类型，并拒绝数组）；
+  `mergeDictionaryPath`（换行分隔字符串合并，最易错一步单独成纯函数）；`buildVcDictionaryJson`
+  （displayed 用**不含 WJ** 的干净原文——顺带消解 spec 附录 A.2 记录的「VC 精确匹配被 WJ
+  打穿」风险，已回填该节）；reload 命令调用与失败兜底（与「写入失败」提示分离）。
+- 设置：`headingLinkSuggestEnabled`（默认 true）+ `vcIntegrationMode`（off/manual/auto，默认
+  off）+ 三态下拉（沿用 `languageName` 的 addDropdown 先例）；**任何离开 off 的切换必须过确认
+  框**（新建 `src/settings/tabs/VcIntegrationSection.ts`，两个 Modal 照抄 DangerTab 结构）；
+  词典路径展示 + 一键复制（Clipboard API + execCommand 兜底）。
+- i18n 中英 23 个新键（含最高风险的自动配置确认文案，逐句列明会读写 VC 配置）；styles.css
+  建议框样式；README 双语各加一条卖点 + 快速上手补一行。
+
+**测试**：新增 `tests/dev_tests/headingindex.test.ts`（16 例）/ `headingtrigger.test.ts`
+（16 例）/ `vcintegration.test.ts`（24 例）；`main.test.ts` 追加 M13 两个 describe（8 例：
+去抖窗口/重置/切走作废/剥前缀收录/关闭不构建/运行期补建/截断 Notice）；
+`obsidian-mock.ts` 补 `EditorSuggest`/`PopoverSuggest`/`Scope` 最小替身 + Plugin 的
+`registerEditorSuggest`（headingsuggest 模块加载必需）。`doc/testplan.md` 新增 Q 分类 19 行
+（Q1–Q19），dev 可覆盖的逻辑行已回填 ✅/⚠️，真机项（Q4/Q5/Q9/Q10–Q15）保持 🔲 待用户手验。
+spec.md 落 M13 Roadmap 条目 + 执行顺序表第 6 位 + A.2 消解回填。
+
+### 没做什么
+
+- 方案 §10 Out of scope 全部未做：块级 `#^blockid`、模糊/拼音匹配、跨 vault、标题内标点触发、
+  围栏跨行检测、VC 联动关闭时的反向清理、其他补全插件联动、批量转换存量正文、索引持久化缓存。
+- `HeadingLinkSuggest` 类本身（Tab 键、DOM 渲染、移动端点按）未做自动化测试——方案 §8.2
+  选项 A 明确推荐：`EditorSuggest` 真实交互是 DOM/CM6 行为，伪造容易造出「测试通过但真实行为
+  对不上」的假安全感。
+- VC 侧 [C：未核实] 项（插件 id / `app.plugins` 形状 / data.json 字段名与类型 / 活体 `.settings`
+  字段 / reload 命令 id / Tab 默认行为 / compositionend 后是否立即重触发）全部按调研值实现，
+  在 testplan Q 行与代码注释标注，需真实环境逐条核对（方案 §12）。
+
+### 下一步
+
+- 真机手验（对照 testplan Q1–Q19 与方案 §11 清单）：建议框 DOM/Tab 接受、**已编号标题锚点
+  含 WORD_JOINER 时链接可点**（本功能最核心的正确性要求）、移动端点按、中文输入法组合、
+  真实 VC 手动/自动两条路径 + 至少一次刻意构造的失败场景（临时改坏 VC data.json 验证
+  Layer 3 兜底不写坏文件）。
+- 若实测发现 [C：未核实] 项与实现不符：修正 `vcintegration.ts`/`headingsuggest.ts` 对应实现，
+  不得为「让代码能跑」绕过 schema 校验或静默吞错（方案 §12 处理原则）。
+
+### 验证方式
+
+`npm run lint` 全绿 / `npm run build`（tsc -noEmit + esbuild）通过 / `npm test` 590 通过，
+唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红（与本次改动无关）/ `npm run
+format:check` 与 `npm run release` 在 preflight 内统一验证。未做真机手验（本环境无 Obsidian
+实体），按仓库惯例保持 testplan 对应行 🔲 并写明「待用户真机手验」。本周期派发 0 次（无
+SubAgent，全部主模型直接实现）。
+
+---
+
+## 2026-08-10 bug 修复：快捷键转空标题——编号写入光标错位 + 行尾多一个空格（1.0.25）
+
+### 做了什么
+
+用户实机反馈（桌面端）：先用快捷键把当前行变成标题，插件插入自动编号的同时，光标位置不对、
+行尾还多出一个空格——描述是"## <光标><编号区域><空格><空格>"，光标应落在编号之后、多出的
+那个空格不该存在。没有直接照字面猜（"光标"两字容易读成正文内容），先用 `AskUserQuestion` 结
+构化确认了具体现象是哪一种解读，再动手查根因。
+
+**根因是同一处触发条件下的两个独立 bug**，都出在"用快捷键/编辑把一个空行（或标题正文已清空
+的标题行）转成标题、光标停在行尾"这个场景（旧内容整体是新内容的前缀，纯追加）：
+
+1. **行尾多一个空格**：`preserveCursorLineTrailingSpace`（1.0.23 引入，见 J19 那次周期）用
+   `newLines[line].endsWith(trailing)` 判断"新内容是否已经带着旧行尾空白"，但 `buildPrefix`
+   在标题文本为空时以不可见的 WORD_JOINER 哨兵收尾（{@link render.ts}）——`endsWith` 被这个哨
+   兵挡住，误判成"没有"，于是把旧的 `## ` 里那个空格又补了一份，叠成两个。改法：比对前先剥掉
+   新行尾部的 WORD_JOINER 哨兵，只看真正可见的字符。
+2. **光标卡在编号前面**：`writeLineDiff`/`lineChange` 为了不打断正在敲字的用户，只写回真正变
+   化的那一段（J19 的最小范围改写）。对"旧内容是新内容前缀"这种纯追加场景，算出的插入点与
+   光标恰好落在同一坐标——CM6 对"插入点=光标位置"的默认关联是**光标留在插入文本之前**，编号
+   写完光标反倒卡在数字前面，用户接着打的字会插到编号中间。这一点这次才第一次显式处理：新增
+   `cursorSelectionForEmptyHeading`，判定"标题渲染后仍为空"（`text.endsWith(WORD_JOINER)`，
+   与模板前缀/后缀/分隔符风格无关的通用判据），命中时随写回事务显式把光标钉在行尾——已有标题
+   正文的行不受影响，仍交给编辑器按插入点自然映射（该场景本就正确，见 `lineChange` 头部注释）。
+   `editor.transaction` 本身就支持在 `changes` 之外带一个 `selection` 字段一并生效，不需要额外
+   一次调用。
+
+`main.ts`：`preserveCursorLineTrailingSpace` 改比对逻辑；新增 `cursorSelectionForEmptyHeading`；
+`writeLineDiff` 加一个可选 `selection` 参数透传给 `editor.transaction`；`applyRenumber` 接线。
+测试：`tests/dev_tests/main.test.ts` 补 `FakeEditor.lastSelection`（记录事务显式带的选区，并同步
+更新 `cursor` 模拟真实编辑器落点）+ 新增 describe 块 3 例（J21：单空格不叠加 / 光标钉在行尾 / 已
+有标题正文的行不受影响不覆盖光标）。
+
+验证方式：`npm test`（526 通过，唯一失败是 `whitelist.test.ts:406` 的 Windows ICU 排序已知假
+红，与本次改动无关）/ `npm run lint` / `npm run format:check`（首次跑因新代码未格式化失败，
+`npx prettier --write src/main.ts` 后复跑全绿）/ `npm run test:fuzz`（核心写回路径改动，模糊测
+试全绿，无新假红）。未做移动端/真机手验——这是纯逻辑修复，`FakeEditor` 已能模拟"显式 selection
+生效"这条真实 Obsidian/CM6 行为，判定为已被单测覆盖。
+
+### 没做什么
+
+- 没有改动"已有标题正文、用户在中间位置编辑"这条路径的光标行为——那条本就交给编辑器按插入点
+  自然映射，且验证过现有设计对它是正确的（新增判据仅在标题渲染为空时才生效，加了专门的回归测
+  试防止误伤）。
+- 没有处理"光标不在被保护行、但同样在插入点上"的场景——`protectLine` 只在自动路径（防抖触发）
+  传入，手动命令（立即重新编号等）不受这层保护约束，也不在本次修复范围内（历来如此，见 J11 对
+  手动命令的说明）。
+
+### 下一步
+
+- ✅ **2026-08-10 用户真机确认解决**："实测已解决"，随即要求收尾推送并打 tag 发布——testplan
+  J21 已回填确认。
+- 其余待办不变：J20 已用户确认解决；P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM
+  手验仍待办，见 status.jsonl 首行与更早周期块。
+
+---
+
 ## 2026-08-10 UX 小改：清理外来编号确认框移动端视觉对齐 PC（1.0.24）
 
 ### 做了什么
