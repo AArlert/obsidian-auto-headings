@@ -58,6 +58,25 @@ export interface AutoHeadingsSettings {
 	 * 手动命令（「立即重新编号」等）不受本闸约束——用户显式敲命令即明确意图。
 	 */
 	retired: boolean;
+	/**
+	 * 标题链接建议（M13，见 spec.md Roadmap M13）：在任意笔记正文里打出与 vault 内某标题原文
+	 * 匹配的文字时，弹出建议，接受后替换为指向该标题的可点击链接（视觉上保留用户打的原文）。
+	 * **默认开**——与「全局自动编号」`autoNumber`、Backlink 同步 `updateBacklinks` 一样，是面向
+	 * 全体用户的默认能力，不是 opt-in。关闭后标题索引完全不构建（见 headingindex.ts），
+	 * 内存/CPU 成本降为零。
+	 */
+	headingLinkSuggestEnabled: boolean;
+	/**
+	 * Various Complements 联动模式（M13，见 spec.md Roadmap M13 与 vcintegration.ts）：
+	 * - "off"：不联动（**默认**——不能因为 headingLinkSuggestEnabled 默认开就跟着默认开，
+	 *   需用户在设置面板显式选择）。
+	 * - "manual"：只生成/维护 JSON 词典文件，把路径显示给用户，引导其自行粘贴进 VC 设置；
+	 *   不碰 Various Complements 的任何配置文件。
+	 * - "auto"：额外尝试把词典路径自动写入 Various Complements 的设置（探测运行时实例优先，
+	 *   文件级读改写兜底，schema 校验失败整体放弃）。
+	 * 任何离开 "off" 的切换都必须先过独立确认框（见 VcIntegrationSection.ts）。
+	 */
+	vcIntegrationMode: "off" | "manual" | "auto";
 }
 
 /** 防抖延迟的边界与默认值（见 spec.md §3.9）。 */
@@ -80,6 +99,8 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	updateBacklinks: true,
 	backlinksIntroShown: false,
 	retired: false,
+	headingLinkSuggestEnabled: true,
+	vcIntegrationMode: "off",
 };
 
 /** 将防抖延迟夹到合法范围 [50, 2000]，非数字回退到默认值。 */

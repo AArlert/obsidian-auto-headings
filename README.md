@@ -25,13 +25,14 @@ Everything below is what you get the moment the plugin is enabled, before you op
 -   **Two independent switches, plus a manual override.** Enabling the plugin isn't the same as turning it loose on your whole vault: a global auto-numbering toggle decides whether editing a note triggers renumbering at all. Add `obsidian-auto-headings: true` or `false` to a note's frontmatter to override that toggle for one file — force it on while everything else stays untouched, or force it off for a file you don't want the plugin near. The **Renumber now** command ignores both: typing a command is explicit enough intent to skip every switch and renumber immediately.
 -   **Configuration lives in Settings, not in your notes.** Templates, path rules, and the whitelist are all managed from the settings panel — nothing gets written to frontmatter except that one optional override key above. Open a note and there's no sign the plugin is even installed.
 -   **Bilingual out of the box.** The entire UI follows Obsidian's own language setting (English / 简体中文), or can be locked to one manually. Fully usable on mobile (`isDesktopOnly: false`).
+-   **Type it, link it.** While typing in any note, Auto Headings suggests vault headings that match what you've written — press `Tab` (or tap on mobile) and your text becomes a clickable link to that heading, keeping the words you typed visible. Also on by default, and it works for already-numbered headings too.
 
 ### Quick start
 
 1. Install and enable the plugin (see [Install](#install)).
 2. Open any note and edit it — headings from H2 down get numbered automatically.
 3. Open **Settings → Auto Headings** if you want to go further:
-    - **General**: language, global auto-numbering toggle, backlink sync, debounce delay.
+    - **General**: language, global auto-numbering toggle, backlink sync, heading link suggestions, debounce delay.
     - **Paths & templates**: the path-rule table and the template editor (live preview, whitelist).
     - **Sensitive actions**: the three cleanup entries.
 4. Per-file override: add `obsidian-auto-headings: true/false` in frontmatter to force-enable/disable a single file. The command **Renumber now** bypasses all switches.

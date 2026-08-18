@@ -127,6 +127,7 @@ export class Plugin {
 	addSettingTab(): void {}
 	registerEvent(): void {}
 	registerDomEvent(): void {}
+	registerEditorSuggest(): void {}
 	async loadData(): Promise<unknown> {
 		return this._data;
 	}
@@ -205,6 +206,34 @@ export class Modal {
 
 /** App 类型在源码里仅用作类型注解；提供一个空类以防个别打包路径未擦除该导入。 */
 export class App {}
+
+/**
+ * `Scope` 替身（M13）：headingsuggest.ts 构造时注册 Tab 键回调，仅需可调用 `register`。
+ */
+export class Scope {
+	register(): unknown {
+		return {};
+	}
+}
+
+/**
+ * `PopoverSuggest`/`EditorSuggest` 替身（M13）：headingsuggest.ts 的类骨架需要可 extends、
+ * 可赋值 app/scope/limit/context——dev_tests 不测 EditorSuggest 类本身的 DOM/CM6 交互
+ * （方案 §8.2 选项 A，留给真机手验），这里只为模块加载提供最小形状。
+ */
+export class PopoverSuggest {
+	app: unknown;
+	scope: Scope;
+	constructor(app: unknown) {
+		this.app = app;
+		this.scope = new Scope();
+	}
+}
+
+export class EditorSuggest extends PopoverSuggest {
+	context: unknown = null;
+	limit = 0;
+}
 
 /**
  * `getLanguage` 替身：i18n.ts 的语言探测改走官方 API（1.8.0+）后，测试经此设定「Obsidian 界面语言」。

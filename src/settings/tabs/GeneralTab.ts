@@ -1,6 +1,7 @@
 import { Setting } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { DEBOUNCE_DEFAULT, DEBOUNCE_MAX, DEBOUNCE_MIN, clampDebounceDelay } from "../model";
+import { renderVcIntegrationSection } from "./VcIntegrationSection";
 
 /**
  * 「全局设置」TAB（M7 多 TAB 重构）：语言 / 全局自动编号 / Backlink 同步 / 复制净化 / 防抖延迟。
@@ -66,6 +67,16 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 			}),
 		);
 
+	// —— 标题链接建议开关（M13，默认开，见 spec.md Roadmap M13）——
+	new Setting(containerEl)
+		.setName(t.headingLinkSuggestName)
+		.setDesc(t.headingLinkSuggestDesc)
+		.addToggle((toggle) =>
+			toggle.setValue(plugin.settings.headingLinkSuggestEnabled).onChange(async (value) => {
+				await plugin.setHeadingLinkSuggestEnabled(value);
+			}),
+		);
+
 	// —— 防抖延迟（滑块，M6，见 spec.md §3.9）——
 	new Setting(containerEl)
 		.setName(t.debounceName)
@@ -90,4 +101,7 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 					tab.display();
 				}),
 		);
+
+	// —— Various Complements 联动（M13，见 spec.md Roadmap M13）——
+	renderVcIntegrationSection(tab, containerEl);
 }
