@@ -153,7 +153,12 @@ class VcAutoModeConfirmModal extends Modal {
 		const t = this.plugin.messages();
 		contentEl.empty();
 		contentEl.createEl("h3", { text: t.vcAutoConfirmTitle });
+		// 1.0.27：长段 ①②③ 文案改为「短总述 + 要点列表」，确认框整洁可扫读。
 		contentEl.createEl("p", { text: t.vcAutoConfirmBody });
+		const ul = contentEl.createEl("ul");
+		for (const point of t.vcAutoConfirmPoints) {
+			ul.createEl("li", { text: point });
+		}
 		new Setting(contentEl)
 			.addButton((btn) =>
 				btn.setButtonText(t.cancel).onClick(() => {

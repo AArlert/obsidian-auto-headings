@@ -5,14 +5,16 @@
  * 不用离开自己习惯的建议框就能补全标题链接。**安全优先**（分层防御）：
  * - Layer 0：探测安装状态（app.plugins.manifests，不在官方 .d.ts 里，结构化收窄）。
  * - Layer 1（首选）：VC 活体实例读写（.settings + 继承自 Plugin 的 saveData）。
- * - Layer 2（兜底）：直接读改写 VC 的 data.json——JSON.parse 全量解析、只改两个已知字段、
+ * - Layer 2（兜底）：直接读改写 VC 的 data.json——JSON.parse 全量解析、只改已知字段、
  *   JSON.stringify 全量写回，**绝不重建对象**（否则会清空 VC 其余配置）。
  * - Layer 3：两层都失败或 schema 校验不通过 → 整体放弃，不做部分写入。
  *
  * 本模块无状态、不碰 this.settings（Obsidian 事件接线与落盘在 main.ts）。
  *
- * 涉及 VC 内部结构 / 未公开 API 的断言均为调研结论，标注见方案 §12 核实清单，实现前需在
- * 真实环境逐条核对；校验失败就该老实回退到手动模式，不能为「让代码能跑」绕过校验。
+ * 涉及 VC 内部结构的断言已对照 VC 源码逐条核实（clone 留档于 doc/research/
+ * vc-source-verification.md，基准：VC main 分支 2026-08-11）；Obsidian 内部 API
+ * （app.plugins / .suggestions）仍按「结构化收窄 + 运行时判空 + 真机核对」处理。
+ * 校验失败就该老实回退到手动模式，不能为「让代码能跑」绕过校验。
  */
 
 import { normalizePath, type App } from "obsidian";
@@ -21,29 +23,41 @@ import type { HeadingIndexEntry } from "./headingindex";
 const VC_PLUGIN_ID = "various-complements";
 /** VC 数据文件相对 vault 根的路径（configDir 即 .obsidian）。 */
 const VC_DATA_REL_PATH = "plugins/various-complements/data.json";
-/** VC「重新加载自定义词典」命令的运行时 id（`插件id:命令id` 惯例，见方案 §12 核实清单第 5 条）。 */
+/** VC「重新加载自定义词典」命令的运行时 id（`插件id:命令id` 惯例，已对照 VC 源码核实）。 */
 const VC_RELOAD_COMMAND_ID = "various-complements:reload-custom-dictionaries";
 /** VC 词典文件重写节流（方案 §5.8，可调常量）：重写整个 JSON 文件比更新内存索引昂贵得多。 */
 export const VC_DICTIONARY_THROTTLE_MS = 3000;
+/**
+ * VC 词典条数上限（可调常量）：VC 端会全量加载词典建索引（wordByValue + 首字母桶），
+ * 独立于本插件内存索引上限（50,000）设更小值——20,000 条紧凑 JSON ≈ 2.2MB，控制 VC 侧
+ * 成本与 iCloud 同步体积；超出截断并弹一次性 Notice（见 main.ts writeVcDictionary）。
+ */
+export const MAX_VC_DICTIONARY_ENTRIES = 20000;
 
 export type VcInstallStatus = "not-installed" | "disabled" | "enabled";
 
 /**
- * VC data.json 的最小已知形状——只声明我们要读写的两个字段，其余字段原样透传，绝不重建对象
- * （重建对象会把 VC 的其余配置全部清空，是一次真正的数据破坏）。字段名/类型见方案 §12 核实
- * 清单第 3 条：[C：未核实] 需对照当前实际安装的 VC 版本复核。
+ * VC data.json 的最小已知形状——只声明我们要读写的字段，其余字段原样透传，绝不重建对象
+ * （重建对象会把 VC 的其余配置全部清空，是一次真正的数据破坏）。字段名/类型已对照 VC
+ * 源码核实（doc/research/vc-source-verification.md）。
  */
 export interface VcSettingsShape {
 	/** 自定义词典路径列表，**换行分隔的字符串**（不是数组！）。 */
 	customDictionaryPaths?: string;
 	/** 自定义词典补全总开关。 */
 	enableCustomDictionaryComplement?: boolean;
+	/**
+	 * 自定义词典补全的触发最小字符数（VC 默认 0 = 跟随全局/分词策略阈值，default 策略为 3，
+	 * 即打 1–2 个字符根本不触发）。自动配置时置为 1，兑现「打 1 个字就出标题建议」；
+	 * 该字段只放宽自定义词典类补全，不影响 VC 其它补全类型。
+	 */
+	customDictionaryMinNumberOfCharactersForTrigger?: number;
 	[key: string]: unknown;
 }
 
 /**
- * 两个字段「存在才校验类型」——缺失合法（VC 用深合并兜底缺失字段），类型不符才算非法，
- * 避免对「合法但恰好还没写过这两个键」的 data.json 误判为不合法。
+ * 各字段「存在才校验类型」——缺失合法（VC 用深合并兜底缺失字段），类型不符才算非法，
+ * 避免对「合法但恰好还没写过这些键」的 data.json 误判为不合法。
  */
 export function isValidVcSettingsShape(data: unknown): data is VcSettingsShape {
 	if (typeof data !== "object" || data === null || Array.isArray(data)) {
@@ -56,6 +70,12 @@ export function isValidVcSettingsShape(data: unknown): data is VcSettingsShape {
 	if (
 		"enableCustomDictionaryComplement" in d &&
 		typeof d.enableCustomDictionaryComplement !== "boolean"
+	) {
+		return false;
+	}
+	if (
+		"customDictionaryMinNumberOfCharactersForTrigger" in d &&
+		typeof d.customDictionaryMinNumberOfCharactersForTrigger !== "number"
 	) {
 		return false;
 	}
@@ -86,20 +106,39 @@ export function vcDictionaryPath(pluginDir: string): string {
 	return normalizePath(`${pluginDir}/vc-heading-dictionary.json`);
 }
 
+/** buildVcDictionaryJson 的返回值：词典内容 + 是否因超上限被截断（供调用方弹一次性 Notice）。 */
+export interface VcDictionaryOutput {
+	/** 词典文件内容（紧凑 JSON，无缩进——控制体积与 iCloud 同步成本）。 */
+	json: string;
+	/** 标题总数是否超过 {@link MAX_VC_DICTIONARY_ENTRIES}（超出部分被截断）。 */
+	truncated: boolean;
+	/** 传入的标题条目总数。 */
+	total: number;
+}
+
 /**
  * 生成 VC JSON 词典内容。
  *
  * 词典是「静态文件」，生成时不知道未来用户会在哪个文件里打字，因此不能用 headingtrigger.ts 的
- * 「同文件省略文件名」优化——一律用完整的 `[[basename#anchor|...]]` 形式。alias 恒为标题的完整
- * 原文（displayText）——VC 按 displayed 匹配、接受时整体替换为 value，是「前缀展开为全文」的
- * 语义，与本插件自己的 EditorSuggest「保留用户实际打的原文」是两种不同但都合理的既定行为。
+ * 「同文件省略文件名」优化——一律用完整的 `[[basename#anchor|...]]` 形式；alias 恒为标题的完整
+ * 原文（displayText）——VC 按 displayed 匹配、接受时整体替换为 value（「前缀展开为全文」语义）。
+ *
+ * **格式要求（已对照 VC 源码核实）**：当前 VC 版本的 JSON 词典顶层必须是 `words` 数组
+ * （`{ words: [{ value, displayed }] }`）——裸数组会让 VC 解析抛错、整个词典加载失败（用户
+ * 实测 #5 的根因之一）。超过 {@link MAX_VC_DICTIONARY_ENTRIES} 时截断并置 `truncated`。
  */
-export function buildVcDictionaryJson(entries: HeadingIndexEntry[]): string {
-	const items = entries.map((e) => ({
+export function buildVcDictionaryJson(entries: HeadingIndexEntry[]): VcDictionaryOutput {
+	const total = entries.length;
+	const taken = entries.slice(0, MAX_VC_DICTIONARY_ENTRIES);
+	const items = taken.map((e) => ({
 		value: `[[${e.basename}#${e.anchor}|${e.displayText}]]`,
 		displayed: e.displayText,
 	}));
-	return JSON.stringify(items, null, "\t");
+	return {
+		json: JSON.stringify({ words: items }),
+		truncated: total > MAX_VC_DICTIONARY_ENTRIES,
+		total,
+	};
 }
 
 /**
@@ -136,8 +175,8 @@ export function detectVcStatus(app: App): VcInstallStatus {
  *
  * 好处：不需要自己拼 VC 的 data.json 路径；直接改 VC 当前持有的内存对象，saveData 是 VC 从
  * Plugin 基类继承的公开方法，语义上等价于「帮 VC 自己按一次保存」，不会跟 VC 尚未落盘的其它
- * 内存态修改产生竞态。[C：未核实] VC 主插件类是否真的把设置挂在公开字段 `.settings` 上
- * （方案 §12 核实清单第 4 条）。
+ * 内存态修改产生竞态。`.settings` 公开字段已对照 VC 源码核实（`VariousComponents extends
+ * Plugin`，标准 `this.settings`，见 doc/research/vc-source-verification.md）。
  */
 async function tryWriteViaLiveInstance(
 	app: App,
@@ -159,6 +198,7 @@ async function tryWriteViaLiveInstance(
 		dictionaryPath,
 	);
 	settings.enableCustomDictionaryComplement = true;
+	applyTriggerThreshold(settings);
 	await vc.saveData(settings);
 	return "ok";
 }
@@ -166,7 +206,7 @@ async function tryWriteViaLiveInstance(
 /**
  * Layer 2：文件级读改写兜底（VC 未启用/未加载/活体形状不符时）。
  *
- * 关键约束：JSON.parse 整个文件、只改两个已知字段、JSON.stringify 整个对象写回——绝不用
+ * 关键约束：JSON.parse 整个文件、只改已知字段、JSON.stringify 整个对象写回——绝不用
  * 「已知字段拼一个新对象」的写法，否则会把 VC 的其余设置全部清空。
  */
 async function tryWriteViaAdapterFile(
@@ -192,8 +232,21 @@ async function tryWriteViaAdapterFile(
 		dictionaryPath,
 	);
 	settings.enableCustomDictionaryComplement = true;
+	applyTriggerThreshold(settings);
 	await app.vault.adapter.write(vcDataPath, JSON.stringify(settings, null, "\t"));
 	return "ok";
+}
+
+/**
+ * 把自定义词典的触发阈值放宽到 1 字符（用户实测：只打一个字应能出标题建议）。
+ *
+ * VC 默认 0 = 跟随全局/分词策略阈值（default 策略为 3，1–2 字符不触发）；置 1 后
+ * VC 取 `min(全局阈值, 1)` = 1。仅当现值不是 1 才写（用户显式设为 1 则不动）。
+ */
+function applyTriggerThreshold(settings: VcSettingsShape): void {
+	if (settings.customDictionaryMinNumberOfCharactersForTrigger !== 1) {
+		settings.customDictionaryMinNumberOfCharactersForTrigger = 1;
+	}
 }
 
 export type VcAutoIntegrationResult =

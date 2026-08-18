@@ -1909,9 +1909,20 @@ i18n.ts                     // 中英双语文案（Messages 接口 + zh/en 两�
       50,000 条 / 单文件 500 条、截断时一次性 Notice 不静默丢弃）
 - [x] `EditorSuggest` 建议框（`headingsuggest.ts`：前缀增量匹配、桌面 Tab + 移动点按接受、
       上下文屏蔽礼貌规则、IME 组合不触发）
-- [x] 链接锚点复用 `backlinks.ts` 的 `displayAnchor`，正确处理已编号标题的 WORD_JOINER
+- [x] 链接锚点复用 `backlinks.ts` 的 `displayAnchor`，正确处理已编号标题的 WORD_JOINER；
+      **1.0.27 产品决策**：接受建议时 alias 自动补全为剥编号前缀后的**完整标题名**
+      （用户实测反馈「希望是完整的标题名而不是残缺的」，与 VC 词典 value 的 alias 形态一致）
 - [x] Various Complements 联动（`vcintegration.ts`：手动引导 / 自动配置两模式、分层防御写入、
       schema 校验失败整体放弃），两模式均需用户显式确认后才开启
+- [x] **VC 侧事实已对照源码核实（1.0.27，clone 留档 doc/research/vc-source-verification.md）**：
+      词典 JSON 顶层必须是 `{"words":[...]}`（裸数组会让 VC 解析抛错、整个词典加载失败——这是
+      用户实测「联动后打一个『交』无候选」的根因之一，1.0.27 已修复）；`customDictionaryPaths` /
+      `enableCustomDictionaryComplement` 字段名与 reload 命令 id `reload-custom-dictionaries`
+      全部确认；自动配置顺带把 VC 的 `customDictionaryMinNumberOfCharactersForTrigger` 置 1
+      （VC 默认触发阈值 3，1–2 个字符不触发）
+- [x] **词典轻量三件套（1.0.27）**：紧凑 JSON（无缩进，20,000 条 ≈ 2.2MB 封顶）+
+      内容未变不写盘（内存缓存比对，标题无变化时 iCloud/同步零流量）+
+      词典独立条数上限 `MAX_VC_DICTIONARY_ENTRIES = 20,000`（超出截断 + 一次性 Notice）
 - [ ] `doc/testplan.md` §Q 场景回填（Q4/Q5/Q9/Q10–Q15 等真机手验项待用户实机确认）
 
 不是本里程碑目标（见调研方案 §10 Out of scope）：块级 `#^blockid` 匹配、模糊/拼音匹配、跨 vault
@@ -2050,7 +2061,7 @@ npm test
    Various Complements 的补全、乃至 Obsidian Publish 生成的 URL 锚点（WJ 会被 percent-encode 成
    `%E2%81%A0` 进 URL）——都是同一类伤。逐插件打补丁式披露不可持续，应升级为**一次性把契约说清、
    任何下游都能照办**的《标记字符契约》（→ `doc/marker-contract.md`，英文，因为受众是下游开发者）。
-   **M13 已部分消解（1.0.26）**：本插件的 Various Complements 联动侧主动规避——喂给 VC 词典的
+   **M13 已部分消解（1.0.27 生效）**：本插件的 Various Complements 联动侧主动规避——喂给 VC 词典的
    `displayed`（匹配/展示）字段是未归一化、不含 WJ 的干净标题文本，WJ 只存在于写入链接的锚点里
    （供 Obsidian 按字节解析），VC 的精确匹配不再被 WJ 打穿（见 [Milestone 13](#milestone-13--标题交叉引用自动补全--various-complements-联动)）。
 2. **WJ 没有命名空间。** 参考来源 gurjar1/auto-heading-obsidian 也用 U+2060。两插件共存（或用户

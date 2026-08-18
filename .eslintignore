@@ -4,5 +4,6 @@ main.js
 dist/
 release/
 coverage/
+doc/research/
 
 .DS_Store

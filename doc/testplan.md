@@ -453,15 +453,15 @@
 | Q1 | 面板关闭「标题链接建议」开关后，打出与某标题原文匹配的文字 | 不弹出任何建议；`headingIndex.size` 为 0（内存索引未构建，验证「关闭即零成本」） | ✅ 逻辑（`main.test.ts`：关闭不安排更新 / 关闭即清空）/ 🔲 面板点击手验 |
 | Q2 | 面板打开该开关（默认即打开），在任意笔记正文里打出与 vault 内某个标题「剥编号前缀后的原文」完全匹配的文字（如该标题为 `## 1.1 交叉矩阵`，打「交叉矩阵」） | 出现建议候选，候选文案为该标题的原文（不含编号），候选下方显示来源文件路径 | ✅ 逻辑（`headingindex.test.ts` 剥前缀收录 + `main.test.ts`）/ 🔲 建议框 DOM 手验 |
 | Q3 | 只打出候选标题的**前缀**（如标题是「交叉矩阵与其应用」，只打「交叉矩阵」） | 候选照常出现（前缀增量匹配，边打边筛，随每敲一个字符候选集合收窄） | ✅ 逻辑（`queryPrefix` 前缀匹配单测）/ 🔲 逐字符 UI 手验 |
-| Q4 | **桌面端**：候选出现后按 Tab | 建议被接受：刚打的文字被替换为 `[[basename#锚点\|用户实际打的原文]]`（目标在当前文件内则省略 basename，写作 `[[#锚点\|原文]]`）；替换后文本视觉上仍为用户打的那段原文，点击可正确跳转（**尤其目标标题已被编号、锚点含 WORD_JOINER 的情况**）；光标落在插入内容之后 | 🔲 **待真机手验**（Tab 键绑定与 `.suggestions.useSelectedItem` 是内部 API，见调研方案 §12 核实清单第 7 条） |
+| Q4 | **桌面端**：候选出现后按 Tab | 建议被接受：刚打的文字被替换为 `[[basename#锚点\|完整标题名]]`（目标在当前文件内则省略 basename，写作 `[[#锚点\|完整标题名]]`；**1.0.27 起 alias 自动补全为剥编号前缀后的完整标题名**，不再保留残缺前缀）；点击可正确跳转（**尤其目标标题已被编号、锚点含 WORD_JOINER 的情况**）；光标落在插入内容之后 | ✅ 逻辑（`headingtrigger.test.ts` 链接构造）/ 🔲 Tab 键行为待真机手验（`.suggestions.useSelectedItem` 是内部 API） |
 | Q5 | **移动端**：候选出现后用手指点按某一条候选（不通过键盘） | 与 Q4 效果一致（EditorSuggest 候选项本身即可点击 DOM 元素，点按共享同一 `selectSuggestion` 回调，理论不需要移动端分支） | 🔲 **待真机手验** |
 | Q6 | vault 里**多个文件**存在同名（或同前缀）标题，打出匹配文字 | 建议框列出全部候选，各自标注来源文件路径以区分；用户可用 ↑/↓ 切换后 Tab/点按接受任一条 | ✅ 逻辑（`headingindex.test.ts` 同名多文件 + `sortEntries`）/ 🔲 UI 手验 |
 | Q7 | 光标所在整行本身就是一个 ATX 标题行（`## …`），在标题文本内打字命中 vault 里某标题原文 | **不**弹出建议（避免「正在写标题时把自己的标题内容误建议成链接」） | ✅（`headingtrigger.test.ts` `isBlockedContext`，含 3 空格缩进边界） |
 | Q8 | 在 `[[` 尚未闭合的括号内打字（如 `[[交叉`），恰好与某标题匹配 | **不**弹出本插件自己的建议（避免与 Obsidian 原生 `[[` 补全/VC 的 internal link 补全抢同一建议框名额） | ✅（`headingtrigger.test.ts` 未闭合 `[[` / 紧邻 `[` / `#` 屏蔽） |
 | Q9 | 中文拼音输入法组合期间（`compositionstart` 之后、`compositionend` 之前），组合中间态字符恰好匹配某标题前缀 | 组合过程中**不**弹出/不接受建议，不打断拼音输入；上屏后（`compositionend` 之后）按正常规则重新判断是否触发 | 🔲 **需真机手验中文输入法**（复用 `main.ts` `imeComposing` 标志位，`onTrigger` 首行读取） |
 | Q10 | vault 里未安装 Various Complements，打开设置面板选择「手动配置」或「自动配置」 | 明确提示未检测到 Various Complements（「手动配置」不依赖 VC 是否安装，仍可走；「自动配置」探测层返回 `not-installed` 并放弃） | ✅ 逻辑（`vcintegration.test.ts` 探测三态）/ 🔲 面板提示手验 |
-| Q11 | vault 里已安装并启用 Various Complements，选择「手动配置」并确认 | 生成/刷新 JSON 词典文件到插件目录；确认框内展示词典文件路径 + 一键复制按钮；**不**修改 VC 的任何配置文件；用户手动把路径粘贴进 VC 的「Custom dictionary paths」设置并启用「Custom dictionary complement」后，在 VC 自己的建议框打字命中标题能看到候选、接受后插入正确链接 | 🔲 **需真实 VC 手验**（词典生成逻辑已 dev 单测：`buildVcDictionaryJson`/`mergeDictionaryPath`） |
-| Q12 | 同上前提，改选「自动配置」并确认 | `enableAutoIntegration` 走 Layer 1（活体实例）成功：VC 的 `customDictionaryPaths` 被追加本插件词典路径（不覆盖用户已有路径）、`enableCustomDictionaryComplement` 置 `true`；尝试调用 reload 命令；成功后无需任何手动操作，直接在 VC 建议框打字命中标题即可看到候选——跨插件联动生效的最终验证点 | ⚠️（三层写入路径已 dev 单测；真实 VC 活体 `.settings`/reload 命令 id 属 [C：未核实]，见调研方案 §12） |
+| Q11 | vault 里已安装并启用 Various Complements，选择「手动配置」并确认 | 生成/刷新 JSON 词典文件到插件目录（**1.0.27 起为 VC 要求的 `{"words":[...]}` 顶层格式**，紧凑无缩进）；确认框内展示词典文件路径 + 一键复制按钮；**不**修改 VC 的任何配置文件；用户手动把路径粘贴进 VC 的「Custom dictionary paths」设置并启用「Custom dictionary complement」后，在 VC 自己的建议框打字命中标题能看到候选、接受后插入正确链接 | 🔲 **需真实 VC 手验**（词典生成逻辑已 dev 单测：`buildVcDictionaryJson` 格式/截断 + `mergeDictionaryPath`） |
+| Q12 | 同上前提，改选「自动配置」并确认 | `enableAutoIntegration` 走 Layer 1（活体实例）成功：VC 的 `customDictionaryPaths` 被追加本插件词典路径（不覆盖用户已有路径）、`enableCustomDictionaryComplement` 置 `true`、`customDictionaryMinNumberOfCharactersForTrigger` 置 `1`（**1.0.27：兑现「只打一个字也出标题建议」**）；尝试调用 reload 命令（id 已对照 VC 源码核实）；成功后无需任何手动操作，直接在 VC 建议框打字命中标题即可看到候选——跨插件联动生效的最终验证点 | ⚠️（三层写入路径/阈值写入已 dev 单测；真实 VC 活体实例与加载行为需真机核对，`app.plugins` 仍属 Obsidian 内部 API） |
 | Q13 | 模拟 VC 的 `data.json`/活体 `settings` 形状不符合 schema 校验（如字段类型对不上） | 自动配置整体放弃，不写入任何字段、不破坏原有 `data.json` 其余内容；设置面板下拉视觉复位到切换前的值；弹出明确失败 Notice，引导改用「手动配置」 | ✅ 逻辑（`vcintegration.test.ts` invalid-shape 放弃且不触碰文件）/ 🔲 面板复位手验 |
 | Q14 | 自动配置写入成功，但 reload 命令调用失败或该命令 id 不存在 | 词典文件与 VC 配置写入仍然成功（不因 reload 失败回滚）；额外弹出一条独立提示，说明需用户手动执行 VC 的「Reload custom dictionaries」命令或重启 Obsidian（与「写入失败」提示文案不同） | ✅ 逻辑（`vcintegration.test.ts` `tryReloadVcDictionaries` 三态）/ 🔲 真实 VC 命令手验 |
 | Q15 | 从「自动配置」或「手动配置」切换回「不联动」 | 停止后续词典文件维护（后续标题变化不再触发词典重写）；已生成的词典文件保留在磁盘原处不删除；已写入 VC 的 `customDictionaryPaths`/`enableCustomDictionaryComplement` **不做反向撤销**（v1 明确不做反向清理） | 🔲 待手验（`setVcIntegrationOff` 清计时器逻辑在 `main.ts`，未单独拆测） |
@@ -469,6 +469,7 @@
 | Q17 | 运行期（不重载插件/不重启 Obsidian）把「标题链接建议」开关从关闭切换为开启 | 立即触发一次补建索引（`buildInitialHeadingIndex`），无需重启即可开始弹出建议 | ✅（`main.test.ts` 运行期切换补建） |
 | Q18 | 已被索引的某个标题所在文件被重命名或删除 | 索引通过 `vault.on("rename"/"delete")` 增量更新；重命名后候选的来源路径/basename 同步更新；删除后该文件标题不再出现在候选里 | ✅（`headingindex.test.ts` `renameFile`/`removeFile`） |
 | Q19 | 用户在文件 A 里新建一个标题，几百毫秒防抖窗口内还未被索引更新时，立刻切到文件 B 打字命中这个新标题 | 建议可能暂时不出现（已知的最终一致性代价，见调研方案 §2.5，不是 bug）；防抖窗口过后重新打同样的文字应该能看到建议 | ✅（`main.test.ts` 去抖窗口/重置/切走作废） |
+| Q20 | **词典轻量与格式（1.0.27）**：① 词典 JSON 顶层为 `{"words":[...]}`（VC 当前版本要求，裸数组会加载失败）；② 标题无变化时（如防抖窗口内重复编辑相同内容）不重写词典文件（iCloud/同步零流量）；③ 标题总数超 20,000 时词典截断并弹一次性 Notice；④ 自动配置后 VC 的 `customDictionaryMinNumberOfCharactersForTrigger` 为 1（只打一个字也出标题建议） | ① 词典可被 VC 正常加载（用户实测 #5 的修复）；② 写盘次数不随无变化编辑增长；③ 词典 ≤ ~2.2MB 封顶，截断有提示；④ VC 框单字符即触发 | ✅（`vcintegration.test.ts` 格式/截断/阈值 + `main.test.ts` 节流/去重/截断 Notice） |
 
 ---
 

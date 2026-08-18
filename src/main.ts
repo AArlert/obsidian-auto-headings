@@ -104,6 +104,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private readonly headingIndexTimers = new Map<string, number>();
 	/** VC 词典文件重写的全局节流计时器（见 vcintegration.ts）。 */
 	private vcDictionaryTimer: number | null = null;
+	/** 上次写出的词典 JSON（1.0.27 轻量改进：内容未变不写盘，避免 iCloud/同步无谓上传）。 */
+	private lastVcDictionaryJson: string | null = null;
+	/** 词典条数截断的一次性 Notice 是否已弹过（不重复打扰）。 */
+	private vcTruncationNoticed = false;
 
 	/**
 	 * 「清除全库编号」进行中标志（M7 多 TAB 敏感操作，见 spec.md §3.10）：置位期间
@@ -387,6 +391,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			void this.buildInitialHeadingIndex();
 		} else if (!enabled) {
 			this.headingIndex.clear();
+			// 同 setVcIntegrationOff：清写盘缓存，下次开启必须重新落盘。
+			this.lastVcDictionaryJson = null;
 		}
 	}
 
@@ -446,6 +452,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			window.clearTimeout(this.vcDictionaryTimer);
 			this.vcDictionaryTimer = null;
 		}
+		// 清掉写盘缓存：用户可能在关闭期间手动删除/改动词典文件，下次开启必须重新落盘。
+		this.lastVcDictionaryJson = null;
 	}
 
 	/**
@@ -725,13 +733,28 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}, VC_DICTIONARY_THROTTLE_MS);
 	}
 
-	/** M13：把当前索引全量写成 VC 词典 JSON（手动/自动模式共用；写失败静默，下次变更会重试）。 */
+	/**
+	 * M13：把当前索引全量写成 VC 词典 JSON（手动/自动模式共用）。
+	 *
+	 * **内容未变不写盘**（1.0.27 轻量改进）：词典在 .obsidian 内、随 iCloud 等同步整个 vault，
+	 * 每次全量重写都会触发整文件重新上传——内存缓存上次写出的字符串，相同则跳过
+	 * `adapter.write`（标题无变化时同步零流量）。写失败静默，下次索引变更会重试。
+	 */
 	private async writeVcDictionary(): Promise<void> {
-		const json = buildVcDictionaryJson(this.headingIndex.allEntries());
+		const { json, truncated, total } = buildVcDictionaryJson(this.headingIndex.allEntries());
+		if (json === this.lastVcDictionaryJson) {
+			return; // 内容未变：不写盘（避免 iCloud/同步无谓上传）
+		}
+		this.lastVcDictionaryJson = json;
 		try {
 			await this.app.vault.adapter.write(this.vcDictionaryFilePath(), json);
 		} catch {
 			/* 写入失败静默忽略：下一次索引变更会重试 */
+		}
+		if (truncated && !this.vcTruncationNoticed) {
+			// 词典条数上限（20,000）截断：一次性告知，不做静默丢弃。
+			this.vcTruncationNoticed = true;
+			new Notice(this.messages().noticeVcDictionaryTruncated(total));
 		}
 	}
 
