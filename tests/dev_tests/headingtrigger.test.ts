@@ -114,22 +114,22 @@ describe("sortEntries：建议排序", () => {
 });
 
 describe("buildHeadingLink：链接构造（Q4 逻辑面）", () => {
-	it("目标在当前文件内：省略文件名的同文件锚点形式", () => {
-		expect(buildHeadingLink(entry({ path: "notes/a.md" }), "notes/a.md", "交叉")).toBe(
-			"[[#交叉矩阵|交叉]]",
+	it("目标在当前文件内：省略文件名的同文件锚点形式，alias 为完整标题名", () => {
+		expect(buildHeadingLink(entry({ path: "notes/a.md" }), "notes/a.md")).toBe(
+			"[[#交叉矩阵|交叉矩阵]]",
 		);
 	});
 
-	it("目标在其它文件：[[basename#锚点|原文]]，alias 恒为用户实际打的原文", () => {
-		expect(
-			buildHeadingLink(entry({ path: "notes/b.md", basename: "b" }), "notes/a.md", "交叉矩"),
-		).toBe("[[b#交叉矩阵|交叉矩]]");
+	it("目标在其它文件：[[basename#锚点|完整标题名]]（1.0.27：alias 补全为完整标题名而非残缺前缀）", () => {
+		expect(buildHeadingLink(entry({ path: "notes/b.md", basename: "b" }), "notes/a.md")).toBe(
+			"[[b#交叉矩阵|交叉矩阵]]",
+		);
 	});
 
 	it("已编号标题：锚点保留 WORD_JOINER（与 backlinks.ts displayAnchor 一致）", () => {
 		const wj = "\u2060";
-		expect(
-			buildHeadingLink(entry({ anchor: `1.1 ${wj}交叉矩阵` }), "notes/a.md", "交叉矩阵"),
-		).toBe(`[[#1.1 ${wj}交叉矩阵|交叉矩阵]]`);
+		expect(buildHeadingLink(entry({ anchor: `1.1 ${wj}交叉矩阵` }), "notes/a.md")).toBe(
+			`[[#1.1 ${wj}交叉矩阵|交叉矩阵]]`,
+		);
 	});
 });

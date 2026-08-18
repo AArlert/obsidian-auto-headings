@@ -41,6 +41,79 @@
 
 ---
 
+## 2026-08-11 M13 实测反馈修复：alias 完整标题名 + VC 词典格式/阈值/轻量化（1.0.27）
+
+### 做了什么
+
+用户人工测试 1.0.26 后给出 5 条反馈，逐条处理：
+
+1. **基础建议框正常**——确认，无改动。
+2. **自动联动确认框太长** → 精简：长段 ①②③ 文案改为「一句总述 + `ul` 三点要点列表」
+   （i18n 新增 `vcAutoConfirmPoints: string[]`，Modal 按列表渲染），手动模式文案同步精简。
+3. **词典体积 / iCloud 同步担忧** → 研究 + 轻量三件套落地（详见下）。
+4. **alias 是残缺前缀**（打「交叉矩」补出 `[[…|交叉矩]]`，用户要完整标题名）→ **产品决策变更**：
+   `buildHeadingLink` 去掉 `typedText` 参数，alias 恒为剥编号前缀后的完整标题名
+   `displayText`（与 VC 词典 value 的 alias 形态一致）；i18n desc / README 双语 / testplan Q4
+   预期同步更新。
+5. **VC 框只打一个「交」无候选** → **根因是词典 JSON 格式不兼容**（见下），叠加 VC 默认触发
+   阈值问题，一并修复。
+
+**VC 源码核实（clone 留档 `doc/research/vc-source-verification.md`，不入库）**：
+`tadashi-aikawa/obsidian-various-complements-plugin` main 分支，逐条核实原方案 §12 的
+[C：未核实] 项：
+
+- **词典 JSON 格式（原调研结论有误，本次更正）**：VC 当前版本的 `JsonDictionary` 顶层必须是
+  `words` 数组（`{ words: [{ value, displayed }] }`，`CustomDictionaryWordProvider.ts:16-48`）。
+  我们 1.0.26 写的**裸数组**会让 `json.words.map` 抛 TypeError → VC 弹「Fail to load」且词典
+  **0 词**——这就是用户实测 #5「打『交』无任何候选」的根因。1.0.27 修复为 `{"words":[...]}`。
+- **触发阈值**：VC 默认 `tokenizeStrategy`（default）的 `triggerThreshold = 3`
+  （`TokenizeStrategy.ts:19`），且 `customDictionaryMinNumberOfCharactersForTrigger` 默认 0
+  （跟随全局阈值）——即使格式修好，1–2 字符也不触发。自动配置现在把该字段置 1
+  （`Math.min(全局阈值, 1) = 1`，只放宽自定义词典类补全），兑现「只打一个字也出标题建议」。
+- 其余确认：插件 id `various-complements`、`customDictionaryPaths: string`（换行分隔）、
+  `enableCustomDictionaryComplement: boolean`、活体 `.settings` + `saveData`（`VariousComponents
+  extends Plugin`）、reload 命令 id `reload-custom-dictionaries`——全部与 1.0.26 实现一致。
+
+**词典轻量三件套**（回应用户 #3：VC 自己的 current-vault 补全不落盘，我们却生成一个词典文件，
+是否太重）：
+
+1. 紧凑 JSON（去掉 `\t` 缩进，体积 -30~40%）。
+2. **内容未变不写盘**：`main.ts` 缓存上次写出的 JSON，相同则跳过 `adapter.write`
+   （标题无变化时 iCloud/同步零流量）；关闭联动/开关时清缓存，下次开启必落盘。
+3. **词典独立条数上限 `MAX_VC_DICTIONARY_ENTRIES = 20,000`**：超出截断 + 一次性 Notice
+   （`noticeVcDictionaryTruncated`，新 i18n 键）。20,000 条 ≈ 2.2MB 封顶，几千条时几百 KB。
+
+`vcintegration.ts`：`VcSettingsShape` 增 `customDictionaryMinNumberOfCharactersForTrigger`
+（存在才校验类型）；`buildVcDictionaryJson` 返回 `{ json, truncated, total }`；两条写入路径
+统一 `applyTriggerThreshold`（现值 ≠1 才写）。测试：`vcintegration.test.ts` 改格式断言 +
+新增 20,001 条截断用例 + 阈值断言（含「已是 1 不动」）；`main.test.ts` 新增「VC 词典写盘」
+describe 4 例（节流写盘 / 内容未变不重写 / 内容变化重写 / 截断 Notice，makePlugin 假 vault
+补 `adapter`）。testplan 新增 **Q20** 行覆盖上述四件事，Q4/Q11/Q12 预期同步更新。spec.md M13
+条目更新（决策变更 + 核实结论 + 轻量三件套）。
+
+### 没做什么
+
+- **词典分片**（按 matchKey 首字符拆多个小文件，VC 的 `customDictionaryPaths` 天然支持多路径）：
+  单次写盘更小、iCloud 增量更友好，但总大小不变、重写逻辑复杂化（需 per-file 变更定位分片），
+  列入 research 留档的后续候选，v1 不做。
+- VC 加载失败 Notice 的乱码（「鈿?」）是 VC 自身显示问题，不在我们侧修。
+- 真机手验项不变：Tab 行为 / `.suggestions.useSelectedItem` / compositionend 重触发 /
+  移动端点按 / 真实 VC 加载行为仍需用户实机确认（testplan Q4/Q5/Q9/Q10–Q15 保持 🔲/⚠️）。
+
+### 下一步
+
+- 用户实机复测重点：① VC 框打「交」应出候选（格式 + 阈值双修复的验证点，Q12/Q20）；
+  ② 插件框打「交叉矩」接受后应补出完整标题名 `[[交叉矩阵#1 交叉矩阵|交叉矩阵]]`（Q4）；
+  ③ 自动联动确认框是否整洁（#2）；④ 大库下词典文件体积与 iCloud 同步感受（Q20）。
+
+### 验证方式
+
+`npm test` 596 通过（唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红，与本次
+无关）；lint / build / format:check 走 preflight 统一验证。本周期派发 0 次（VC 源码核实为
+主模型直接 clone + grep，无 SubAgent）。
+
+---
+
 ## 2026-08-11 M13 落地：标题链接建议 + Various Complements 联动（1.0.26）
 
 ### 做了什么
@@ -184,51 +257,6 @@ SubAgent，全部主模型直接实现）。
   J21 已回填确认。
 - 其余待办不变：J20 已用户确认解决；P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM
   手验仍待办，见 status.jsonl 首行与更早周期块。
-
----
-
-## 2026-08-10 UX 小改：清理外来编号确认框移动端视觉对齐 PC（1.0.24）
-
-### 做了什么
-
-用户实机截图反馈（两张对照图）：J17（1.0.23）加的逐条勾选 + git 风格 diff 确认框，窄屏
-（含移动端，`@media max-width:480px`）下把勾选框与 diff 从横排切成纵排——勾选框独占一行，
-diff 卡片另起一行、且因原横排逻辑被挤窄。用户要求移动端对齐 PC 端的视觉效果。
-
-**先问清楚再动手**：截图能看出两处差异——① 布局（横排 vs 纵排）；② 卡片背景观感（移动端截图
-隐约能看到卡片背后透出笔记原文，疑似半透明）。这次没有直接猜，用 `AskUserQuestion` 让用户
-明确排除了②（"不改卡片透不透"），锁定只改布局，并给出比"简单加宽横排"更具体的方案：
-**checkbox 不再挤占 diff 的横向空间**——diff 始终占满卡片内容区宽度，checkbox 改为悬浮定位，
-纵向对齐 diff 首行（红/before 行）的顶部；红行换行成两排时，checkbox 仍对齐最上方一排。
-
-实现（`styles.css`）：
-- `.ah-foreign-guard-item` 从 flex 横/纵排切换改为 `position: relative` + 固定 `padding-left`
-  留白（默认 40px，窄屏媒体查询加宽到 44px 配合更大的可点触勾选框）。
-- `.ah-foreign-guard-toggle` 改 `position: absolute`，`top`/`left` 与卡片的
-  `padding-top`/`padding-left` 对齐——天然贴 diff 首行顶部，不需要额外算高度。
-- `.ah-foreign-guard-diff` 从 `flex: 1 1 auto`（与 checkbox 分享行内空间）改为 `width: 100%`。
-- 窄屏媒体查询精简：只保留放大 checkbox 触控尺寸（22px）+ 相应加宽 `padding-left`，去掉原来
-  的 `flex-direction: column` 整套横纵排切换——**桌面与移动端现在是同一套布局代码**，不再有
-  断点级的视觉分裂，"对齐"这件事从"调参数凑相似"变成"物理上不可能不一致"。
-
-验证方式：本机起 `python -m http.server` 把改动后的 `styles.css` 配一份最小 HTML 骨架跑进
-Claude Browser 预览，375px（模拟移动端）与 800px（模拟桌面）两个视口截图核对，长标题换行两排
-时 checkbox 仍贴最上一排——符合预期后清理临时文件，未入库。质量门槛：`npm test`（唯一失败是
-`whitelist.test.ts:406` 的 Windows ICU 排序已知假红，与本次改动无关）/ `lint` / `format:check`
-全绿。纯 CSS 改动，无需改测试代码。
-
-### 没做什么
-
-- 没碰卡片背景透明度/`--background-secondary` 相关的任何东西——用户已明确排除，若移动端真有
-  背景色不透底的观感问题，需要用户另外反馈、单独查根因，不要顺手"顺便"改了。
-- 没有做移动端真机手验（本次是纯 CSS 视觉改动，本机浏览器多宽度截图已核对布局符合用户给出的
-  具体规格，但最终观感仍需用户真机确认，见 testplan J20 状态）。
-
-### 下一步
-
-- 等用户真机确认 J20（对话框在移动端的实际观感）。
-- 其余待办不变，见 status.jsonl 首行与本文件更早周期块（P12 / E36 / O11① 等 DOM 手验、竞品
-  调研采纳清单）。
 
 ---
 

@@ -118,6 +118,9 @@ describe("isValidVcSettingsShape：最小 schema 校验", () => {
 	it("字段类型不符判非法（存在才校验类型）", () => {
 		expect(isValidVcSettingsShape({ customDictionaryPaths: 3 })).toBe(false);
 		expect(isValidVcSettingsShape({ enableCustomDictionaryComplement: "yes" })).toBe(false);
+		expect(
+			isValidVcSettingsShape({ customDictionaryMinNumberOfCharactersForTrigger: "x" }),
+		).toBe(false);
 	});
 
 	it("非对象（null / 字符串 / 数组）判非法", () => {
@@ -128,9 +131,9 @@ describe("isValidVcSettingsShape：最小 schema 校验", () => {
 });
 
 describe("buildVcDictionaryJson：词典内容（Q11/Q12 逻辑面）", () => {
-	it("每条目为 value（完整 [[basename#锚点|原文]] 形式）+ displayed（干净原文）", () => {
+	it("顶层 words 数组（VC 当前版本要求的 JsonDictionary 形状），每条为 value（完整链接）+ displayed（干净原文）", () => {
 		const wj = "\u2060";
-		const json = buildVcDictionaryJson([
+		const out = buildVcDictionaryJson([
 			{
 				path: "a.md",
 				basename: "a",
@@ -150,11 +153,33 @@ describe("buildVcDictionaryJson：词典内容（Q11/Q12 逻辑面）", () => {
 				anchor: "引言",
 			},
 		]);
-		const parsed = JSON.parse(json) as Array<{ value: string; displayed: string }>;
-		expect(parsed).toEqual([
+		expect(out.total).toBe(2);
+		expect(out.truncated).toBe(false);
+		const parsed = JSON.parse(out.json) as {
+			words: Array<{ value: string; displayed: string }>;
+		};
+		// 关键：顶层必须是 words 数组（裸数组会让 VC 解析抛错、整个词典加载失败，用户实测 #5 根因）
+		expect(parsed.words).toEqual([
 			{ value: `[[a#1.1 ${wj}交叉矩阵|交叉矩阵]]`, displayed: "交叉矩阵" },
 			{ value: "[[b#引言|引言]]", displayed: "引言" },
 		]);
+	});
+
+	it("超过 MAX_VC_DICTIONARY_ENTRIES（20,000）时截断并置 truncated", () => {
+		const entries = Array.from({ length: 20001 }, (_, i) => ({
+			path: `f${i}.md`,
+			basename: `f${i}`,
+			level: 1,
+			lineIndex: 0,
+			displayText: `标题${i}`,
+			matchKey: `标题${i}`,
+			anchor: `标题${i}`,
+		}));
+		const out = buildVcDictionaryJson(entries);
+		expect(out.total).toBe(20001);
+		expect(out.truncated).toBe(true);
+		const parsed = JSON.parse(out.json) as { words: unknown[] };
+		expect(parsed.words).toHaveLength(20000);
 	});
 });
 
@@ -194,9 +219,25 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		expect(result).toEqual({ outcome: "ok", via: "live-instance" });
 		expect(liveSettings.customDictionaryPaths).toBe(DICT);
 		expect(liveSettings.enableCustomDictionaryComplement).toBe(true);
+		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1); // 触发阈值放宽到 1 字符
 		expect(liveSettings.other).toBe(1); // 其余字段原样保留
 		expect(saveData).toHaveBeenCalledOnce();
 		expect(app.vault.adapter.write).not.toHaveBeenCalled(); // 未走文件路径
+	});
+
+	it("触发阈值已是 1：保持不动（用户显式设置优先）", async () => {
+		const saveData = vi.fn(async () => {});
+		const liveSettings: Record<string, unknown> = {
+			customDictionaryMinNumberOfCharactersForTrigger: 1,
+		};
+		const app = makeApp({
+			installed: true,
+			enabled: true,
+			liveSettings,
+			liveSaveData: saveData,
+		});
+		await enableAutoIntegration(app, DICT);
+		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1);
 	});
 
 	it("Layer 1 已存在路径：不重复添加", async () => {
@@ -238,6 +279,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		>;
 		expect(written.customDictionaryPaths).toBe(`p0\n${DICT}`);
 		expect(written.enableCustomDictionaryComplement).toBe(true);
+		expect(written.customDictionaryMinNumberOfCharactersForTrigger).toBe(1);
 		expect(written.other).toEqual({ keep: 1 }); // 关键约束：绝不重建对象吞掉其余配置
 	});
 

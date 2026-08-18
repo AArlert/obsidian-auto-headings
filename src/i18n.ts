@@ -104,6 +104,10 @@ export interface Messages {
 	noticeVcAutoWriteNotInstalled: string;
 	/** 写入成功但 reload 命令调用失败，需用户手动执行或重启。 */
 	noticeVcReloadFailed: string;
+	/** VC 词典条数超上限截断时的一次性 Notice。 */
+	noticeVcDictionaryTruncated: (total: number) => string;
+	/** 自动配置确认框的要点列表（Modal 里渲染为 ul）。 */
+	vcAutoConfirmPoints: string[];
 
 	// —— 路径规则 ——
 	pathRulesHeading: string;
@@ -360,7 +364,7 @@ const zh: Messages = {
 
 	headingLinkSuggestName: "标题链接建议",
 	headingLinkSuggestDesc:
-		"在正文里打出与库内某标题原文匹配的文字时，弹出建议；接受后替换为指向该标题的链接（视觉上保留你打的原文）。默认开启；关闭后标题索引完全不构建，内存/CPU 成本降为零。",
+		"在正文里打出与库内某标题原文匹配的文字时，弹出建议；接受后替换为指向该标题的链接，文字自动补全为该标题的完整名称。默认开启；关闭后标题索引完全不构建，内存/CPU 成本降为零。",
 	headingSuggestThisFile: "（本文件）",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`标题索引因 vault 规模过大未完整构建，已索引 ${indexed} 个标题；建议功能在已索引范围内可用。`,
@@ -378,11 +382,16 @@ const zh: Messages = {
 	noticeVcPathCopied: "词典文件路径已复制。",
 	vcManualConfirmTitle: "开启手动联动",
 	vcManualConfirmBody:
-		"确认后将在插件目录下生成/维护一份 JSON 标题词典文件，并在设置面板显示其路径；不会修改 Various Complements 的任何配置。请复制该路径，自行粘贴到 VC 的「Custom dictionary paths」设置并启用其「Custom dictionary complement」功能。",
+		"将在插件目录下生成/维护 JSON 标题词典文件，并在此显示其路径；不会修改 Various Complements 的任何配置。请复制路径，自行粘贴到 VC 的「Custom dictionary paths」设置并启用「Custom dictionary complement」。",
 	vcManualConfirmButton: "生成词典文件",
 	vcAutoConfirmTitle: "开启自动联动",
 	vcAutoConfirmBody:
-		"确认后将：① 在插件目录下生成/维护一份 JSON 标题词典文件；② 尝试读写 Various Complements 的配置文件（data.json），把该词典路径写入其自定义词典设置，并同时开启它的「自定义词典补全」功能；③ 全程做安全校验，若无法安全写入会自动放弃、不改动 Various Complements 现有配置，并提示改用「手动配置」。确认继续？",
+		"将生成标题词典并自动配置 Various Complements，全程安全校验：无法安全写入会自动放弃，不改动 VC 现有配置。确认继续？",
+	vcAutoConfirmPoints: [
+		"生成/维护标题词典文件（最多 2 万条标题，超出自动截断）",
+		"写入 VC 配置：词典路径 + 开启「自定义词典补全」+ 触发阈值调为 1 个字符",
+		"写入完成后自动重载 VC 词典（失败会另行提示）",
+	],
 	vcAutoConfirmButton: "确认并自动配置",
 	noticeVcAutoWriteSuccess: "已自动配置 Various Complements 联动。",
 	noticeVcAutoWriteInvalidShape:
@@ -391,6 +400,8 @@ const zh: Messages = {
 		"未能自动配置 Various Complements（未安装 / 未启用 / 数据文件缺失）；请先安装并启用它，或改用「手动配置」。",
 	noticeVcReloadFailed:
 		"词典与 VC 配置已写入，但自动重载 VC 词典失败；请在命令面板手动执行 Various Complements 的「Reload custom dictionaries」命令（或重启 Obsidian）。",
+	noticeVcDictionaryTruncated: (total) =>
+		`标题总数（${total}）超过词典条数上限，词典已截断；建议功能在已收录范围内可用。`,
 
 	pathRulesHeading: "路径规则",
 	pathRulesDesc:
@@ -642,7 +653,7 @@ const en: Messages = {
 
 	headingLinkSuggestName: "Heading link suggestions",
 	headingLinkSuggestDesc:
-		"While typing in any note, suggest vault headings that match what you typed; accept to replace your text with a clickable link to that heading (your typed text stays visible). On by default; when off, the heading index is never built and memory/CPU cost drops to zero.",
+		"While typing in any note, suggest vault headings that match what you typed; accept to replace your text with a clickable link to that heading, expanding your text to the heading's full name. On by default; when off, the heading index is never built and memory/CPU cost drops to zero.",
 	headingSuggestThisFile: "(this file)",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`The heading index was not fully built because the vault is too large (${indexed} headings indexed); suggestions work within the indexed range.`,
@@ -660,11 +671,16 @@ const en: Messages = {
 	noticeVcPathCopied: "Dictionary file path copied.",
 	vcManualConfirmTitle: "Enable manual integration",
 	vcManualConfirmBody:
-		'After confirming, a JSON heading dictionary file will be generated and maintained inside this plugin\'s folder, and its path will be shown here. No Various Complements setting will be modified. Copy the path, paste it into VC\'s "Custom dictionary paths" setting, and enable its "Custom dictionary complement" feature.',
+		'A JSON heading dictionary file will be generated and maintained inside this plugin\'s folder, and its path will be shown here. No Various Complements setting will be modified. Copy the path, paste it into VC\'s "Custom dictionary paths" setting, and enable its "Custom dictionary complement" feature.',
 	vcManualConfirmButton: "Generate dictionary",
 	vcAutoConfirmTitle: "Enable automatic integration",
 	vcAutoConfirmBody:
-		'Confirming will: (1) generate/maintain a JSON heading dictionary file inside this plugin\'s folder; (2) attempt to read and write Various Complements\' configuration file (data.json) to register that dictionary path and turn ON its "Custom dictionary complement" feature; (3) run safety checks throughout — if it cannot write safely it will abort automatically without touching your existing Various Complements settings, and suggest "Manual" mode instead. Continue?',
+		"A heading dictionary will be generated and Various Complements configured automatically, with safety checks throughout: if it cannot write safely it will abort without touching your existing VC settings. Continue?",
+	vcAutoConfirmPoints: [
+		"Generate/maintain the heading dictionary file (capped at 20,000 headings, truncated beyond that)",
+		'Write to VC settings: dictionary path + enable "Custom dictionary complement" + set its trigger threshold to 1 character',
+		"Reload VC dictionaries automatically after writing (you'll be told if that fails)",
+	],
 	vcAutoConfirmButton: "Confirm & configure",
 	noticeVcAutoWriteSuccess: "Various Complements integration configured automatically.",
 	noticeVcAutoWriteInvalidShape:
@@ -673,6 +689,8 @@ const en: Messages = {
 		"Could not configure Various Complements automatically (not installed / not enabled / missing data file); install and enable it first, or use Manual mode.",
 	noticeVcReloadFailed:
 		'The dictionary and VC settings were written, but reloading VC dictionaries failed; run VC\'s "Reload custom dictionaries" command from the command palette (or restart Obsidian).',
+	noticeVcDictionaryTruncated: (total) =>
+		`The total number of headings (${total}) exceeds the dictionary cap; the dictionary was truncated and works within the included range.`,
 
 	pathRulesHeading: "Path rules",
 	pathRulesDesc:

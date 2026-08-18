@@ -123,8 +123,8 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		if (!ctx) {
 			return;
 		}
-		const alias = ctx.query;
-		const link = buildHeadingLink(entry, ctx.file.path, alias);
+		// alias 恒为完整标题名（displayText），见 headingtrigger.ts buildHeadingLink。
+		const link = buildHeadingLink(entry, ctx.file.path);
 		ctx.editor.replaceRange(link, ctx.start, ctx.end);
 		ctx.editor.setCursor({ line: ctx.start.line, ch: ctx.start.ch + link.length });
 	}

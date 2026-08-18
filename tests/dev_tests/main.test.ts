@@ -199,6 +199,11 @@ function makePlugin(
 	// 假 vault：getAbstractFileByPath 返回 mock TFile 实例（main.ts 用 instanceof TFile 收窄，
 	// 对象字面量会被判为「非文件」跳过），process 读改写回内存。
 	const vaultFiles = new Map<string, string>(Object.entries(opts.vaultFiles ?? {}));
+	// M13：假 adapter（vault.adapter）承载插件目录下的文件（VC 词典等），write 计数供去重断言。
+	const adapterFiles = new Map<string, string>();
+	const adapterWrite = vi.fn(async (p: string, c: string) => {
+		adapterFiles.set(p, c);
+	});
 	const fileBasename = (p: string) => (p.split("/").pop() ?? p).replace(/\.md$/i, "");
 	const makeTFile = (p: string) =>
 		Object.assign(new MockTFile(), { path: p, basename: fileBasename(p) });
@@ -213,6 +218,12 @@ function makePlugin(
 		getMarkdownFiles: () =>
 			[...vaultFiles.keys()].map((p) => ({ path: p, basename: fileBasename(p) })),
 		read: async (file: { path: string }) => vaultFiles.get(file.path) ?? "",
+		configDir: ".obsidian",
+		adapter: {
+			exists: async (p: string) => adapterFiles.has(p),
+			read: async (p: string) => adapterFiles.get(p) ?? "",
+			write: adapterWrite,
+		},
 		/**
 		 * 「这个文件自己的内容」——`renumberOnOpen` 的判断依据（J15）。**刻意不走编辑器**：真实
 		 * Obsidian 在 `file-open` 那一刻编辑器还显示着上一篇，读编辑器会拿到别的文件的内容。
@@ -288,6 +299,8 @@ function makePlugin(
 	return {
 		p,
 		vaultFiles,
+		adapterFiles,
+		adapterWrite,
 		setTemplate: (t: Template) => {
 			tplBox.current = t;
 		},
@@ -2142,5 +2155,82 @@ describe("M13：setHeadingLinkSuggestEnabled 运行期切换", () => {
 		expect(Notice.messages.some((m) => m.includes("未完整构建"))).toBe(true);
 		expect(p.headingIndex.hasAnyPrefixMatch("丁")).toBe(false); // 超限文件未收录
 		expect(p.headingIndex.hasAnyPrefixMatch("甲")).toBe(true); // 已索引部分正常可用
+	});
+});
+
+describe("M13：VC 词典写盘（节流 / 去重 / 截断，Q11/Q20 逻辑面）", () => {
+	it("manual 模式下索引更新后按 3000ms 节流写盘，词典为 VC words 格式（Q11 逻辑面）", async () => {
+		const { p, adapterFiles } = makePlugin();
+		p.settings.vcIntegrationMode = "manual";
+		const ed = new FakeEditor("## 交叉矩阵");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300); // 索引防抖到期
+		expect(adapterFiles.size).toBe(0); // 词典节流尚未到期
+		vi.advanceTimersByTime(3000);
+		const raw = adapterFiles.get("plugins/auto-headings/vc-heading-dictionary.json");
+		expect(raw).toBeDefined();
+		const parsed = JSON.parse(raw ?? "{}") as {
+			words?: Array<{ value: string; displayed: string }>;
+		};
+		// 顶层 words 数组（VC 当前版本要求的 JsonDictionary 形状，裸数组会加载失败）。
+		expect(parsed.words?.[0]).toEqual({
+			value: "[[a#交叉矩阵|交叉矩阵]]",
+			displayed: "交叉矩阵",
+		});
+	});
+
+	it("内容未变不重写盘（去重：标题无变化时 iCloud/同步零流量）", async () => {
+		const { p, adapterWrite } = makePlugin();
+		p.settings.vcIntegrationMode = "manual";
+		const ed = new FakeEditor("## 交叉矩阵");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		vi.advanceTimersByTime(3000);
+		expect(adapterWrite).toHaveBeenCalledTimes(1);
+		// 同一内容再次编辑（相同内容也触发 editor-change）：词典内容未变，不写盘。
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		vi.advanceTimersByTime(3000);
+		expect(adapterWrite).toHaveBeenCalledTimes(1);
+	});
+
+	it("内容变化后重新写盘", async () => {
+		const { p, adapterWrite } = makePlugin();
+		p.settings.vcIntegrationMode = "manual";
+		const ed = new FakeEditor("## 交叉矩阵");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		vi.advanceTimersByTime(3000);
+		ed.setValue("## 交叉矩阵\n## 新标题");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		vi.advanceTimersByTime(3000);
+		expect(adapterWrite).toHaveBeenCalledTimes(2);
+	});
+
+	it("词典条数超上限（20,000）：截断写盘并弹一次性 Notice（Q20 逻辑面）", async () => {
+		// 单文件标题有 500 条上限，用 41 个文件 × 500 条 = 20,500 条跨过词典上限。
+		const vaultFiles: Record<string, string> = {};
+		for (let f = 0; f < 41; f++) {
+			const lines: string[] = [];
+			for (let i = 0; i < 500; i++) {
+				lines.push(`## 文件${f}标题${i}`);
+			}
+			vaultFiles[`f${f}.md`] = lines.join("\n");
+		}
+		const { p, adapterFiles } = makePlugin({ vaultFiles });
+		p.headingIndex = new HeadingIndex(50001); // 索引不截断，只触发词典层截断
+		await p.setHeadingLinkSuggestEnabled(true); // 触发 buildInitialHeadingIndex
+		// 41 个文件的串行 cachedRead 链需要更多微任务让出（flushPromises 的 10 次不够）。
+		for (let i = 0; i < 200; i++) {
+			await Promise.resolve();
+		}
+		await p.enableVcManualIntegration();
+		await flushPromises();
+		const raw = adapterFiles.get("plugins/auto-headings/vc-heading-dictionary.json");
+		expect(raw).toBeDefined();
+		const parsed = JSON.parse(raw ?? "{}") as { words?: unknown[] };
+		expect(parsed.words).toHaveLength(20000);
+		expect(Notice.messages.some((m) => m.includes("词典已截断"))).toBe(true);
 	});
 });

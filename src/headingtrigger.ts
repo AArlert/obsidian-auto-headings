@@ -101,14 +101,11 @@ export function sortEntries(
  * - 目标是当前活动文件自身时用 `[[#anchor|alias]]`（无文件名的同文件锚点形式，与 backlinks.ts
  *   对 `[[#锚点]]` 的既有语义一致）。
  * - 否则用 `[[basename#anchor|alias]]`。
- * - alias 恒为用户实际打的原文（不是标题全文——即便只打了标题的前缀也不做自动补全展开，
- *   这是产品需求明确要求的：「视觉上显示为用户打的原文」）。
+ * - alias 恒为标题的**完整原文**（displayText，剥编号前缀后）——1.0.27 产品决策：接受建议时
+ *   把用户打的残缺前缀自动补全为完整标题名（用户实测反馈「希望是完整的标题名而不是残缺的」，
+ *   与 VC 词典 value 的 alias 形态一致）。
  */
-export function buildHeadingLink(
-	entry: HeadingIndexEntry,
-	activeFilePath: string,
-	typedText: string,
-): string {
+export function buildHeadingLink(entry: HeadingIndexEntry, activeFilePath: string): string {
 	const target = entry.path === activeFilePath ? "" : entry.basename;
-	return `[[${target}#${entry.anchor}|${typedText}]]`;
+	return `[[${target}#${entry.anchor}|${entry.displayText}]]`;
 }
