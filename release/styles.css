@@ -896,8 +896,11 @@ button.ah-tab.ah-tab-active:hover {
 	margin-bottom: 6px;
 }
 
-/* 标题链接建议（M13）：建议框候选行——icon 列 + 标题原文/来源路径两行（1.0.28 起带 icon，
-   与 Various Complements 原生建议框视觉一致） */
+/* 标题链接建议（M13）：建议框候选行——icon 列 + 标题原文/来源路径两行。
+   1.0.32 起字号与配色对齐 Various Complements 的自定义词典条目（第二行 0.75em /
+   --text-muted，见 VC styles.css 的 __description 规则）：同一个标题候选在本插件的框
+   和 VC 的框里出现时不该长两副面孔。VC 那边我们改不了（其 DOM 无 per-词典钩子），
+   所以统一到它那一套。 */
 .ah-heading-suggest-item {
 	display: flex;
 	align-items: flex-start;
@@ -908,6 +911,8 @@ button.ah-tab.ah-tab-active:hover {
 .ah-heading-suggest-icon {
 	flex-shrink: 0;
 	margin-top: 2px;
+	width: 16px;
+	height: 16px;
 	color: var(--text-muted);
 }
 
@@ -923,8 +928,8 @@ button.ah-tab.ah-tab-active:hover {
 }
 
 .ah-heading-suggest-path {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	font-size: 0.75em;
+	color: var(--text-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

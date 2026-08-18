@@ -2172,12 +2172,14 @@ describe("M13：VC 词典写盘（节流 / 去重 / 截断，Q11/Q20 逻辑面�
 		const raw = adapterFiles.get("plugins/auto-headings/vc-heading-dictionary.json");
 		expect(raw).toBeDefined();
 		const parsed = JSON.parse(raw ?? "{}") as {
-			words?: Array<{ value: string; displayed: string }>;
+			words?: Array<{ value: string; displayed: string; description: string }>;
 		};
-		// 顶层 words 数组（VC 当前版本要求的 JsonDictionary 形状，裸数组会加载失败）。
+		// 顶层 words 数组（VC 当前版本要求的 JsonDictionary 形状，裸数组会加载失败）；
+		// description = 来源路径，VC 渲染为条目第二行小字（1.0.32）。
 		expect(parsed.words?.[0]).toEqual({
 			value: "[[a#交叉矩阵|交叉矩阵]]",
 			displayed: "交叉矩阵",
+			description: "a.md",
 		});
 	});
 

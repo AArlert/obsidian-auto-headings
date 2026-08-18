@@ -10,6 +10,7 @@ import type { App } from "obsidian";
 import {
 	buildVcDictionaryJson,
 	detectVcStatus,
+	disambiguateVcDisplayed,
 	enableAutoIntegration,
 	isValidVcSettingsShape,
 	mergeDictionaryPath,
@@ -122,6 +123,12 @@ describe("isValidVcSettingsShape：最小 schema 校验", () => {
 		expect(
 			isValidVcSettingsShape({ customDictionaryMinNumberOfCharactersForTrigger: "x" }),
 		).toBe(false);
+		expect(isValidVcSettingsShape({ displayedTextSuffix: 1 })).toBe(false);
+	});
+
+	it("displayedTextSuffix 为字符串（含空串）时合法（1.0.32 新增字段）", () => {
+		expect(isValidVcSettingsShape({ displayedTextSuffix: " => ..." })).toBe(true);
+		expect(isValidVcSettingsShape({ displayedTextSuffix: "" })).toBe(true);
 	});
 
 	it("非对象（null / 字符串 / 数组）判非法", () => {
@@ -157,13 +164,54 @@ describe("buildVcDictionaryJson：词典内容（Q11/Q12 逻辑面）", () => {
 		expect(out.total).toBe(2);
 		expect(out.truncated).toBe(false);
 		const parsed = JSON.parse(out.json) as {
-			words: Array<{ value: string; displayed: string }>;
+			words: Array<{ value: string; displayed: string; description: string }>;
 		};
 		// 关键：顶层必须是 words 数组（裸数组会让 VC 解析抛错、整个词典加载失败，用户实测 #5 根因）
+		// description = 来源路径：VC 把它渲染成条目第二行小字（1.0.32，与本插件建议框两行观感对齐）
 		expect(parsed.words).toEqual([
-			{ value: `[[a#1.1 ${wj}交叉矩阵|交叉矩阵]]`, displayed: "交叉矩阵" },
-			{ value: "[[b#引言|引言]]", displayed: "引言" },
+			{
+				value: `[[a#1.1 ${wj}交叉矩阵|交叉矩阵]]`,
+				displayed: "交叉矩阵",
+				description: "a.md",
+			},
+			{ value: "[[b#引言|引言]]", displayed: "引言", description: "b.md" },
 		]);
+	});
+
+	it("同名标题：value 各指各的文件，displayed 带区分后缀（否则 VC 会去重掉一条，Q25）", () => {
+		const out = buildVcDictionaryJson([
+			{
+				path: "axi.md",
+				basename: "axi",
+				level: 2,
+				lineIndex: 0,
+				displayText: "交叉矩阵",
+				matchKey: "交叉矩阵",
+				anchor: "交叉矩阵",
+			},
+			{
+				path: "交叉矩阵.md",
+				basename: "交叉矩阵",
+				level: 2,
+				lineIndex: 0,
+				displayText: "交叉矩阵",
+				matchKey: "交叉矩阵",
+				anchor: "交叉矩阵",
+			},
+		]);
+		const parsed = JSON.parse(out.json) as {
+			words: Array<{ value: string; displayed: string; description: string }>;
+		};
+		expect(parsed.words.map((w) => w.displayed)).toEqual([
+			"交叉矩阵 (axi)",
+			"交叉矩阵 (交叉矩阵)",
+		]);
+		// 接受后插入的仍是各自正确的链接，消歧只影响“显示/匹配”文本
+		expect(parsed.words.map((w) => w.value)).toEqual([
+			"[[axi#交叉矩阵|交叉矩阵]]",
+			"[[交叉矩阵#交叉矩阵|交叉矩阵]]",
+		]);
+		expect(parsed.words.map((w) => w.description)).toEqual(["axi.md", "交叉矩阵.md"]);
 	});
 
 	it("超过 MAX_VC_DICTIONARY_ENTRIES（20,000）时截断并置 truncated", () => {
@@ -221,6 +269,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		expect(liveSettings.customDictionaryPaths).toBe(DICT);
 		expect(liveSettings.enableCustomDictionaryComplement).toBe(true);
 		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1); // 触发阈值放宽到 1 字符
+		expect(liveSettings.displayedTextSuffix).toBe(""); // 1.0.32：清空「 => ...」显示后缀
 		expect(liveSettings.other).toBe(1); // 其余字段原样保留
 		expect(saveData).toHaveBeenCalledOnce();
 		expect(app.vault.adapter.write).not.toHaveBeenCalled(); // 未走文件路径
@@ -239,6 +288,19 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		});
 		await enableAutoIntegration(app, DICT);
 		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1);
+	});
+
+	it("displayedTextSuffix 已是空串：保持不动（不做无谓写入）", async () => {
+		const saveData = vi.fn(async () => {});
+		const liveSettings: Record<string, unknown> = { displayedTextSuffix: "" };
+		const app = makeApp({
+			installed: true,
+			enabled: true,
+			liveSettings,
+			liveSaveData: saveData,
+		});
+		await enableAutoIntegration(app, DICT);
+		expect(liveSettings.displayedTextSuffix).toBe("");
 	});
 
 	it("Layer 1 已存在路径：不重复添加", async () => {
@@ -389,5 +451,62 @@ describe("shouldYieldSuggestToVc：建议框共存策略（Q23；1.0.31 补第�
 		expect(shouldYieldSuggestToVc("own", "enabled", "off")).toBe(false);
 		expect(shouldYieldSuggestToVc("own", "disabled", "manual")).toBe(false);
 		expect(shouldYieldSuggestToVc("own", "not-installed", "off")).toBe(false);
+	});
+});
+
+describe("disambiguateVcDisplayed：同名标题消歧（Q25，1.0.32）", () => {
+	/** 只有本函数关心的三个字段，其余给占位值。 */
+	const e = (path: string, displayText: string) => ({
+		path,
+		basename: path.split("/").pop()?.replace(/\.md$/i, "") ?? path,
+		level: 2,
+		lineIndex: 0,
+		displayText,
+		matchKey: displayText,
+		anchor: displayText,
+	});
+
+	it("标题全库唯一：保持纯净，不加任何后缀（绝大多数条目）", () => {
+		expect(disambiguateVcDisplayed([e("a.md", "引言"), e("b.md", "总结")])).toEqual([
+			"引言",
+			"总结",
+		]);
+	});
+
+	it("跨文件同名：各自带上文件名——这是 VC 按显示文本去重时唯一能保住两条的办法", () => {
+		expect(
+			disambiguateVcDisplayed([e("axi.md", "交叉矩阵"), e("交叉矩阵.md", "交叉矩阵")]),
+		).toEqual(["交叉矩阵 (axi)", "交叉矩阵 (交叉矩阵)"]);
+	});
+
+	it("不同目录下的同名文件：文件名仍撞，退到去掉 .md 的完整路径", () => {
+		expect(disambiguateVcDisplayed([e("x/同.md", "标题"), e("y/同.md", "标题")])).toEqual([
+			"标题 (x/同)",
+			"标题 (y/同)",
+		]);
+	});
+
+	it("同一文件里两个同名标题：最具体的候选后面挂序号", () => {
+		expect(disambiguateVcDisplayed([e("a.md", "小结"), e("a.md", "小结")])).toEqual([
+			"小结 (a)",
+			"小结 (a) #2",
+		]);
+	});
+
+	it("某标题原文恰好长得像消歧后的形态：不与之撞车", () => {
+		// 真有一个标题就叫「交叉矩阵 (axi)」，消歧结果必须避开它。
+		const out = disambiguateVcDisplayed([
+			e("axi.md", "交叉矩阵"),
+			e("交叉矩阵.md", "交叉矩阵"),
+			e("c.md", "交叉矩阵 (axi)"),
+		]);
+		expect(out[2]).toBe("交叉矩阵 (axi)"); // 唯一标题保持纯净
+		expect(new Set(out).size).toBe(3); // 三条互不相同 => VC 不会去重掉任何一条
+		expect(out[0]).not.toBe("交叉矩阵 (axi)");
+	});
+
+	it("确定性：同一输入两次调用输出一致（保证内容未变时不重写词典文件）", () => {
+		const input = [e("axi.md", "交叉矩阵"), e("交叉矩阵.md", "交叉矩阵"), e("b.md", "引言")];
+		expect(disambiguateVcDisplayed(input)).toEqual(disambiguateVcDisplayed(input));
 	});
 });

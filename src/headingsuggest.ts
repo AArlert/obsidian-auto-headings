@@ -37,14 +37,22 @@ import { normalizeForWhitelist } from "./whitelist";
 const SUGGEST_LIMIT = 20;
 
 /**
- * 条目 icon 的候选序列（1.0.29，用户要求「用标题的 H 标志」）：优先 lucide 的 `heading`，
- * 该 id 不在当前 Obsidian 内置图标集里时退到 `hash`（`#`，同样是标题语义），最后退到 `link`。
+ * 条目 icon 的候选序列。
+ *
+ * 1.0.29 用的是 `heading`（H 标志）；**1.0.32 改为书架语义**（`library`）——用户决定
+ * 两个建议框的观感统一到 VC 那一套：VC 框里标题候选走的是「自定义词典」类型，图标固定是
+ * 书架（ionicons library），且 VC 的 DOM 没有任何 per-word / per-dictionary 钩子，我们**改不了**
+ * 那边（只能覆盖整个 customDictionary 类型的 CSS，会误伤用户自己的词典条目，已否决）。
+ * 既然改不了那边，就把这边对齐过去，免得同一功能在两个框里长两副面孔。
+ *
+ * 刻意**不照搬 VC 样式表里的 base64 资产**（第三方资产 + 署名问题），改用 Obsidian 内置 lucide
+ * 的同语义图标，顺带自动跟随主题。
  *
  * 为什么要兜底：`setIcon` 的 id 只是字符串，官方 .d.ts 不枚举、也不校验——传了内置集里没有的
  * id 会**静默留空**（条目前面变成一个空洞）。逐个试 + 检查是否真渲染出子元素，比赌某个 id
  * 一定存在稳妥，代价只有首次渲染的一两次 DOM 判空。
  */
-const ICON_CANDIDATES = ["heading", "hash", "link"] as const;
+const ICON_CANDIDATES = ["library", "book", "heading"] as const;
 
 /** 按 {@link ICON_CANDIDATES} 依次尝试，取第一个真正渲染出内容的 icon。 */
 function setHeadingIcon(el: HTMLElement): void {
@@ -157,8 +165,8 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 
 	renderSuggestion(entry: HeadingIndexEntry, el: HTMLElement): void {
 		// 1.0.28：与 VC 原生建议框一致，条目带 icon。布局：icon 列 + 标题/来源两行文本列。
-		// 1.0.29：icon 由 "link" 改为 "heading"（H 标志）——候选的语义是「某个标题」，
-		// 而不是「某个链接」；VC 框里各来源也是按条目**种类**区分 icon 的。
+		// 1.0.32：icon 与两行字号统一对齐 VC 的自定义词典条目观感（见 ICON_CANDIDATES 与
+		// styles.css）——同一功能在两个建议框里不该长两副面孔。
 		el.addClass("ah-heading-suggest-item");
 		const iconEl = el.createDiv({ cls: "ah-heading-suggest-icon" });
 		setHeadingIcon(iconEl);

@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-08-09","version":"1.0.20","summary":"file-open 同步读到的是上一篇的编辑器内容 ⇒ 用 A 的内容判断、把守卫提示挂到 B 的路径上（点进去说没什么可清理、切回 A 又不弹）。renumberOnOpen 推迟一个宏任务 + 重新确认活动文件；防抖计时器加 info.file 路径作废闸（此前写入侧无保护，可能把 A 的编号写进 B）。J15 三例，去掉修复实测变红。"}
 {"type":"log","date":"2026-08-09","version":"1.0.19","summary":"迁移守卫提示改为只为 getActiveFile() 那个文件发声 + 单条 activeGuardNotice 按路径去重 + 失效即收起；删 1.0.18 的 lastGuardedPath。根因：防抖计时器/批量刷新的发起方不保证是活动文件。测试替身补 getActiveFile（缺它正是两版没测出来的原因）。"}
 {"type":"log","date":"2026-08-09","version":"1.0.18","summary":"迁移守卫重新提示改按检查序列推导（lastGuardedPath 单变量），不再依赖 file-open——真机反馈 1.0.17 版本切标签页返回不一定重新提示。main.test.ts J13 重写+新增 4 例。发行说明改 1.0.18.md。"}
 {"type":"log","date":"2026-08-09","version":"1.0.17","summary":"单标题跳过编号 <!-- skip -->（issue #6，接白名单同一豁免分支）+ 迁移守卫改可见（每次打开重新提示、点击弹清理预览确认框）+ UVM 注释块激励三颗雷排完 + LRU 上限 50→200。细节见 log.md。"}

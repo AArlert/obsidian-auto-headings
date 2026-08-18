@@ -15,6 +15,7 @@
 import { Modal, Notice, Setting, type App } from "obsidian";
 import type AutoHeadingsPlugin from "../../main";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
+import { readVcDescriptionOnSuggestion } from "../../vcintegration";
 
 /** 复制文本到剪贴板：优先 Clipboard API，失败回退临时 textarea + execCommand（移动端兜底）。 */
 async function copyToClipboard(text: string): Promise<void> {
@@ -75,6 +76,11 @@ export function renderVcIntegrationSection(
 		});
 
 	if (plugin.settings.vcIntegrationMode !== "off") {
+		// 1.0.32：来源路径行靠 VC 的 descriptionOnSuggestion 渲染；用户把它设成 None 时那一行
+		// 不会出现。这是 VC 的全局显示偏好（同时管 internalLink 等），不代改，只如实提示一句。
+		if (readVcDescriptionOnSuggestion(plugin.app)?.toLowerCase() === "none") {
+			containerEl.createEl("p", { cls: "ah-section-desc", text: t.vcDescriptionOffHint });
+		}
 		const path = plugin.vcDictionaryFilePath();
 		new Setting(containerEl)
 			.setName(t.vcDictionaryPathLabel)

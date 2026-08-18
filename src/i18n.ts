@@ -122,6 +122,8 @@ export interface Messages {
 	noticeVcDictionaryTruncated: (total: number) => string;
 	/** 自动配置确认框的要点列表（Modal 里渲染为 ul）。 */
 	vcAutoConfirmPoints: string[];
+	/** VC 的 descriptionOnSuggestion 设为 None 时，来源路径行不显示的只读提示（1.0.32）。 */
+	vcDescriptionOffHint: string;
 
 	// —— 路径规则 ——
 	pathRulesHeading: string;
@@ -409,7 +411,7 @@ const zh: Messages = {
 	noticeVcPathCopied: "词典文件路径已复制。",
 	vcManualConfirmTitle: "开启手动联动",
 	vcManualConfirmBody:
-		"将在插件目录下生成/维护 JSON 标题词典文件，并在此显示其路径；不会修改 Various Complements 的任何配置。请复制路径，自行粘贴到 VC 的「Custom dictionary paths」设置并启用「Custom dictionary complement」。",
+		"将在插件目录下生成/维护 JSON 标题词典文件，并在此显示其路径；不会修改 Various Complements 的任何配置。请复制路径，自行粘贴到 VC 的「Custom dictionary paths」设置并启用「Custom dictionary complement」。另建议把 VC 的「Displayed text suffix」清空，否则标题候选会显示成「标题 => ...」。",
 	vcManualConfirmButton: "生成词典文件",
 	vcAutoConfirmTitle: "开启自动联动",
 	vcAutoConfirmBody:
@@ -417,8 +419,11 @@ const zh: Messages = {
 	vcAutoConfirmPoints: [
 		"生成/维护标题词典文件（最多 2 万条标题，超出自动截断）",
 		"写入 VC 配置：词典路径 + 开启「自定义词典补全」+ 触发阈值调为 1 个字符",
+		"清空 VC 的「补全候选显示后缀」——这是全局项，你其它自定义词典的候选也不再带「 => ...」",
 		"写入完成后自动重载 VC 词典（失败会另行提示）",
 	],
+	vcDescriptionOffHint:
+		"Various Complements 的「Description on suggestion」当前为 None，标题候选下方的来源路径行不会显示（同名标题仍可凭标题行括号里的文件名区分）。这是 VC 的全局显示偏好，本插件不代改。",
 	vcAutoConfirmButton: "确认并自动配置",
 	noticeVcAutoWriteSuccess: "已自动配置 Various Complements 联动。",
 	noticeVcAutoWriteInvalidShape:
@@ -711,7 +716,7 @@ const en: Messages = {
 	noticeVcPathCopied: "Dictionary file path copied.",
 	vcManualConfirmTitle: "Enable manual integration",
 	vcManualConfirmBody:
-		'A JSON heading dictionary file will be generated and maintained inside this plugin\'s folder, and its path will be shown here. No Various Complements setting will be modified. Copy the path, paste it into VC\'s "Custom dictionary paths" setting, and enable its "Custom dictionary complement" feature.',
+		'A JSON heading dictionary file will be generated and maintained inside this plugin\'s folder, and its path will be shown here. No Various Complements setting will be modified. Copy the path, paste it into VC\'s "Custom dictionary paths" setting, and enable its "Custom dictionary complement" feature. Clearing VC\'s "Displayed text suffix" is also recommended, otherwise heading candidates render as "heading => ...".',
 	vcManualConfirmButton: "Generate dictionary",
 	vcAutoConfirmTitle: "Enable automatic integration",
 	vcAutoConfirmBody:
@@ -719,8 +724,11 @@ const en: Messages = {
 	vcAutoConfirmPoints: [
 		"Generate/maintain the heading dictionary file (capped at 20,000 headings, truncated beyond that)",
 		'Write to VC settings: dictionary path + enable "Custom dictionary complement" + set its trigger threshold to 1 character',
+		'Clear VC\'s "Displayed text suffix" — this is a global setting, so candidates from your other custom dictionaries will no longer carry " => ..." either',
 		"Reload VC dictionaries automatically after writing (you'll be told if that fails)",
 	],
+	vcDescriptionOffHint:
+		'Various Complements\' "Description on suggestion" is currently None, so the source-path line under each heading candidate will not be shown (headings with the same name can still be told apart by the file name in parentheses on the title line). This is a global VC display preference; this plugin does not change it for you.',
 	vcAutoConfirmButton: "Confirm & configure",
 	noticeVcAutoWriteSuccess: "Various Complements integration configured automatically.",
 	noticeVcAutoWriteInvalidShape:
