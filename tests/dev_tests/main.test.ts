@@ -131,6 +131,8 @@ interface PluginInternals {
 	scheduleHeadingIndexUpdate(editor: unknown, info: unknown): void;
 	buildInitialHeadingIndex(): Promise<void>;
 	setHeadingLinkSuggestEnabled(enabled: boolean): Promise<void>;
+	/** M13（1.0.28）：启动后的 VC 词典同步（重写词典 + reload 重试）。 */
+	syncVcDictionaryAfterStartup(): Promise<void>;
 }
 
 /** 以 H2 中文样式覆盖默认模板（用于「改模板后即时重排」）。 */
@@ -2232,5 +2234,53 @@ describe("M13：VC 词典写盘（节流 / 去重 / 截断，Q11/Q20 逻辑面�
 		const parsed = JSON.parse(raw ?? "{}") as { words?: unknown[] };
 		expect(parsed.words).toHaveLength(20000);
 		expect(Notice.messages.some((m) => m.includes("词典已截断"))).toBe(true);
+	});
+
+	it("auto 模式启动同步：重写词典 + 调用 VC reload（升级场景，Q21 逻辑面）", async () => {
+		const { p, adapterFiles } = makePlugin({ vaultFiles: { "a.md": "## 交叉矩阵" } });
+		p.settings.vcIntegrationMode = "auto";
+		const executeCommandById = vi.fn(() => true);
+		(
+			p as unknown as { app: { commands?: { executeCommandById: () => boolean } } }
+		).app.commands = {
+			executeCommandById,
+		};
+		await p.setHeadingLinkSuggestEnabled(true); // 构建索引
+		for (let i = 0; i < 100; i++) {
+			await Promise.resolve();
+		}
+		await (
+			p as unknown as { syncVcDictionaryAfterStartup(): Promise<void> }
+		).syncVcDictionaryAfterStartup();
+		expect(adapterFiles.has("plugins/auto-headings/vc-heading-dictionary.json")).toBe(true);
+		expect(executeCommandById).toHaveBeenCalledWith(
+			"various-complements:reload-custom-dictionaries",
+		);
+	});
+
+	it("启动同步：reload 命令不可用时按 2s 间隔重试 5 次后静默放弃（不抛错）", async () => {
+		const { p } = makePlugin({ vaultFiles: { "a.md": "## 交叉矩阵" } });
+		p.settings.vcIntegrationMode = "auto";
+		const executeCommandById = vi.fn(() => false);
+		(
+			p as unknown as { app: { commands?: { executeCommandById: () => boolean } } }
+		).app.commands = {
+			executeCommandById,
+		};
+		await p.setHeadingLinkSuggestEnabled(true);
+		for (let i = 0; i < 100; i++) {
+			await Promise.resolve();
+		}
+		const promise = (
+			p as unknown as { syncVcDictionaryAfterStartup(): Promise<void> }
+		).syncVcDictionaryAfterStartup();
+		// 每个 timer 触发后需要多轮微任务恢复（C resolve → attempt 的 try 完成 → 挂起下一 timer），
+		// 放宽为 12 轮 advance+flush；无挂起 timer 时 advance 是 no-op。
+		for (let i = 0; i < 12; i++) {
+			vi.advanceTimersByTime(2000);
+			await Promise.resolve();
+		}
+		await promise;
+		expect(executeCommandById).toHaveBeenCalledTimes(5);
 	});
 });

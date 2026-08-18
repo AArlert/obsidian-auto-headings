@@ -14,6 +14,7 @@
 
 import {
 	EditorSuggest,
+	setIcon,
 	type Editor,
 	type EditorPosition,
 	type EditorSuggestContext,
@@ -108,11 +109,16 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 	}
 
 	renderSuggestion(entry: HeadingIndexEntry, el: HTMLElement): void {
+		// 1.0.28：与 VC 原生建议框一致，条目带 icon（链接图标）——用户实测反馈「候选前没有 icon，
+		// 和原生 VC 不一致」。布局：icon 列 + 标题/来源两行文本列。
 		el.addClass("ah-heading-suggest-item");
-		el.createDiv({ cls: "ah-heading-suggest-title", text: entry.displayText });
+		const iconEl = el.createDiv({ cls: "ah-heading-suggest-icon" });
+		setIcon(iconEl, "link");
+		const content = el.createDiv({ cls: "ah-heading-suggest-content" });
+		content.createDiv({ cls: "ah-heading-suggest-title", text: entry.displayText });
 		const activeFile = this.context?.file;
 		const isSelf = activeFile?.path === entry.path;
-		el.createDiv({
+		content.createDiv({
 			cls: "ah-heading-suggest-path",
 			text: isSelf ? this.plugin.messages().headingSuggestThisFile : entry.path,
 		});

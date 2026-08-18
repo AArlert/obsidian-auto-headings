@@ -896,12 +896,26 @@ button.ah-tab.ah-tab-active:hover {
 	margin-bottom: 6px;
 }
 
-/* 标题链接建议（M13）：建议框候选行——标题原文 + 来源路径两行 */
+/* 标题链接建议（M13）：建议框候选行——icon 列 + 标题原文/来源路径两行（1.0.28 起带 icon，
+   与 Various Complements 原生建议框视觉一致） */
 .ah-heading-suggest-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	padding: 2px 0;
+}
+
+.ah-heading-suggest-icon {
+	flex-shrink: 0;
+	margin-top: 2px;
+	color: var(--text-muted);
+}
+
+.ah-heading-suggest-content {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	padding: 2px 0;
+	min-width: 0;
 }
 
 .ah-heading-suggest-title {

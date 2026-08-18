@@ -93,12 +93,14 @@ function compareEntries(a: HeadingIndexEntry, b: HeadingIndexEntry): number {
 }
 
 /** 在 sorted（按 compareEntries 升序）里找第一个「>= needle 的条目」的下标（needle 是完整条目）。 */
-function lowerBoundEntry(sorted: HeadingIndexEntry[], needle: HeadingIndexEntry): number {
+/** 在 sorted（按 compareEntries 升序）里找第一个「> needle 的条目」的下标——相等区间的**末尾**，
+ *  插入点用它可保持「先插入在前」的稳定顺序（1.0.28 压测修复，见 setFile/renameFile）。 */
+function upperBoundEntry(sorted: HeadingIndexEntry[], needle: HeadingIndexEntry): number {
 	let lo = 0;
 	let hi = sorted.length;
 	while (lo < hi) {
 		const mid = (lo + hi) >>> 1;
-		if (compareEntries(sorted[mid], needle) < 0) {
+		if (compareEntries(sorted[mid], needle) <= 0) {
 			lo = mid + 1;
 		} else {
 			hi = mid;
@@ -178,7 +180,10 @@ export class HeadingIndex {
 		this.totalCount = this.totalCount - old.length + taken.length;
 		this.sorted = this.sorted.filter((e) => e.path !== path);
 		for (const e of taken) {
-			this.sorted.splice(lowerBoundEntry(this.sorted, e), 0, e);
+			// 用 upperBound（相等区间的**末尾**）插入：同 (matchKey, path) 的条目保持
+			// 「先插入在前」的稳定顺序（1.0.28 压测修复——lowerBound 前插会让反复更新
+			// 同一文件时相同 key 的条目顺序反转，与参考模型稳定排序不一致）。
+			this.sorted.splice(upperBoundEntry(this.sorted, e), 0, e);
 		}
 	}
 
@@ -193,18 +198,30 @@ export class HeadingIndex {
 		this.sorted = this.sorted.filter((e) => e.path !== path);
 	}
 
-	/** 增量：文件改名——只改字段，不需要重新解析内容。 */
+	/**
+	 * 增量：文件改名——只改字段，不需要重新解析内容。
+	 *
+	 * 目标路径**已存在**时（改名覆盖，UVM 压测 1.0.28 覆盖）：被覆盖文件的旧条目一并移除、
+	 * `totalCount` 同步修正——否则 sorted 里残留旧路径条目、计数漂移。**自身改名**
+	 * （oldPath === newPath，UVM 压测 1.0.28 覆盖）按无操作处理：replaced 与 entries 是
+	 * 同一数组，直接相减会把 totalCount 多扣一份。
+	 */
 	renameFile(oldPath: string, newPath: string, newBasename: string): void {
 		const entries = this.byFile.get(oldPath);
 		if (!entries) {
 			return;
 		}
+		if (oldPath === newPath) {
+			return; // 自身改名：无操作（Obsidian 的 rename 事件不会产生，防御边界）
+		}
+		const replaced = this.byFile.get(newPath) ?? [];
 		this.byFile.delete(oldPath);
-		this.sorted = this.sorted.filter((e) => e.path !== oldPath);
+		this.sorted = this.sorted.filter((e) => e.path !== oldPath && e.path !== newPath);
+		this.totalCount = this.totalCount - entries.length - replaced.length + entries.length;
 		for (const e of entries) {
 			e.path = newPath;
 			e.basename = newBasename;
-			this.sorted.splice(lowerBoundEntry(this.sorted, e), 0, e);
+			this.sorted.splice(upperBoundEntry(this.sorted, e), 0, e);
 		}
 		this.byFile.set(newPath, entries);
 	}
