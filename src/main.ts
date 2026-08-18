@@ -46,6 +46,18 @@ import {
 import { parseHeadings, type Heading } from "./parser";
 import { NO_NUMBERING_TEMPLATE, resolvePathRule, ruleMatches, type PathRule } from "./pathrules";
 import { TemplateStore } from "./templates/TemplateStore";
+import { HeadingIndex } from "./headingindex";
+import { HeadingLinkSuggest } from "./headingsuggest";
+import {
+	buildVcDictionaryJson,
+	enableAutoIntegration,
+	tryReloadVcDictionaries,
+	VC_DICTIONARY_THROTTLE_MS,
+	vcDictionaryPath,
+} from "./vcintegration";
+
+/** M13：初始标题索引扫描的批量大小（文件数），每批让出主线程一次（方案 §2.4，可调常量）。 */
+const INITIAL_SCAN_BATCH_SIZE = 200;
 
 /**
  * obsidian-auto-headings 插件入口。
@@ -82,6 +94,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	/** 以文件路径为键的防抖计时器；编辑另一个笔记不会取消当前笔记的待处理更新。 */
 	private readonly debounceTimers = new Map<string, number>();
+
+	/**
+	 * 标题索引：全 vault「剥前缀后原文 → 位置」的内存索引（M13，见 headingindex.ts）。
+	 * 刻意不加 private——HeadingLinkSuggest（另一个类）需要读它，与 imeComposing 完全同款先例。
+	 */
+	headingIndex = new HeadingIndex();
+	/** 标题索引增量更新的按文件去抖计时器（与 debounceTimers 同构，独立维护）。 */
+	private readonly headingIndexTimers = new Map<string, number>();
+	/** VC 词典文件重写的全局节流计时器（见 vcintegration.ts）。 */
+	private vcDictionaryTimer: number | null = null;
 
 	/**
 	 * 「清除全库编号」进行中标志（M7 多 TAB 敏感操作，见 spec.md §3.10）：置位期间
@@ -166,6 +188,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.settingTab = new AutoHeadingsSettingTab(this.app, this);
 		this.addSettingTab(this.settingTab);
 
+		// 标题链接建议（M13）：EditorSuggest 建议框。此处不依赖 headingIndex/vault 扫描是否已完成——
+		// onTrigger 只有在用户真正打字触发时才会被调用，届时 onload() 早已跑完。
+		this.registerEditorSuggest(new HeadingLinkSuggest(this));
+
 		// 全局切换命令：与「全局自动编号」面板开关双向同步（统一经由 setAutoNumber）。
 		// 命令 ID 不含插件 ID（Obsidian 注册时自动加 `auto-headings:` 前缀，审核要求不重复）。
 		this.addCommand({
@@ -205,10 +231,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 			},
 		});
 
-		// 实时编辑监听：editor onChange → 重置该文件的防抖计时器。
+		// 实时编辑监听：editor onChange → 重置该文件的防抖计时器（编号 + M13 标题索引各一套）。
 		this.registerEvent(
 			this.app.workspace.on("editor-change", (editor, info) => {
 				this.scheduleRenumber(editor, info);
+				this.scheduleHeadingIndexUpdate(editor, info);
 			}),
 		);
 
@@ -280,6 +307,41 @@ export default class AutoHeadingsPlugin extends Plugin {
 				this.dismissGuardNotice(file.path);
 			}),
 		);
+
+		// 标题索引（M13）：初始全量扫描 + 增量维护监听器，延后到布局就绪后注册/执行——避免拖慢
+		// 启动；且避免 vault.on("create") 在启动时为每个既存文件重放一遍（obsidian.d.ts 官方说明）。
+		// 监听器必须先于初始扫描注册：扫描期间发生的真实变更不能被漏掉（setFile 幂等，重叠无害）。
+		this.app.workspace.onLayoutReady(() => {
+			this.registerEvent(
+				this.app.vault.on("create", (f) => {
+					if (f instanceof TFile && f.extension === "md") {
+						void this.indexSingleFile(f);
+					}
+				}),
+			);
+			this.registerEvent(
+				this.app.vault.on("modify", (f) => {
+					if (f instanceof TFile && f.extension === "md") {
+						void this.indexSingleFile(f);
+					}
+				}),
+			);
+			this.registerEvent(
+				this.app.vault.on("delete", (f) => {
+					this.headingIndex.removeFile(f.path);
+				}),
+			);
+			this.registerEvent(
+				this.app.vault.on("rename", (f, oldPath) => {
+					if (f instanceof TFile && f.extension === "md") {
+						this.headingIndex.renameFile(oldPath, f.path, f.basename);
+					} else {
+						this.headingIndex.removeFile(oldPath);
+					}
+				}),
+			);
+			void this.buildInitialHeadingIndex();
+		});
 	}
 
 	onunload(): void {
@@ -291,6 +353,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.headingSnapshots.clear();
 		this.activeGuardNotice?.notice.hide();
 		this.activeGuardNotice = null;
+		// M13：标题索引与 VC 词典计时器一并清理，索引内存立即释放。
+		for (const timer of this.headingIndexTimers.values()) {
+			window.clearTimeout(timer);
+		}
+		this.headingIndexTimers.clear();
+		this.headingIndex.clear();
+		if (this.vcDictionaryTimer !== null) {
+			window.clearTimeout(this.vcDictionaryTimer);
+			this.vcDictionaryTimer = null;
+		}
 	}
 
 	/**
@@ -301,6 +373,79 @@ export default class AutoHeadingsPlugin extends Plugin {
 		await this.saveSettings();
 		// 若设置面板当前打开，刷新以反映最新状态（含「兜底缺失提示条」的显隐）。
 		this.settingTab.display();
+	}
+
+	/**
+	 * 设置「标题链接建议」开关并持久化（M13）：开启且索引尚未构建时立即补建（不必重载插件）；
+	 * 关闭时立即清空索引——兑现「关闭即零成本」（索引完全不构建，见 headingindex.ts）。
+	 * 与 setAutoNumber 完全同构的「面板开关 ↔ 持久化」模式。
+	 */
+	async setHeadingLinkSuggestEnabled(enabled: boolean): Promise<void> {
+		this.settings.headingLinkSuggestEnabled = enabled;
+		await this.saveSettings();
+		if (enabled && this.headingIndex.size === 0) {
+			void this.buildInitialHeadingIndex();
+		} else if (!enabled) {
+			this.headingIndex.clear();
+		}
+	}
+
+	/** 本插件 VC 词典文件的完整路径（固定位于插件目录下，见 vcintegration.ts）。 */
+	vcDictionaryFilePath(): string {
+		const pluginDir =
+			this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+		return vcDictionaryPath(pluginDir);
+	}
+
+	/**
+	 * 手动配置模式（M13，见方案 §5.10）：生成/刷新词典文件并落盘模式选择。
+	 * 不碰 Various Complements 的任何配置文件。
+	 */
+	async enableVcManualIntegration(): Promise<void> {
+		this.settings.vcIntegrationMode = "manual";
+		await this.saveSettings();
+		await this.writeVcDictionary();
+	}
+
+	/**
+	 * 自动配置模式（M13，见方案 §5.7/§5.9）：探测 → 写入 VC 配置（分层防御）→ 落盘模式 →
+	 * reload 命令调用与兜底。校验失败时**不写入** "auto"，模式保持原值，由设置面板重绘复位。
+	 */
+	async enableVcAutoIntegration(): Promise<void> {
+		const t = this.messages();
+		const path = this.vcDictionaryFilePath();
+		const result = await enableAutoIntegration(this.app, path);
+		if (result.outcome === "ok") {
+			this.settings.vcIntegrationMode = "auto";
+			await this.saveSettings();
+			await this.writeVcDictionary();
+			new Notice(t.noticeVcAutoWriteSuccess);
+			const reloaded = await tryReloadVcDictionaries(this.app);
+			if (!reloaded) {
+				// 写入成功但 reload 失败：独立提示，不能与「写入失败」混为一谈。
+				new Notice(t.noticeVcReloadFailed);
+			}
+			return;
+		}
+		if (result.outcome === "invalid-shape") {
+			new Notice(t.noticeVcAutoWriteInvalidShape);
+			return; // 设置保持不变（面板下拉由 display() 重绘复位）。
+		}
+		new Notice(t.noticeVcAutoWriteNotInstalled); // not-installed / disabled-and-no-file
+	}
+
+	/**
+	 * 切回「不联动」（M13，见方案 §5.10）：停止后续词典文件维护。
+	 * **不删除**已生成的词典文件、**不撤销**已写入 VC 的配置（v1 明确不做反向清理——
+	 * 「这个值当初是不是我们改的」这类状态追踪复杂度与收益不成比例）。
+	 */
+	async setVcIntegrationOff(): Promise<void> {
+		this.settings.vcIntegrationMode = "off";
+		await this.saveSettings();
+		if (this.vcDictionaryTimer !== null) {
+			window.clearTimeout(this.vcDictionaryTimer);
+			this.vcDictionaryTimer = null;
+		}
 	}
 
 	/**
@@ -486,6 +631,108 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 		}
 		return { prefixes: [...prefixes], suffixes: [...suffixes] };
+	}
+
+	/**
+	 * M13：初始全量扫描。**必须走 HeadingIndex.loadInitial**（一次排序），不能循环调用 setFile
+	 * （O((N·H)²) 退化，见 headingindex.ts）。按批让出主线程，避免大 vault 长时间阻塞 UI；
+	 * 单文件读取失败静默跳过，不阻断整体扫描。
+	 */
+	private async buildInitialHeadingIndex(): Promise<void> {
+		if (!this.settings.headingLinkSuggestEnabled) {
+			return;
+		}
+		const files = this.app.vault.getMarkdownFiles(); // 既有先例：main.ts 批量重编号同款取法
+		const batch: Array<{ path: string; basename: string; content: string }> = [];
+		for (let i = 0; i < files.length; i++) {
+			const f = files[i];
+			try {
+				batch.push({
+					path: f.path,
+					basename: f.basename,
+					content: await this.app.vault.cachedRead(f),
+				});
+			} catch {
+				/* 单文件读取失败：跳过，不阻断整体扫描 */
+			}
+			if ((i + 1) % INITIAL_SCAN_BATCH_SIZE === 0) {
+				await new Promise((resolve) => window.setTimeout(resolve, 0)); // 让出主线程
+			}
+		}
+		this.headingIndex.loadInitial(batch);
+		if (this.headingIndex.isTruncated) {
+			// 一次性告知，不做静默丢弃：默认开启的功能在超大 vault 下部分失效却不提示，
+			// 用户会把它当 bug 报告。
+			new Notice(this.messages().noticeHeadingIndexTruncated(this.headingIndex.size));
+		}
+	}
+
+	/** M13：单文件增量索引（新建/修改后调用）。读取失败静默忽略，下次 modify 事件会重试。 */
+	private async indexSingleFile(f: TFile): Promise<void> {
+		if (!this.settings.headingLinkSuggestEnabled) {
+			return;
+		}
+		try {
+			this.headingIndex.setFile(f.path, f.basename, await this.app.vault.cachedRead(f));
+		} catch {
+			/* 忽略：下次 modify 事件会重试 */
+		}
+		this.scheduleVcDictionaryWrite();
+	}
+
+	/**
+	 * M13：与 scheduleRenumber 同构的按文件去抖，独立维护——覆盖「编辑器已改但尚未落盘」的
+	 * 新鲜度窗口（vault.on("modify") 只在落盘后才触发）：用户刚打完一个新标题，几秒内就能搜到。
+	 */
+	private scheduleHeadingIndexUpdate(
+		editor: Editor,
+		info: MarkdownView | MarkdownFileInfo,
+	): void {
+		const file = info.file;
+		if (!file || !this.settings.headingLinkSuggestEnabled) {
+			return;
+		}
+		const path = file.path;
+		const existing = this.headingIndexTimers.get(path);
+		if (existing !== undefined) {
+			window.clearTimeout(existing);
+		}
+		const timer = window.setTimeout(() => {
+			this.headingIndexTimers.delete(path);
+			if (info.file?.path !== path) {
+				return; // 与 scheduleRenumber 同一条 J15 教训：该叶子已切到别的文件，本轮作废
+			}
+			this.headingIndex.setFile(path, file.basename ?? linkBasename(path), editor.getValue());
+			this.scheduleVcDictionaryWrite();
+		}, this.settings.debounceDelay); // 复用已有防抖延迟设置，不新增设置项
+		this.headingIndexTimers.set(path, timer);
+	}
+
+	/**
+	 * M13：VC 词典重写（全局 3000ms 节流，见 vcintegration.ts §5.8）——重写一个可能几千条目的
+	 * JSON 文件比更新内存索引昂贵得多，没必要跟着每次小改动都写盘。「不联动」时完全不生成/维护。
+	 */
+	private scheduleVcDictionaryWrite(): void {
+		if (this.settings.vcIntegrationMode === "off" || !this.settings.headingLinkSuggestEnabled) {
+			return;
+		}
+		if (this.vcDictionaryTimer !== null) {
+			window.clearTimeout(this.vcDictionaryTimer);
+		}
+		this.vcDictionaryTimer = window.setTimeout(() => {
+			this.vcDictionaryTimer = null;
+			void this.writeVcDictionary();
+		}, VC_DICTIONARY_THROTTLE_MS);
+	}
+
+	/** M13：把当前索引全量写成 VC 词典 JSON（手动/自动模式共用；写失败静默，下次变更会重试）。 */
+	private async writeVcDictionary(): Promise<void> {
+		const json = buildVcDictionaryJson(this.headingIndex.allEntries());
+		try {
+			await this.app.vault.adapter.write(this.vcDictionaryFilePath(), json);
+		} catch {
+			/* 写入失败静默忽略：下一次索引变更会重试 */
+		}
 	}
 
 	/**
@@ -1248,6 +1495,14 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		if (typeof merged.backlinksIntroShown !== "boolean") {
 			merged.backlinksIntroShown = false;
+		}
+		// M13：新字段缺省兜底——标题链接建议默认开（默认能力）；VC 联动默认不联动
+		// （不能因为基础功能默认开就顺带默认开联动，需用户在设置面板显式选择）。
+		if (typeof merged.headingLinkSuggestEnabled !== "boolean") {
+			merged.headingLinkSuggestEnabled = true;
+		}
+		if (merged.vcIntegrationMode !== "manual" && merged.vcIntegrationMode !== "auto") {
+			merged.vcIntegrationMode = "off";
 		}
 		// 迁移：历史独立开关 `backlinkStandaloneTrigger`（0.7.8–1.0.8，CR-18）已并入 `updateBacklinks`
 		// （1.0.9 起单开关全局生效，与是否命中编号模板无关）；旧字段不再读取，随迁移一并清理。

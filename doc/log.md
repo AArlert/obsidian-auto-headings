@@ -41,6 +41,95 @@
 
 ---
 
+## 2026-08-11 M13 落地：标题链接建议 + Various Complements 联动（1.0.26）
+
+### 做了什么
+
+按 `doc/research/gitignore-axi-md-3-1-1-tab-axi-declarative-whistle.md` 完整执行（该目录已被
+`.gitignore` 排除不入库）。方案 §0 的 `.gitignore` 改动（排除 `doc/research/`）已由上一会话
+先行提交（`4af7ec3`），本周期核对时已在库，无需重复。本轮实现完整 M13。
+
+**功能一：标题链接建议（默认开）**——在任意笔记正文里打出与 vault 内标题「剥编号前缀后的
+原文」匹配的文字时弹出建议，Tab/点按接受后替换为指向该标题的链接（视觉保留用户打的原文）。
+
+- 新增 `src/headingindex.ts`：`HeadingIndexEntry` + `buildEntriesForFile`（复用 `parseHeadings` /
+  `stripPrefix` / `displayAnchor` / `normalizeForWhitelist`，与编号引擎完全解耦——白名单豁免、
+  「不编号」文件夹的标题照常可链）+ `HeadingIndex`（按 matchKey 排序数组 + 二分查找；
+  `loadInitial` 一次排序避免 O((N·H)²)；上限 50,000 条 / 单文件 500 条，截断置位 + 一次性
+  Notice，不静默丢弃；构造参数可调上限供测试模拟截断）。
+- 新增 `src/headingtrigger.ts`：`extractTriggerToken`（`\p{L}\p{N}` 向左回溯，最短 2 码点 /
+  上限 80）、`isBlockedContext`（标题行 / `#` 标签 / 未闭合 `[[` / 紧邻 `[` 四类礼貌规则）、
+  `sortEntries`（精确优先 → matchKey 长度升序 → path 兜底）、`buildHeadingLink`（同文件省略
+  文件名，alias 恒为用户打的原文）。
+- 新增 `src/headingsuggest.ts`：`HeadingLinkSuggest extends EditorSuggest`，四个生命周期方法
+  薄委托纯函数（方案 §8.2 选项 A：类本身不伪造测试，留真机手验）；IME 组合期间 `onTrigger`
+  首行短路（复用既有 `imeComposing`）；Tab 接受走 `Scope.register`（[] 修饰键，不误吃
+  Shift+Tab），内部 `.suggestions.useSelectedItem` 包 try/catch 静默降级——Obsidian 内部 API，
+  已登记为未来升级最优先复查点。
+- `main.ts` 接线：`headingIndex` 字段 + 按文件去抖 `headingIndexTimers`；`onload` 注册
+  EditorSuggest + `onLayoutReady` 内**先挂** `vault.on(create/modify/delete/rename)` **再起**
+  初始扫描（`buildInitialHeadingIndex`，按 200 文件/批让出主线程，复用 `debounceDelay` 不新增
+  设置项）；`setHeadingLinkSuggestEnabled` 运行期补建/清空（关闭即零成本）；`onunload` 清理。
+  **架构承诺修订**：spec.md §4「触发的性能边界」追加 M13 例外（全生命周期一次懒加载全库只读
+  扫描，此后仅按文件增量维护）——这是方案 §2.1 明确要求正面处理的冲突，不能假装没发生。
+
+**功能二：Various Complements 联动（默认关，需显式确认）**——把标题索引导出为 JSON 词典喂给
+VC 的自定义词典补全（VC 自身标题级补全 issue #72 开了 4 年多没做，本联动是真实的获客角度，
+前提是足够稳、不破坏用户已有 VC 配置）。
+
+- 新增 `src/vcintegration.ts`：探测三态（not-installed / disabled / enabled，`app.plugins`
+  结构化收窄不用 any）+ 分层防御写入——Layer 1 活体实例（`.settings` + `saveData`，不碰文件、
+  无竞态）→ Layer 2 文件级读改写（JSON.parse 全量、只改 `customDictionaryPaths` /
+  `enableCustomDictionaryComplement` 两字段、JSON.stringify 全量写回，**绝不重建对象**）→
+  Layer 3 schema 校验失败整体放弃（`isValidVcSettingsShape` 存在才校验类型，并拒绝数组）；
+  `mergeDictionaryPath`（换行分隔字符串合并，最易错一步单独成纯函数）；`buildVcDictionaryJson`
+  （displayed 用**不含 WJ** 的干净原文——顺带消解 spec 附录 A.2 记录的「VC 精确匹配被 WJ
+  打穿」风险，已回填该节）；reload 命令调用与失败兜底（与「写入失败」提示分离）。
+- 设置：`headingLinkSuggestEnabled`（默认 true）+ `vcIntegrationMode`（off/manual/auto，默认
+  off）+ 三态下拉（沿用 `languageName` 的 addDropdown 先例）；**任何离开 off 的切换必须过确认
+  框**（新建 `src/settings/tabs/VcIntegrationSection.ts`，两个 Modal 照抄 DangerTab 结构）；
+  词典路径展示 + 一键复制（Clipboard API + execCommand 兜底）。
+- i18n 中英 23 个新键（含最高风险的自动配置确认文案，逐句列明会读写 VC 配置）；styles.css
+  建议框样式；README 双语各加一条卖点 + 快速上手补一行。
+
+**测试**：新增 `tests/dev_tests/headingindex.test.ts`（16 例）/ `headingtrigger.test.ts`
+（16 例）/ `vcintegration.test.ts`（24 例）；`main.test.ts` 追加 M13 两个 describe（8 例：
+去抖窗口/重置/切走作废/剥前缀收录/关闭不构建/运行期补建/截断 Notice）；
+`obsidian-mock.ts` 补 `EditorSuggest`/`PopoverSuggest`/`Scope` 最小替身 + Plugin 的
+`registerEditorSuggest`（headingsuggest 模块加载必需）。`doc/testplan.md` 新增 Q 分类 19 行
+（Q1–Q19），dev 可覆盖的逻辑行已回填 ✅/⚠️，真机项（Q4/Q5/Q9/Q10–Q15）保持 🔲 待用户手验。
+spec.md 落 M13 Roadmap 条目 + 执行顺序表第 6 位 + A.2 消解回填。
+
+### 没做什么
+
+- 方案 §10 Out of scope 全部未做：块级 `#^blockid`、模糊/拼音匹配、跨 vault、标题内标点触发、
+  围栏跨行检测、VC 联动关闭时的反向清理、其他补全插件联动、批量转换存量正文、索引持久化缓存。
+- `HeadingLinkSuggest` 类本身（Tab 键、DOM 渲染、移动端点按）未做自动化测试——方案 §8.2
+  选项 A 明确推荐：`EditorSuggest` 真实交互是 DOM/CM6 行为，伪造容易造出「测试通过但真实行为
+  对不上」的假安全感。
+- VC 侧 [C：未核实] 项（插件 id / `app.plugins` 形状 / data.json 字段名与类型 / 活体 `.settings`
+  字段 / reload 命令 id / Tab 默认行为 / compositionend 后是否立即重触发）全部按调研值实现，
+  在 testplan Q 行与代码注释标注，需真实环境逐条核对（方案 §12）。
+
+### 下一步
+
+- 真机手验（对照 testplan Q1–Q19 与方案 §11 清单）：建议框 DOM/Tab 接受、**已编号标题锚点
+  含 WORD_JOINER 时链接可点**（本功能最核心的正确性要求）、移动端点按、中文输入法组合、
+  真实 VC 手动/自动两条路径 + 至少一次刻意构造的失败场景（临时改坏 VC data.json 验证
+  Layer 3 兜底不写坏文件）。
+- 若实测发现 [C：未核实] 项与实现不符：修正 `vcintegration.ts`/`headingsuggest.ts` 对应实现，
+  不得为「让代码能跑」绕过 schema 校验或静默吞错（方案 §12 处理原则）。
+
+### 验证方式
+
+`npm run lint` 全绿 / `npm run build`（tsc -noEmit + esbuild）通过 / `npm test` 590 通过，
+唯一失败为 `whitelist.test.ts:406` Windows ICU 排序已知假红（与本次改动无关）/ `npm run
+format:check` 与 `npm run release` 在 preflight 内统一验证。未做真机手验（本环境无 Obsidian
+实体），按仓库惯例保持 testplan 对应行 🔲 并写明「待用户真机手验」。本周期派发 0 次（无
+SubAgent，全部主模型直接实现）。
+
+---
+
 ## 2026-08-10 bug 修复：快捷键转空标题——编号写入光标错位 + 行尾多一个空格（1.0.25）
 
 ### 做了什么
@@ -143,108 +232,6 @@ Claude Browser 预览，375px（模拟移动端）与 800px（模拟桌面）两
 
 ---
 
-## 2026-08-09 真机回归：新敲的标题不编号——彻底换掉「整行冻结」（并入 1.0.23，不单独发版）
-
-> **接手者注意**：本块记录的是**上一块修得不对**、用户真机又打回来的一次。教训在最后一节，
-> 比改动本身值钱。
->
-> **版本号说明**：本轮一度 bump 到 1.0.24，用户要求**并入 1.0.23**、不单独发新版，故版本号已退回
-> 1.0.23，`release-notes/1.0.24.md` 的内容并进 `1.0.23.md`、原文件删除。**但 1.0.23 的 tag 与
-> GitHub Release 是在本轮修复之前就已推送发布的**——线上那份 1.0.23 产物**不含本轮修复**，仓库里的
-> 1.0.23 与线上的 1.0.23 就此分叉。要让线上也拿到修复，须移动 1.0.23 tag 重新触发发布工作流
-> （见「没做什么」）。
-
-### 症状与根因
-
-用户实测：敲 `##` 写完标题文本，光标**直接移到另一行**，编号不出现；必须再编辑一次（多数人是
-碰巧按了 Enter）才补上。用户原话「怎么老毛病又回来了」——他把它读成 1.0.15 那个老问题复发。
-
-根因是**上一块给的修法覆盖不全**。那一版的判据是「光标行的标题层级相对
-`headingSnapshots` 是否变化」，而该判据前有一道保守闸：
-
-```ts
-if (headings.length !== snapshot.length) return false;  // 逐位对照前提被打破 → 当作"没变" → 冻结
-```
-
-**新敲出一个标题恰好会让标题数量变化**，于是走保守分支、整行冻结——层级判据只挡住了「改层级」
-那一种症状，挡不住「新增标题」这一种。
-
-更要命的是**解除冻结的条件从来就不成立**：冻结后本该「光标移开后的下一次触发补上」，但自动路径
-只挂 `editor-change`，**移动光标不触发任何事件**。所以真实解除条件是「再编辑一次」，不是「移开」。
-这一条 1.0.15 就写在注释和 spec 里，一直没人（包括我）意识到它根本不成立——**日志 / 注释里写着的
-「会在 X 之后补上」，如果 X 不是一个真实事件源，那就是一句从未被验证过的话。**
-
-### 改法：不再冻结任何东西
-
-整行冻结从一开始就是**用整行级手段去解决一个只关乎行尾空白的问题**（J11 要防的就只有
-`stripPrefix` 的 `\s+$` 把刚敲的空格吃掉）。本轮把手段本身换掉：
-
-- `preserveLine` + `levelChangedSinceSnapshot` → **删**，换成 `preserveCursorLineTrailingSpace`：
-  只把用户刚敲的行尾空白补回本轮结果，**编号照常写入**。不再需要快照、不再需要任何历史推断。
-- 幂等性天然成立：补回后与上一轮落盘内容逐字节相同 ⇒ 下一轮无改动可写，不发空事务。
-- 补回的空白不产生幻影改名——`parseHeadings` 的 `text` 本就去尾空白，快照与改名判定看的都是它。
-
-**配套改 `writeLineDiff` 为最小范围改写**（新增 `lineChange()`）：不冻结意味着光标行会在用户正
-敲字时被改写，而原先的**整行替换**变更范围覆盖光标位置，CM6 只能把光标甩到一端——那是换一种形式
-的「抢键盘」。掐掉两端公共前后缀后，编号前缀落在行首是**纯插入**（`from.ch === to.ch`），与行尾的
-光标天然不重叠。切点两端各回退一格避开 UTF-16 代理对（emoji 标题常见）。顺带缩小了 J6 的暴露面。
-
-### 验证
-
-`main.test.ts` J19 三例（新标题当轮编号 / 新标题带空格 / 写回范围断言，FakeEditor 加 `lastChanges`）
-+ J11 五例重写（语义变了：**J11 现在期望"编号照写 + 空格保住"，不再是"整行原样"**）。全量 524 条
-523 绿（唯一红是 `whitelist.test.ts:406` 的 ICU 本机假红）；fuzz 5000×80 记分板全程一致；
-`tsc`/`lint`/`format:check` 全绿。**用户真机复验通过**（原话「完美」）。
-
-### 教训（比改动本身重要）★
-
-1. **上一轮把用户的反馈修窄了。** 用户上一次说的是「改层级后等不到编号」，就只针对
-   「层级变化」造了个判据，而没有回头问「**冻结这个手段本身是不是从一开始就用错了**」。结果是
-   同一个根因换个入口（新增标题）立刻复发。**症状驱动的补丁会把根因留在原地**——收到第二次同类
-   反馈时，优先怀疑的应该是手段选错，而不是判据不够细。
-2. **别信注释里那句「会在 X 之后补上」**，除非能指出 X 对应哪个真实事件源。这次的 X（光标移开）
-   压根没有监听器，这句话在仓库里躺了 9 个版本没被质疑过。
-3. **语义变更要显式改测试的期望值，不能只加新用例。** J11 原本断言「整行原样保留」，新语义下
-   它应该断言「编号照写 + 空格保住」——如果只加 J19 不改 J11，两者会互相矛盾，而先跑通的那个会
-   掩盖问题。
-
-### 没做什么
-
-- **没有引入光标 / 选区监听**（CM6 `updateListener` 一类）。本轮是绕开这条路解决的；spec
-  Roadmap 里 hobeedzc 那条「脏标题行集合 + 离开该行才重排」仍未做，且已补注说明它依赖的正是这次
-  绕开的事件源，真要做得重新估成本。
-- **没动上一块的清理确认框相关代码**（勾选 / diff / 搜索），本次改动与它无交集。
-- **没有引入 `gh` CLI 到本机**：移动 tag 重发全部靠 CI 完成（本机无 `gh`，见 memory 记录）。
-
-### 覆盖线上 1.0.23：移动 tag 重发（用户明确要求）★
-
-1.0.23 的 tag 与 GitHub Release 是在本轮修复**之前**推的，线上产物不含修复。用户判断「上线没多久、
-装的人应该很少」，要求**直接覆盖线上版本**而非新发 1.0.24，故：
-
-1. **先改发布工作流使其可重复触发**：`.github/workflows/release.yml` 原本直接 `gh release create`，
-   而该命令在**同名 Release 已存在时会报错退出**——「移动 tag 强推重发」这条路原本走不通，首次
-   需要它时才发现。现在改为先 `gh release delete "$tag" --yes || true` 再建（不加 `--cleanup-tag`，
-   tag 本身不动；Release 不存在时命令返回非零，`|| true` 咽掉，首次发布照常）。
-2. **工作流的改动必须先落进被 tag 的那个提交**——工作流是从 tag 指向的提交 checkout 出来跑的，
-   顺序反了等于用旧工作流重发，照样失败。
-3. 然后 `git tag -f -a 1.0.23` + `git push -f origin 1.0.23` 触发重建。
-
-**代价（已与用户确认接受）**：已装 1.0.23 的用户因版本号未变**不会收到更新提示**，只有新安装 /
-手动重装的人拿到修复版。
-
-### 下一步
-
-1. 沿用的手验清单：P12 / E36 / O11① / O5f / H12 / H9 / Dataview；J18 的 DOM 交互。
-2. 发版前照例 `git ls-remote --tags origin` 现场核对。**另注意**：现在 tag 可能被移动过，
-   「tag 存在」不再等于「线上产物就是当初那次构建」——要确认线上内容得看 Release 的构建时间 / 资产。
-
-### 本周期派发
-
-派发 3 次（全部 `quality-gate`：单测验证 ×1、fuzz ×1、收尾门槛 ×1）。诊断与改法设计主模型自持——
-根因在「手段选错」这一层，需要同时持有 J11 的历史动机、1.0.23 的判据实现和 CM6 写回语义三者。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -262,6 +249,10 @@ obsidian-auto-headings/
 │   ├── backlinks.ts        Backlink 同步纯函数核心（改名表/锚点归一/链接重写）
 │   ├── cleanup.ts          清除编号命令的内容级封装
 │   ├── clipboard.ts        剪贴板净化纯逻辑（WJ 剥离/换行规范化/净化→原文 LRU，spec §2.8）
+│   ├── headingindex.ts     标题索引（M13：剥前缀原文 → 位置，排序数组 + 二分查找，增量维护）
+│   ├── headingtrigger.ts   标题链接建议的触发边界/上下文屏蔽/排序/链接构造（纯函数，M13）
+│   ├── headingsuggest.ts   标题链接建议 EditorSuggest 薄适配层（M13，DOM/CM6 交互留真机手验）
+│   ├── vcintegration.ts    Various Complements 联动（探测/词典生成/分层防御写入，M13）
 │   ├── pathrules.ts        路径规则 → 模板解析（纯函数）
 │   ├── frontmatter.ts      单文件开关（obsidian-auto-headings: true/false）读取
 │   ├── i18n.ts             中英双语文案（Messages 接口 + zh/en 两套）
@@ -269,13 +260,14 @@ obsidian-auto-headings/
 │   │   ├── model.ts        设置数据模型（全局开关、防抖延迟、路径规则持久化）
 │   │   ├── SettingsTab.ts  设置 GUI 壳：TAB 栏 + 分发（内容在 tabs/，M7 多 TAB 已拆完）
 │   │   ├── ForeignNumberingCleanupModal.ts 迁移守卫 Notice 点击入口：清理预览确认框（testplan J14）
-│   │   └── tabs/           七个 TAB 的实现
-│   │       ├── GeneralTab.ts      常规设置（全局开关、防抖、语言、Backlink 开关；复制净化 1.0.16 起恒开无开关）
+│   │   └── tabs/           七个 TAB 的实现 + M13 联动设置区（VcIntegrationSection，挂在 GeneralTab 末尾）
+│   │       ├── GeneralTab.ts      常规设置（全局开关、防抖、语言、Backlink 开关、标题链接建议开关；复制净化 1.0.16 起恒开无开关）
 │   │       ├── TemplatesTab.ts    模板列表（自绘 header：折叠/命名/删除）
 │   │       ├── EditPanel.ts       模板编辑面板（级别格式网格 + 跳级/占位字符）
 │   │       ├── WhitelistEditor.ts 白名单行编辑器（分段控件/行内编辑/命中角标）
 │   │       ├── PathRules.ts       路径规则表（拖拽排序/建议弹窗/根规则/删模板确认）
 │   │       ├── PathSuggest.ts     路径建议弹窗组件（非 TAB，供 PathRules.ts 用，1.0.4）
+│   │       ├── VcIntegrationSection.ts VC 联动三态选择器 + 手动/自动两个确认 Modal（M13）
 │   │       ├── DangerTab.ts       敏感操作（清除全库编号）
 │   │       └── AboutTab.ts        关于/帮助/鸣谢
 │   └── templates/

@@ -895,3 +895,24 @@ button.ah-tab.ah-tab-active:hover {
 	color: var(--text-normal);
 	margin-bottom: 6px;
 }
+
+/* 标题链接建议（M13）：建议框候选行——标题原文 + 来源路径两行 */
+.ah-heading-suggest-item {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 2px 0;
+}
+
+.ah-heading-suggest-title {
+	font-weight: var(--font-medium);
+}
+
+.ah-heading-suggest-path {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 40em;
+}

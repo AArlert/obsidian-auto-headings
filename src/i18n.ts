@@ -72,6 +72,39 @@ export interface Messages {
 	updateBacklinksName: string;
 	updateBacklinksDesc: string;
 
+	// —— 标题链接建议（M13）——
+	headingLinkSuggestName: string;
+	headingLinkSuggestDesc: string;
+	/** renderSuggestion 里「本文件」标签（目标标题在当前文件内时替代路径显示）。 */
+	headingSuggestThisFile: string;
+	/** 标题索引因 vault 规模过大未完整构建时的一次性 Notice。 */
+	noticeHeadingIndexTruncated: (indexed: number) => string;
+
+	// —— Various Complements 联动（M13）——
+	vcModeName: string;
+	vcModeDesc: string;
+	vcModeOff: string;
+	vcModeManual: string;
+	vcModeAuto: string;
+	/** 自动配置前置探测未检测到 VC 时的提示。 */
+	vcNotInstalledNotice: string;
+	vcDictionaryPathLabel: string;
+	vcCopyPathButton: string;
+	noticeVcPathCopied: string;
+	vcManualConfirmTitle: string;
+	vcManualConfirmBody: string;
+	vcManualConfirmButton: string;
+	vcAutoConfirmTitle: string;
+	vcAutoConfirmBody: string;
+	vcAutoConfirmButton: string;
+	noticeVcAutoWriteSuccess: string;
+	/** schema 校验失败、已整体放弃自动写入（未改动 VC 配置）时的提示。 */
+	noticeVcAutoWriteInvalidShape: string;
+	/** 自动写入路径不可用（未安装 / 未启用 / 数据文件缺失）时的提示。 */
+	noticeVcAutoWriteNotInstalled: string;
+	/** 写入成功但 reload 命令调用失败，需用户手动执行或重启。 */
+	noticeVcReloadFailed: string;
+
 	// —— 路径规则 ——
 	pathRulesHeading: string;
 	pathRulesDesc: string;
@@ -325,6 +358,40 @@ const zh: Messages = {
 	updateBacklinksDesc:
 		"标题文字一旦改动，自动更新其它文件里指向它的内部链接（如 [[文件#标题]]），避免断链——全局生效，与是否编号无关（改标题不加编号、或笔记未命中任何模板，链接照样同步）；注意会修改引用文件、改动不在其撤销历史内。",
 
+	headingLinkSuggestName: "标题链接建议",
+	headingLinkSuggestDesc:
+		"在正文里打出与库内某标题原文匹配的文字时，弹出建议；接受后替换为指向该标题的链接（视觉上保留你打的原文）。默认开启；关闭后标题索引完全不构建，内存/CPU 成本降为零。",
+	headingSuggestThisFile: "（本文件）",
+	noticeHeadingIndexTruncated: (indexed) =>
+		`标题索引因 vault 规模过大未完整构建，已索引 ${indexed} 个标题；建议功能在已索引范围内可用。`,
+
+	vcModeName: "Various Complements 联动",
+	vcModeDesc:
+		"把标题索引导出为词典文件喂给 Various Complements 的自定义词典补全，让它的建议框也能补全标题链接（VC 自身尚不支持标题级补全）。联动默认关闭，任何开启方式都需要你显式确认。",
+	vcModeOff: "不联动",
+	vcModeManual: "手动配置",
+	vcModeAuto: "自动配置",
+	vcNotInstalledNotice:
+		"未检测到 Various Complements（未安装或未启用），自动配置已取消；请先安装并启用它，或改用「手动配置」。",
+	vcDictionaryPathLabel: "词典文件路径",
+	vcCopyPathButton: "复制路径",
+	noticeVcPathCopied: "词典文件路径已复制。",
+	vcManualConfirmTitle: "开启手动联动",
+	vcManualConfirmBody:
+		"确认后将在插件目录下生成/维护一份 JSON 标题词典文件，并在设置面板显示其路径；不会修改 Various Complements 的任何配置。请复制该路径，自行粘贴到 VC 的「Custom dictionary paths」设置并启用其「Custom dictionary complement」功能。",
+	vcManualConfirmButton: "生成词典文件",
+	vcAutoConfirmTitle: "开启自动联动",
+	vcAutoConfirmBody:
+		"确认后将：① 在插件目录下生成/维护一份 JSON 标题词典文件；② 尝试读写 Various Complements 的配置文件（data.json），把该词典路径写入其自定义词典设置，并同时开启它的「自定义词典补全」功能；③ 全程做安全校验，若无法安全写入会自动放弃、不改动 Various Complements 现有配置，并提示改用「手动配置」。确认继续？",
+	vcAutoConfirmButton: "确认并自动配置",
+	noticeVcAutoWriteSuccess: "已自动配置 Various Complements 联动。",
+	noticeVcAutoWriteInvalidShape:
+		"Various Complements 的配置格式与预期不符，已放弃自动写入（未改动其配置）；请改用「手动配置」，或检查其配置文件。",
+	noticeVcAutoWriteNotInstalled:
+		"未能自动配置 Various Complements（未安装 / 未启用 / 数据文件缺失）；请先安装并启用它，或改用「手动配置」。",
+	noticeVcReloadFailed:
+		"词典与 VC 配置已写入，但自动重载 VC 词典失败；请在命令面板手动执行 Various Complements 的「Reload custom dictionaries」命令（或重启 Obsidian）。",
+
 	pathRulesHeading: "路径规则",
 	pathRulesDesc:
 		"把路径映射到模板：文件夹规则以「/」结尾、「/」根规则即全局默认，最具体的规则优先。",
@@ -572,6 +639,40 @@ const en: Messages = {
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc:
 		"Whenever a heading's text changes, automatically update internal links in other files that point to it (e.g. [[file#heading]]) so they don't break — this works globally, regardless of numbering (edits with no numbering added, or notes matching no template, still sync); note this modifies the referencing files outside their undo history.",
+
+	headingLinkSuggestName: "Heading link suggestions",
+	headingLinkSuggestDesc:
+		"While typing in any note, suggest vault headings that match what you typed; accept to replace your text with a clickable link to that heading (your typed text stays visible). On by default; when off, the heading index is never built and memory/CPU cost drops to zero.",
+	headingSuggestThisFile: "(this file)",
+	noticeHeadingIndexTruncated: (indexed) =>
+		`The heading index was not fully built because the vault is too large (${indexed} headings indexed); suggestions work within the indexed range.`,
+
+	vcModeName: "Various Complements integration",
+	vcModeDesc:
+		"Export the heading index as a dictionary file for Various Complements' custom dictionary complement, so its suggestion popup can also complete heading links (VC itself still lacks heading-level completion). Off by default; enabling always requires your explicit confirmation.",
+	vcModeOff: "Off",
+	vcModeManual: "Manual",
+	vcModeAuto: "Automatic",
+	vcNotInstalledNotice:
+		"Various Complements was not detected (not installed or not enabled); automatic configuration was cancelled. Install and enable it first, or use Manual mode.",
+	vcDictionaryPathLabel: "Dictionary file path",
+	vcCopyPathButton: "Copy path",
+	noticeVcPathCopied: "Dictionary file path copied.",
+	vcManualConfirmTitle: "Enable manual integration",
+	vcManualConfirmBody:
+		'After confirming, a JSON heading dictionary file will be generated and maintained inside this plugin\'s folder, and its path will be shown here. No Various Complements setting will be modified. Copy the path, paste it into VC\'s "Custom dictionary paths" setting, and enable its "Custom dictionary complement" feature.',
+	vcManualConfirmButton: "Generate dictionary",
+	vcAutoConfirmTitle: "Enable automatic integration",
+	vcAutoConfirmBody:
+		'Confirming will: (1) generate/maintain a JSON heading dictionary file inside this plugin\'s folder; (2) attempt to read and write Various Complements\' configuration file (data.json) to register that dictionary path and turn ON its "Custom dictionary complement" feature; (3) run safety checks throughout — if it cannot write safely it will abort automatically without touching your existing Various Complements settings, and suggest "Manual" mode instead. Continue?',
+	vcAutoConfirmButton: "Confirm & configure",
+	noticeVcAutoWriteSuccess: "Various Complements integration configured automatically.",
+	noticeVcAutoWriteInvalidShape:
+		"Various Complements' configuration shape did not match expectations; the automatic write was aborted (its settings were not touched). Use Manual mode instead, or inspect its config file.",
+	noticeVcAutoWriteNotInstalled:
+		"Could not configure Various Complements automatically (not installed / not enabled / missing data file); install and enable it first, or use Manual mode.",
+	noticeVcReloadFailed:
+		'The dictionary and VC settings were written, but reloading VC dictionaries failed; run VC\'s "Reload custom dictionaries" command from the command palette (or restart Obsidian).',
 
 	pathRulesHeading: "Path rules",
 	pathRulesDesc:

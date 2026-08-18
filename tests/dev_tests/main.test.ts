@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AutoHeadingsPlugin from "../../src/main";
 import { DEFAULT_TEMPLATE, WORD_JOINER, type Template } from "../../src/numbering";
 import { NO_NUMBERING_TEMPLATE, type PathRule } from "../../src/pathrules";
+import { HeadingIndex } from "../../src/headingindex";
 import { Modal, Notice, TFile as MockTFile } from "./obsidian-mock";
 
 /** 编辑器坐标。 */
@@ -98,6 +99,10 @@ interface PluginInternals {
 		language: "auto" | "zh" | "en";
 		updateBacklinks: boolean;
 		backlinksIntroShown?: boolean;
+		/** M13：标题链接建议开关（默认开）。 */
+		headingLinkSuggestEnabled: boolean;
+		/** M13：VC 联动模式（默认 "off"）。 */
+		vcIntegrationMode: "off" | "manual" | "auto";
 	};
 	templateStore: {
 		getDefault(): Template;
@@ -119,6 +124,13 @@ interface PluginInternals {
 	freezeVaultNumbering(): Promise<void>;
 	resumeFromRetired(): Promise<void>;
 	onunload(): void;
+	/** M13：标题索引（public 字段，HeadingLinkSuggest 也读它）。 */
+	headingIndex: HeadingIndex;
+	/** M13：标题索引增量更新的按文件去抖计时器。 */
+	headingIndexTimers: Map<string, number>;
+	scheduleHeadingIndexUpdate(editor: unknown, info: unknown): void;
+	buildInitialHeadingIndex(): Promise<void>;
+	setHeadingLinkSuggestEnabled(enabled: boolean): Promise<void>;
 }
 
 /** 以 H2 中文样式覆盖默认模板（用于「改模板后即时重排」）。 */
@@ -262,6 +274,8 @@ function makePlugin(
 		// 锁定中文，使 Notice 断言（本测试用中文文案）稳定，不受运行环境 Obsidian 语言探测影响。
 		language: "zh",
 		updateBacklinks: opts.updateBacklinks ?? false,
+		headingLinkSuggestEnabled: true,
+		vcIntegrationMode: "off",
 	};
 	p.templateStore = {
 		getDefault: () => tplBox.current,
@@ -2034,5 +2048,99 @@ describe("光标所在行保护精确化（2026-08-09 用户体验反馈，testp
 		vi.advanceTimersByTime(500);
 
 		expect(ed.getValue().split("\n")[0]).toBe(`${numbered[0]} `); // 行尾空格原样保留，未被吃掉。
+	});
+});
+
+describe("M13：标题索引增量更新（scheduleHeadingIndexUpdate，与 J1-J3 的 scheduleRenumber 用例对称）", () => {
+	it("编辑内容含新标题：防抖到期后收录进索引（Q19 逻辑面）", () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor("# 文档\n## 交叉矩阵");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		expect(p.headingIndex.size).toBe(0); // 防抖窗口内尚未收录
+		vi.advanceTimersByTime(300);
+		expect(p.headingIndex.size).toBe(2);
+		expect(p.headingIndex.hasAnyPrefixMatch("交叉")).toBe(true);
+		expect(p.headingIndex.queryPrefix("交叉", 10)[0]?.displayText).toBe("交叉矩阵");
+	});
+
+	it("防抖窗口内再次编辑：重置计时器，不提前收录（Q19 逻辑面）", () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor("## a");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(200);
+		ed.setValue("## a\n## b");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(200);
+		expect(p.headingIndex.hasAnyPrefixMatch("b")).toBe(false); // 距上次编辑仅 200ms
+		vi.advanceTimersByTime(100);
+		expect(p.headingIndex.hasAnyPrefixMatch("b")).toBe(true);
+	});
+
+	it("已编号标题剥前缀后作为原文收录（Q2 逻辑面）", () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor(`## ${WORD_JOINER}1.1 ${WORD_JOINER}交叉矩阵`);
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(p.headingIndex.queryPrefix("交叉", 10)[0]?.displayText).toBe("交叉矩阵");
+	});
+
+	it("开关关闭：不安排任何索引更新（Q1 逻辑面：关闭即零成本）", () => {
+		const { p } = makePlugin();
+		p.settings.headingLinkSuggestEnabled = false;
+		const ed = new FakeEditor("## 交叉矩阵");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(1000);
+		expect(p.headingIndex.size).toBe(0);
+	});
+
+	it("叶子在防抖窗口内切到别的文件：本轮作废（与 J15 同款保护）", () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor("## 甲");
+		const info = { file: { path: "a.md" } };
+		p.scheduleHeadingIndexUpdate(ed, info);
+		vi.advanceTimersByTime(200);
+		info.file = { path: "b.md" }; // 同一 Editor 实例被复用来显示新文件
+		vi.advanceTimersByTime(200);
+		expect(p.headingIndex.size).toBe(0); // 本轮整个作废，不拿新文件内容去索引
+	});
+});
+
+describe("M13：setHeadingLinkSuggestEnabled 运行期切换", () => {
+	it("关闭时立即清空已构建的索引（Q1 逻辑面）", async () => {
+		const { p } = makePlugin();
+		const ed = new FakeEditor("## 交叉矩阵");
+		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(300);
+		expect(p.headingIndex.size).toBe(1);
+		p.settings.headingLinkSuggestEnabled = false;
+		await p.setHeadingLinkSuggestEnabled(false);
+		expect(p.headingIndex.size).toBe(0);
+		expect(p.headingIndex.hasAnyPrefixMatch("交叉")).toBe(false);
+	});
+
+	it("开启且索引为空：立即补建索引，无需重载插件（Q17 逻辑面）", async () => {
+		const { p } = makePlugin({
+			vaultFiles: { "a.md": "# 甲\n## 交叉矩阵", "b.md": "## 乙" },
+		});
+		p.settings.headingLinkSuggestEnabled = false;
+		p.headingIndex.clear();
+		await p.setHeadingLinkSuggestEnabled(true);
+		await flushPromises(); // buildInitialHeadingIndex 是 fire-and-forget 的异步链
+		expect(p.headingIndex.size).toBe(3);
+		expect(p.headingIndex.hasAnyPrefixMatch("交叉")).toBe(true);
+	});
+
+	it("索引超上限：弹一次性截断 Notice，已索引部分可用（Q16 逻辑面）", async () => {
+		const { p } = makePlugin({
+			vaultFiles: { "a.md": "## 甲\n## 乙\n## 丙", "b.md": "## 丁" },
+		});
+		p.headingIndex = new HeadingIndex(3); // 调小上限模拟超大 vault
+		await p.setHeadingLinkSuggestEnabled(true);
+		await flushPromises();
+		expect(p.headingIndex.size).toBe(3);
+		expect(p.headingIndex.isTruncated).toBe(true);
+		expect(Notice.messages.some((m) => m.includes("未完整构建"))).toBe(true);
+		expect(p.headingIndex.hasAnyPrefixMatch("丁")).toBe(false); // 超限文件未收录
+		expect(p.headingIndex.hasAnyPrefixMatch("甲")).toBe(true); // 已索引部分正常可用
 	});
 });
