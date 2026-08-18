@@ -19,3 +19,6 @@ npm-debug.log*
 
 # Editor / OS
 .DS_Store
+
+# 本地调研留档（竞品拆解等）：只在工作副本，不推上公开仓库（见 doc/research/README.md）
+doc/research/
