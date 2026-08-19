@@ -69,7 +69,6 @@
 
 - **没动任何行为逻辑**：纯文案改动，键集与函数签名不变（`Messages` 接口零改动）。
 - 没动短标签/按钮/tooltip（本就精要）。
-- 未打 tag（用户未要求发版；`doc/release-notes/` 未新增）。
 
 ### 下一步
 
@@ -82,7 +81,8 @@
 `npm run format` / `npm run lint` 绿；`npm test` 623 通过，唯一失败仍是
 `whitelist.test.ts:406` Windows ICU 已知假红（localeCompare 排序差异，与本次改动无关）；
 `npm run bump 1.1.1` 已同步 package.json / manifest.json / versions.json / lockfile /
-release/manifest.json；`npm run release` 重建产物入库。本周期派发 0 次。
+release/manifest.json；`npm run release` 重建产物入库；写 `doc/release-notes/1.1.1.md`
+（双语，发布说明本身也保持精要）并打 tag `1.1.1` 触发 Release 工作流。本周期派发 0 次。
 
 ---
 
