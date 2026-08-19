@@ -71,6 +71,8 @@
 
 ### 下一步
 
+- 已打并推送 `1.1.2` tag（annotated，指向 `164d01a`）；GitHub Release 待维护者创建（网页粘贴
+  `doc/release-notes/1.1.2.md` 内容即可）。
 - 推送 master 后批准 PR #8 的 GitHub Actions 首次运行，确认 CI 全绿（本机 format:check 的 CRLF 检出
   伪影在 Linux/LF 检出下不存在；test 的 locale 用例同样只在 zh-CN locale 失败）。
 - 建议在 PR 上留审核评论（性能修复已随合入落地，@nestealin 可对照）。
