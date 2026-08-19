@@ -207,3 +207,134 @@ describe("rewriteBacklinksInContent：在引用文件内重写标题链接", () 
 		expect(r.count).toBe(2);
 	});
 });
+
+describe("rewriteBacklinksInContent：Markdown 标题链接（M26）", () => {
+	const from = "链接 同步验证";
+	const to = `${WJ}1 ${WJ}链接 同步验证`;
+	const renames = asMap([{ from, to }]);
+	const encodedFrom = encodeURIComponent(from);
+	const encodedTo = encodeURIComponent(to);
+
+	it("跨文件 URL 编码 fragment：仅替换 fragment，保留 label 与路径", () => {
+		const r = rewriteBacklinksInContent(
+			`见 [Markdown 编码](Target.md#${encodedFrom})`,
+			"Target",
+			false,
+			renames,
+		);
+		expect(r.content).toBe(`见 [Markdown 编码](Target.md#${encodedTo})`);
+		expect(r.count).toBe(1);
+	});
+
+	it("接受 raw / 混合编码旧 fragment，写出统一 URL 编码的新 fragment", () => {
+		const r = rewriteBacklinksInContent(
+			"[混合编码](Target.md#链接%20同步验证)",
+			"Target",
+			false,
+			renames,
+		);
+		expect(r.content).toBe(`[混合编码](Target.md#${encodedTo})`);
+		expect(r.count).toBe(1);
+	});
+
+	it("保留 !、label、可选 title；同一内容可与 wikilink 一起计数", () => {
+		const content = [
+			`![Markdown embed](folder/Target.md#${encodedFrom} "保留 title")`,
+			"[[Target#链接 同步验证|Wiki]]",
+		].join(" 与 ");
+		const r = rewriteBacklinksInContent(content, "Target", false, renames);
+		expect(r.content).toBe(
+			`![Markdown embed](folder/Target.md#${encodedTo} "保留 title") 与 ` +
+				`[[Target#${to}|Wiki]]`,
+		);
+		expect(r.count).toBe(2);
+	});
+
+	it("可选引号 title 内未配对的括号不干扰外层 destination", () => {
+		const content = `[Title](Target.md#${encodedFrom} "保留 ( 字面量")`;
+		expect(rewriteBacklinksInContent(content, "Target", false, renames)).toEqual({
+			content: `[Title](Target.md#${encodedTo} "保留 ( 字面量")`,
+			count: 1,
+		});
+	});
+
+	it("同文件 Markdown #fragment：仅 isSameFile 时改", () => {
+		const link = `[同文件](#${encodedFrom})`;
+		expect(rewriteBacklinksInContent(link, "Target", true, renames)).toEqual({
+			content: `[同文件](#${encodedTo})`,
+			count: 1,
+		});
+		expect(rewriteBacklinksInContent(link, "Target", false, renames)).toEqual({
+			content: link,
+			count: 0,
+		});
+	});
+
+	it("相对路径、vault 根路径与 URL 编码文件名按 basename 命中", () => {
+		const content = [
+			`[相对](../Target%20Note.md#${encodedFrom})`,
+			`[根路径](/folder/Target%20Note.md#${encodedFrom})`,
+		].join("\n");
+		const r = rewriteBacklinksInContent(content, "Target Note", false, renames);
+		expect(r.content).toBe(
+			[
+				`[相对](../Target%20Note.md#${encodedTo})`,
+				`[根路径](/folder/Target%20Note.md#${encodedTo})`,
+			].join("\n"),
+		);
+		expect(r.count).toBe(2);
+	});
+
+	it("嵌套 label、angle destination、路径括号与 title 括号原样保留", () => {
+		const specialTo = `${WJ}2 ${WJ}标题 (新版)!`;
+		const encodedSpecialTo = encodeURIComponent(specialTo).replace(
+			/[!'()*]/g,
+			(ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`,
+		);
+		const content = `[外层 [内层]](<../Target (Draft).md#${encodedFrom}> "title (keep)")`;
+		const r = rewriteBacklinksInContent(
+			content,
+			"Target (Draft)",
+			false,
+			asMap([{ from, to: specialTo }]),
+		);
+		expect(r).toEqual({
+			content: `[外层 [内层]](<../Target (Draft).md#${encodedSpecialTo}> "title (keep)")`,
+			count: 1,
+		});
+	});
+
+	it("外链、别的文件、纯文件、块引用、多级 fragment、坏编码与转义链接保守不改", () => {
+		const content = [
+			`[外链](https://example.com/Target.md#${encodedFrom})`,
+			`[别的文件](Other.md#${encodedFrom})`,
+			"[纯文件](Target.md)",
+			"[块](Target.md#%5Eprobe-block)",
+			`[多级](Target.md#${encodedFrom}%23detail)`,
+			"[坏编码](Target.md#%E9%)",
+			`\\[转义](Target.md#${encodedFrom})`,
+		].join("\n");
+		expect(rewriteBacklinksInContent(content, "Target", false, renames)).toEqual({
+			content,
+			count: 0,
+		});
+	});
+
+	it("行内代码与 fenced code 不改，只改正文中的 Markdown 链接", () => {
+		const content = [
+			`行内 \`[Code](Target.md#${encodedFrom})\``,
+			"```md",
+			`[Fence](Target.md#${encodedFrom})`,
+			"```",
+			`正文 [Live](Target.md#${encodedFrom})`,
+		].join("\n");
+		const expected = content.replace(
+			`正文 [Live](Target.md#${encodedFrom})`,
+			`正文 [Live](Target.md#${encodedTo})`,
+		);
+		expect(rewriteBacklinksInContent(content, "Target", false, renames)).toEqual({
+			content: expected,
+			count: 1,
+		});
+	});
+});

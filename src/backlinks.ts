@@ -2,18 +2,21 @@
  * Backlink 同步（M7，1.0 发布前置，见 spec.md §3.12）。
  *
  * 编号 / 清除 / 清理外来编号都会**改写标题文本**（加 / 改 / 去前缀），这会使指向旧标题锚点的内部链接
- * `[[file#旧标题]]` 断链。本模块提供**纯函数核心**：算「旧→新」改名表、在引用文件内重写链接锚点。
+ * `[[file#旧标题]]` / `[说明](file.md#旧标题)` 断链。本模块提供**纯函数核心**：算「旧→新」改名表、
+ * 在引用文件内重写链接锚点。
  * 与 Obsidian 运行时耦合的部分（`metadataCache.getBacklinksForFile` 反查 + `vault.process` 写回）在
  * `main.ts` 的 `syncBacklinks`；本模块刻意保持无依赖、可纯单测。
  *
  * 设计要点（参考 Header Enhancer 的 `backlinks.ts`，并做稳，见 spec.md §3.12）：
  * - **逐行配对**：编号逐行就地改写、不重排行，故旧 / 新文档按 `lineIndex` 配对即得「旧→新」，无需模糊匹配。
- * - **锚点归一 {@link linkAnchor}**：两侧同口径，使既有链接含不含 WJ 都能匹配；写出的新链接剥 WJ、干净可读。
+ * - **锚点归一 {@link linkAnchor}**：两侧同口径，使既有链接含不含 WJ 都能匹配；写出的新链接保留 WJ，
+ *   与 Obsidian 实际标题锚点逐字节一致。
  * - **重复锚点保守不改**：同名标题多处时锚点歧义，剔出改名表，避免错改。
  */
 
 import { WORD_JOINER } from "./numbering";
 import { parseHeadings } from "./parser";
+import { scanSkipRegions } from "./scan";
 
 /** 一条「旧锚点 → 新锚点」改名（均为 {@link linkAnchor} 归一后的形式）。 */
 export interface HeadingRename {
@@ -39,6 +42,20 @@ export function snapshotHeadings(content: string): HeadingSnapshot[] {
 
 /** 匹配 wikilink / 嵌入：捕获可选的 `!`（嵌入）与内部 `path#sub|alias`。 */
 const WIKILINK_RE = /(!?)\[\[([^\]\n]+?)\]\]/g;
+
+interface OffsetRange {
+	/** 含头、不含尾的源码偏移。 */
+	start: number;
+	end: number;
+}
+
+interface MarkdownDestination {
+	/** destination 在外层 `(...)` 内容里的含头偏移。angle-bracket 形式不含 `<`。 */
+	start: number;
+	/** destination 在外层 `(...)` 内容里的不含尾偏移。angle-bracket 形式不含 `>`。 */
+	end: number;
+	value: string;
+}
 
 /** 去 Obsidian 在标题链接里**不允许**的字符 `[ ] # | ^`、折叠内部空白、trim（WJ 不在 `\s` 内，不受影响）。 */
 function stripIllegal(s: string): string {
@@ -151,13 +168,315 @@ function pathMatchesTarget(pathPart: string, targetBasename: string, isSameFile:
 	return base === targetBasename;
 }
 
+/** 某字符前连续反斜线为奇数时，该字符被 Markdown 转义。 */
+function isEscapedAt(content: string, index: number): boolean {
+	let slashes = 0;
+	for (let i = index - 1; i >= 0 && content[i] === "\\"; i--) {
+		slashes++;
+	}
+	return slashes % 2 === 1;
+}
+
+/** 找 Markdown link label 的配对 `]`；支持 label 内嵌套 `[]`，跨行保守放弃。 */
+function findClosingBracket(content: string, open: number): number {
+	let depth = 1;
+	for (let i = open + 1; i < content.length; i++) {
+		const ch = content[i];
+		if (ch === "\n" || ch === "\r") return -1;
+		if (ch === "\\") {
+			i++;
+			continue;
+		}
+		if (ch === "[") depth++;
+		if (ch === "]" && --depth === 0) return i;
+	}
+	return -1;
+}
+
+/** 找 inline link destination 的配对 `)`；支持裸 destination 内的平衡括号与 `<...>`。 */
+function findClosingParen(content: string, open: number): number {
+	let depth = 1;
+	let inAngleDestination = false;
+	let inTitleQuote: '"' | "'" | null = null;
+	let seenDestination = false;
+	let afterDestination = false;
+	for (let i = open + 1; i < content.length; i++) {
+		const ch = content[i];
+		if (ch === "\n" || ch === "\r") return -1;
+		if (ch === "\\") {
+			i++;
+			continue;
+		}
+		if (inTitleQuote) {
+			if (ch === inTitleQuote) inTitleQuote = null;
+			continue;
+		}
+		if (inAngleDestination) {
+			if (ch === ">") {
+				inAngleDestination = false;
+				afterDestination = true;
+			}
+			continue;
+		}
+		if (ch === "<" && depth === 1 && !seenDestination) {
+			seenDestination = true;
+			inAngleDestination = true;
+			continue;
+		}
+		if (depth === 1) {
+			if (!seenDestination) {
+				if (/\s/.test(ch)) continue;
+				seenDestination = true;
+			} else if (!afterDestination && /\s/.test(ch)) {
+				afterDestination = true;
+				continue;
+			} else if (afterDestination) {
+				if (/\s/.test(ch)) continue;
+				if (ch === '"' || ch === "'") {
+					inTitleQuote = ch;
+					continue;
+				}
+			}
+		}
+		if (ch === "(") depth++;
+		if (ch === ")" && --depth === 0) return i;
+	}
+	return -1;
+}
+
 /**
- * 在一个引用文件的内容里，重写指向目标文件、且 subpath 落在改名表里的标题链接（纯函数，见 spec.md §3.12 流程③）。
+ * 从 Markdown inline link 的 `(...)` 内部取 destination，保留外层空白 / angle brackets / title。
+ * 裸 destination 截止到第一个未转义空白；`<...>` 形式允许路径内空白。
+ */
+function parseMarkdownDestination(inner: string): MarkdownDestination | null {
+	let start = 0;
+	while (start < inner.length && /\s/.test(inner[start])) start++;
+	if (start >= inner.length) return null;
+
+	if (inner[start] === "<") {
+		for (let i = start + 1; i < inner.length; i++) {
+			if (inner[i] === ">" && !isEscapedAt(inner, i)) {
+				return { start: start + 1, end: i, value: inner.slice(start + 1, i) };
+			}
+		}
+		return null;
+	}
+
+	let end = start;
+	while (end < inner.length) {
+		if (/\s/.test(inner[end]) && !isEscapedAt(inner, end)) break;
+		if (inner[end] === "\\" && end + 1 < inner.length) {
+			end += 2;
+			continue;
+		}
+		end++;
+	}
+	return end > start ? { start, end, value: inner.slice(start, end) } : null;
+}
+
+/** `decodeURIComponent` 的保守包装：坏 `%` 编码不应中断整次编号 / 链接同步。 */
+function decodeUrlComponent(value: string): string | null {
+	try {
+		return decodeURIComponent(value);
+	} catch {
+		return null;
+	}
+}
+
+/** Markdown destination 的路径匹配：拒绝外部 scheme / protocol-relative URL，并解码 URL 路径。 */
+function markdownPathMatchesTarget(
+	pathPart: string,
+	targetBasename: string,
+	isSameFile: boolean,
+): boolean {
+	if (pathPart === "") return isSameFile;
+	if (/^[a-z][a-z\d+.-]*:/i.test(pathPart) || pathPart.startsWith("//")) return false;
+	const decoded = decodeUrlComponent(pathPart);
+	if (decoded === null) return false;
+	if (/^[a-z][a-z\d+.-]*:/i.test(decoded) || decoded.startsWith("//")) return false;
+	return pathMatchesTarget(decoded, targetBasename, false);
+}
+
+/** 把写入用标题锚点编码为 Markdown destination 的 fragment。 */
+function markdownFragment(anchor: string): string {
+	return encodeURIComponent(anchor).replace(
+		/[!'()*]/g,
+		(ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`,
+	);
+}
+
+/** 复用标题解析器的块级扫描口径，换算 fenced code block 的源码偏移范围。 */
+function fencedCodeRanges(content: string): OffsetRange[] {
+	const lines = content.split("\n");
+	const states = scanSkipRegions(lines);
+	const ranges: OffsetRange[] = [];
+	let offset = 0;
+	let rangeStart: number | null = null;
+	for (let i = 0; i < lines.length; i++) {
+		if (states[i].inFence) {
+			rangeStart ??= offset;
+		} else if (rangeStart !== null) {
+			ranges.push({ start: rangeStart, end: offset });
+			rangeStart = null;
+		}
+		offset += lines[i].length + (i < lines.length - 1 ? 1 : 0);
+	}
+	if (rangeStart !== null) ranges.push({ start: rangeStart, end: content.length });
+	return ranges;
+}
+
+/** 在 fenced code 之外找单行 inline code span；未闭合反引号不构成排除区。 */
+function inlineCodeRanges(content: string, fences: OffsetRange[]): OffsetRange[] {
+	const ranges: OffsetRange[] = [];
+	let fenceIndex = 0;
+	let i = 0;
+	while (i < content.length) {
+		while (fences[fenceIndex] && fences[fenceIndex].end <= i) fenceIndex++;
+		const fence = fences[fenceIndex];
+		if (fence && fence.start <= i) {
+			i = fence.end;
+			continue;
+		}
+		if (content[i] !== "`" || isEscapedAt(content, i)) {
+			i++;
+			continue;
+		}
+		let runEnd = i + 1;
+		while (content[runEnd] === "`") runEnd++;
+		const runLength = runEnd - i;
+		let close = runEnd;
+		let matchedEnd = -1;
+		while (close < content.length && content[close] !== "\n" && content[close] !== "\r") {
+			if (content[close] !== "`") {
+				close++;
+				continue;
+			}
+			let closeEnd = close + 1;
+			while (content[closeEnd] === "`") closeEnd++;
+			if (closeEnd - close === runLength) {
+				matchedEnd = closeEnd;
+				break;
+			}
+			close = closeEnd;
+		}
+		if (matchedEnd >= 0) {
+			ranges.push({ start: i, end: matchedEnd });
+			i = matchedEnd;
+		} else {
+			i = runEnd;
+		}
+	}
+	return ranges;
+}
+
+/** Markdown 链接解析只在正文运行，代码区按原文本保留。 */
+function markdownCodeRanges(content: string): OffsetRange[] {
+	const fences = fencedCodeRanges(content);
+	return [...fences, ...inlineCodeRanges(content, fences)].sort((a, b) => a.start - b.start);
+}
+
+/** 对一条 Markdown destination 计算新值；不安全 / 不命中时返回 null。 */
+function rewriteMarkdownDestination(
+	destination: string,
+	targetBasename: string,
+	isSameFile: boolean,
+	renames: Map<string, string>,
+): string | null {
+	const hashIdx = destination.indexOf("#");
+	if (hashIdx < 0) return null;
+	const pathPart = destination.slice(0, hashIdx);
+	const rawSubpath = destination.slice(hashIdx + 1);
+	const subpath = decodeUrlComponent(rawSubpath);
+	if (subpath === null || subpath.startsWith("^") || subpath.includes("#")) return null;
+	if (!markdownPathMatchesTarget(pathPart, targetBasename, isSameFile)) return null;
+	const to = renames.get(linkAnchor(subpath));
+	if (to === undefined) return null;
+	return `${pathPart}#${markdownFragment(to)}`;
+}
+
+/**
+ * 扫描 Markdown inline link / image（`[label](destination)` / `![alt](destination)`），仅替换
+ * destination 的标题 fragment。label、路径、angle brackets、可选 title 与 `!` 均原字节保留。
+ */
+function rewriteMarkdownBacklinks(
+	content: string,
+	targetBasename: string,
+	isSameFile: boolean,
+	renames: Map<string, string>,
+): { content: string; count: number } {
+	const excluded = markdownCodeRanges(content);
+	const chunks: string[] = [];
+	let cursor = 0;
+	let count = 0;
+	let excludedIndex = 0;
+	let i = 0;
+	while (i < content.length) {
+		while (excluded[excludedIndex] && excluded[excludedIndex].end <= i) excludedIndex++;
+		const blocked = excluded[excludedIndex];
+		if (blocked && blocked.start <= i) {
+			i = blocked.end;
+			continue;
+		}
+
+		const syntaxStart = i;
+		const openBracket = content[i] === "!" && content[i + 1] === "[" ? i + 1 : i;
+		if (content[openBracket] !== "[") {
+			i++;
+			continue;
+		}
+		if (isEscapedAt(content, syntaxStart) || isEscapedAt(content, openBracket)) {
+			i = openBracket + 1;
+			continue;
+		}
+		const closeBracket = findClosingBracket(content, openBracket);
+		const openParen = closeBracket >= 0 ? closeBracket + 1 : -1;
+		if (openParen < 0 || content[openParen] !== "(") {
+			i = openBracket + 1;
+			continue;
+		}
+		const closeParen = findClosingParen(content, openParen);
+		if (closeParen < 0) {
+			i = openBracket + 1;
+			continue;
+		}
+
+		const innerStart = openParen + 1;
+		const parsed = parseMarkdownDestination(content.slice(innerStart, closeParen));
+		if (parsed) {
+			const replacement = rewriteMarkdownDestination(
+				parsed.value,
+				targetBasename,
+				isSameFile,
+				renames,
+			);
+			if (replacement !== null) {
+				const destinationStart = innerStart + parsed.start;
+				const destinationEnd = innerStart + parsed.end;
+				chunks.push(content.slice(cursor, destinationStart), replacement);
+				cursor = destinationEnd;
+				count++;
+			}
+		}
+		i = closeParen + 1;
+	}
+
+	if (count === 0) return { content, count: 0 };
+	chunks.push(content.slice(cursor));
+	return { content: chunks.join(""), count };
+}
+
+/**
+ * 在一个引用文件的内容里，重写指向目标文件、且 subpath 落在改名表里的 wikilink / Markdown
+ * inline link（纯函数，见 spec.md §3.12 流程③）。
  *
- * 扫描全部 `[[…]]` / `![[…]]`，对每个链接解析 `path#subpath|alias`：
+ * wikilink 扫描全部 `[[…]]` / `![[…]]`，对每个链接解析 `path#subpath|alias`：
  * - 路径段 basename 须命中目标文件（`[[#锚点]]` 仅当 `isSameFile`）；
  * - subpath 须存在、非块引用（不以 `^` 起头）、单段（不含二级 `#`，多级锚点保守跳过）；
  * - subpath 经 {@link linkAnchor} 归一后须在 `renames` 中；命中则替换为新锚点，**保留 `|别名` 与 `!` 嵌入前缀**。
+ *
+ * Markdown inline link / image 另走小型扫描器：支持嵌套 label、平衡括号与 `<destination>`，只替换
+ * destination 的 fragment 并 URL 编码新锚点；label、路径、可选 title 与 `!` 原字节保留。外部 URL、
+ * 转义语法、块 / 多级 fragment、坏 URL 编码、行内代码与 fenced code 均保守跳过。
  *
  * @returns 重写后的内容与命中改写的链接数。
  */
@@ -168,7 +487,7 @@ export function rewriteBacklinksInContent(
 	renames: Map<string, string>,
 ): { content: string; count: number } {
 	let count = 0;
-	const out = content.replace(WIKILINK_RE, (whole, bang: string, inner: string) => {
+	const wikiOut = content.replace(WIKILINK_RE, (whole, bang: string, inner: string) => {
 		const pipeIdx = inner.indexOf("|");
 		const linkPart = pipeIdx >= 0 ? inner.slice(0, pipeIdx) : inner;
 		const alias = pipeIdx >= 0 ? inner.slice(pipeIdx) : ""; // 含前导 `|`
@@ -184,5 +503,6 @@ export function rewriteBacklinksInContent(
 		count++;
 		return `${bang}[[${pathPart}#${to}${alias}]]`;
 	});
-	return { content: out, count };
+	const markdown = rewriteMarkdownBacklinks(wikiOut, targetBasename, isSameFile, renames);
+	return { content: markdown.content, count: count + markdown.count };
 }

@@ -375,7 +375,7 @@ const zh: Messages = {
 
 	updateBacklinksName: "同步内部链接（Backlink）",
 	updateBacklinksDesc:
-		"标题文字改动时，自动更新其它文件里指向它的内部链接（如 [[文件#标题]]），避免断链。与编号无关、全局生效；改动不在引用文件的撤销历史内。",
+		"标题文字改动时，自动更新其它文件里指向它的 Wikilink 与 Markdown 链接（如 [[文件#标题]]、[说明](文件.md#标题)），避免断链。与编号无关、全局生效；改动不在引用文件的撤销历史内。",
 
 	headingLinkSuggestName: "标题链接建议",
 	headingLinkSuggestDesc:
@@ -580,7 +580,7 @@ const zh: Messages = {
 	aboutCreditPathSuggest:
 		"路径输入的文件夹/文件建议弹窗与匹配思路；本插件补充了「文件级精确规则」与漏打尾斜杠时的自动补全。",
 	aboutCreditBacklinks:
-		"Backlink 同步的最初参考（反查引用方 + 重写锚点）；本插件补充别名/嵌入解析，升级为编号与文本全覆盖同步。",
+		"Backlink 同步的最初参考（反查引用方 + 重写锚点）；本插件补充 Wikilink 别名/嵌入与 Markdown 链接，升级为编号与文本全覆盖同步。",
 	aboutCreditWordJoiner:
 		"用不可见 Word Joiner 标记编号边界的最初参考；本插件升级为「首尾双哨兵」，可自愈残缺前缀。",
 
@@ -677,7 +677,7 @@ const en: Messages = {
 
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc:
-		"When a heading's text changes, update internal links to it in other files (e.g. [[file#heading]]) so they don't break. Global and independent of numbering; edits land outside the referencing files' undo history.",
+		"When a heading's text changes, update Wikilinks and Markdown links to it in other files (e.g. [[file#heading]] or [label](file.md#heading)) so they don't break. Global and independent of numbering; edits land outside the referencing files' undo history.",
 
 	headingLinkSuggestName: "Heading link suggestions",
 	headingLinkSuggestDesc:
@@ -895,7 +895,7 @@ const en: Messages = {
 	aboutCreditPathSuggest:
 		"Folder/file suggestion popup and matching approach for path input; extended here with exact-file rules and automatic trailing-slash completion.",
 	aboutCreditBacklinks:
-		"Original reference for backlink sync (reverse-lookup references + rewrite anchors); extended here with alias/embed parsing and full coverage of number and text.",
+		"Original reference for backlink sync (reverse-lookup references + rewrite anchors); extended here with Wikilink alias/embed parsing, Markdown links, and full coverage of number and text.",
 	aboutCreditWordJoiner:
 		'Original reference for marking numbering prefixes with an invisible Word Joiner boundary; upgraded here to a "double sentinel" scheme that self-heals damaged prefixes.',
 

@@ -5,6 +5,87 @@
 
 ---
 
+## 2026-08-19 M13 第七轮：VC 框里补齐同名标题 + 两个建议框观感统一（1.0.32）
+
+### 做了什么
+
+用户实测 1.0.31（VC 启用 + 词典联动开 + 让路生效）后提出三点，并明确了目标：「VC 的候选里既有
+VC 自己的也有本插件的标题，同时出现，不管本文件还是其它文件都要有；标题 icon 是 H；不要
+`交叉矩阵 => ...` 这种显示」。同时确认「VC 关闭、仅本插件时所有功能都在预期内」。
+
+**先把 VC 侧的机制查清（源码 clone `doc/research/various-complements-src`，只读）**，三条硬约束
+决定了哪些能做、哪些根本做不到：
+
+1. **同名标题只出一条 ≠ 我们的 bug**：VC 的 `jsonToWords` 把 `value` / `displayed` **对调**
+   （内部 `Word.value` 存的是我们给的 `displayed`，原 value 进 `insertedText`，
+   `provider/CustomDictionaryWordProvider.ts:48-57`），而去重谓词 `suggestionUniqPredicate`
+   （`ui/suggester.ts:27-45`）对 customDictionary **只比 `value` + type group**，不比
+   `createdPath`、也不比 `insertedText` ⇒ 两条 `displayed` 相同的词条必被砍掉一条
+   （落点 `ui/AutoCompleteSuggest.ts:602`）。**让 `displayed` 本身不同是唯一规避途径**；
+   第二行小字不参与去重，救不回被删那条。
+2. **`=> ...` 是 VC 设置项 `displayedTextSuffix` 的默认值本身**（字面量 `" => ..."`，
+   `setting/settings.ts:223`），条件是「customDictionary + `insertedText` 非空 + 该设置非空」。
+   我们**必须**给 `displayed`（否则 VC 拿整串 `[[...]]` 去匹配，用户打「交叉」根本匹配不上），
+   `insertedText` 必然非空 ⇒ 只能置空那个设置。
+3. **VC 框的 icon 改不了**：`::before` + base64 SVG，class **只按词条 type** 加，DOM 里没有任何
+   per-word / per-dictionary 钩子（`ui/AutoCompleteSuggest.ts:1204-1224`）。想改成 H 只能覆盖整个
+   customDictionary 类型的 CSS，**会误伤用户自己其它词典的条目**。VC 也没有任何面向第三方的
+   扩展点（无 API、不挂 window、provider 硬编码）。
+
+三点都需用户拍板，用 `AskUserQuestion` 摆出代价后用户定了：**冲突项才加区分后缀 + 下方小字写
+来源** / **自动配置时写入清空** / **不覆盖 VC 的 CSS，改把本插件自己的框对齐 VC 的样式**（放弃 H）。
+
+据此落地四件事：
+
+1. **`disambiguateVcDisplayed`（`src/vcintegration.ts`）**：标题全库唯一 → 保持纯净；冲突组 →
+   加 `(来源)`。**区分形态按「组」统一决定**——组内文件名互不相同就整组用文件名，只要有重名文件
+   就**整组**升级为完整路径。这一条是单测当场逼出来的：初版逐条贪心地各判各的，`x/同.md` 与
+   `y/同.md` 会得到「一条 `(同)`、一条 `(y/同)`」的参差列表，用户读不出这是同一维度的区分。
+   仍撞（同文件两个同名标题、或与某个纯净标题撞车）→ 挂 ` #2`。后缀只能在**尾部**：VC 首字母
+   桶键取 `value.charAt(0)`，前缀化会让「交叉」直接查不到。**先截断到 2 万条再消歧**，否则被
+   截掉的孪生项会给幸存者留下一个毫无意义的后缀。
+2. **词条加 `description = 路径`**：VC 官方字段，渲染为条目第二行小字，与本插件建议框的
+   「标题 / 来源」两行对齐。它受用户全局设置 `descriptionOnSuggestion` 控制（设为 `None` 时不
+   显示）——**不代改**（它同时管 internalLink 等，用户可能是刻意关的），改为
+   `readVcDescriptionOnSuggestion` 只读探测 + 设置面板如实提示一句。正因为它可能被关掉，
+   同名区分才必须落在标题行而不是只靠这一行。
+3. **自动配置清空 `displayedTextSuffix`**：`VcSettingsShape` + `isValidVcSettingsShape` 加该字段，
+   仿 `applyTriggerThreshold` 新增 `applyDisplayedTextSuffix`（现值非空串才写），活体与文件两条
+   写入路径各调一次。这是 VC 的**全局显示项**，`vcAutoConfirmPoints` 单列一条并写明「你其它
+   自定义词典的候选也不再带 ` => ...`」；手动模式不写 VC 配置，故在 `vcManualConfirmBody` 补一句
+   让用户自己清。
+4. **本插件建议框对齐 VC 观感**：`ICON_CANDIDATES` 由 `["heading","hash","link"]` 改为
+   `["library","book","heading"]`（书架语义），第二行字号/配色由 `--font-ui-smaller`/`--text-faint`
+   改为 VC 的 `0.75em`/`--text-muted`。**刻意不照搬 VC 样式表里的 base64 资产**（第三方资产 +
+   署名问题），用 Obsidian 内置 lucide 的同语义图标，顺带自动跟随主题。
+
+### 没做什么
+
+- **没有覆盖 VC 的图标 CSS**（用户否决）：省掉一整块依赖 VC 私有 class 名的脆弱代码。
+- **没有用零宽字符做不可见消歧**（用户否决）：能骗过去重且视觉零噪音，但
+  `descriptionOnSuggestion=None` 时两条候选长得一模一样、无法选择，且词典文件被看不见的字符污染。
+- 没有代改 `descriptionOnSuggestion`，没有碰 VC 的其它设置。
+- 没有动让路判定（1.0.31 的三条件不变）、没有动 `MIN_QUERY_LENGTH`。
+
+### 下一步
+
+- 用户真机复测：① 重走一次「自动配置」，确认框应多出「清空显示后缀」那条，确认后 `=> ...` 消失；
+  ② 打「交叉」，VC 框里应同时出现 `交叉矩阵 (axi)` 与 `交叉矩阵 (交叉矩阵)`，各带来源第二行，
+  且 VC 自己的候选照常在列；③ 关 VC 或切「本插件优先」，看本插件的框是否已换成书架图标 + 对齐字号。
+- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互。
+
+### 验证方式
+
+`npx tsc --noEmit` 干净；`npm test` 621 通过（唯一失败仍是 `whitelist.test.ts:406` Windows ICU
+已知假红）——新增 `disambiguateVcDisplayed` 6 例（唯一项纯净 / 跨文件同名 / 同名文件不同目录整组
+升级 / 同文件重复挂序号 / 与「原文长得像后缀」撞车 / 确定性）+ `buildVcDictionaryJson` 同名场景与
+`description` 断言 + `isValidVcSettingsShape` 与 `enableAutoIntegration` 的 `displayedTextSuffix`
+四例；同步改了 `main.test.ts` 里断言词典条目形状的旧用例（新增字段属语义变更，必须显式改期望值而
+不是只加新用例）。`npm run test:fuzz`（5000×80）三块记分板全绿；lint / format:check / release
+重建单独复跑。本周期派发 3 次（Explore ×2 查 VC 词条模型与渲染机制、Plan ×1 出实施方案）。
+
+---
+
 ## 2026-08-19 M13 第六轮：消灭「让路死角」+ 本插件优先时隐藏 VC 配置（1.0.31）
 
 ### 做了什么

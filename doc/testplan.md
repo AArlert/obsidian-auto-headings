@@ -368,6 +368,7 @@
 | **M23** | **依赖总开关**：`updateBacklinks` 关，无模板文件标题改名 | 不触发编号，也不同步链接（总开关关闭时该路径完全不生效） | ✅（`main.test.ts`） |
 | **M24** | **清库压制**：`vaultClearInProgress` 置位期间，`updateBacklinks` 开，编辑器 `editor-change` 触发 | 该路径同样被压制，避免批量写回期间被放大 | ✅（`main.test.ts`） |
 | **M25** | **常规路径优先、不重复同步**：文件命中模板且够格自动触发，标题改名 | 只走常规 `applyRenumber` 一次（含其内置的 backlink 同步），不叠加该路径的第二次同步（无重复 Notice / 计数翻倍） | ✅（`main.test.ts`） |
+| **M26** | **Markdown 标题链接同步**：标题改名或编号变化时，引用方含同文件 / 跨文件 / 相对路径的 `[label](note.md#heading)` 与 `![alt](note.md#heading)`，并混有 URL 编码、angle destination、可选 title、外链、block、多级 fragment、转义语法及代码区文本 | 仅更新目标 Markdown inline link/image 的 heading fragment，并统一 URL 编码新 fragment；label、路径、title 与 `!` 原字节保留；外链、纯文件、block、多级 fragment、坏编码、转义链接、行内代码与 fenced code 保守不动；既有 Wikilink 同步及统一计数保持 | ✅（1.1.2，`backlinks.test.ts` 9 例 + `tests/user_tests/12-Markdown标题反链.md` + NesDev / Obsidian 1.12.7 运行态回读） |
 
 ### N. 起始编号数字 startIndex（M8 批次 1） — dev + user
 
@@ -705,5 +706,4 @@ World（单文件单模板）  →  Vault（多文件 + 多模板 + 路径规则
 - 状态计数与待办清单**跑 `npm run docs` 看摘要**（只统计 §2 场景清单区间），不必整读本文档。
 
 > **写场景的要诀**：永远多想一步「**之前是什么状态**」。同样一个「把序号样式改成中文」，在空文件上做没问题，在已编号文件上做就可能炸——后者才是用户的真实路径。**每条配置变更场景都应配一条「先用旧配置编号 → 改 → 再触发」的状态转移用例。**
-
 
