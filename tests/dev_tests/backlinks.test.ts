@@ -337,4 +337,54 @@ describe("rewriteBacklinksInContent：Markdown 标题链接（M26）", () => {
 			count: 1,
 		});
 	});
+
+	it("M27：%%…%% 与 <!--…--> 注释内不改，注释同行结束后链接照常改", () => {
+		const content = [
+			`%% [Code](Target.md#${encodedFrom}) %% [Live](Target.md#${encodedFrom})`,
+			`<!-- [Html](Target.md#${encodedFrom}) -->`,
+			`<!-- [未完](Target.md#${encodedFrom})`,
+			`[尾行](Target.md#${encodedFrom})`,
+		].join("\n");
+		// 未闭合 HTML 注释延伸到文件尾：注释内两条与注释后一行都不改。
+		const expected = content.replace(
+			`%% [Code](Target.md#${encodedFrom}) %% [Live](Target.md#${encodedFrom})`,
+			`%% [Code](Target.md#${encodedFrom}) %% [Live](Target.md#${encodedTo})`,
+		);
+		expect(rewriteBacklinksInContent(content, "Target", false, renames)).toEqual({
+			content: expected,
+			count: 1,
+		});
+	});
+
+	it("M27：[[wikilink]](literal) 的括号段按字面文本保留，不二次改写、计数不重复", () => {
+		const content = `[[Target#链接 同步验证|别名]](Target.md#${encodedFrom})`;
+		const r = rewriteBacklinksInContent(content, "Target", false, renames);
+		expect(r.content).toBe(`[[Target#${to}|别名]](Target.md#${encodedFrom})`);
+		expect(r.count).toBe(1);
+	});
+
+	it("M27：嵌套未闭合 label 时内层链接仍改写，未闭合括号保守不动", () => {
+		const content = [
+			`[外层 [内层](Target.md#${encodedFrom})`, // 内层完整闭合、外层未闭合：内层改。
+			`[x](a [y](Target.md#${encodedFrom}`, // 两处 `(` 都无配对 `)`：都不改。
+		].join("\n");
+		const expected = content.replace(
+			`[外层 [内层](Target.md#${encodedFrom})`,
+			`[外层 [内层](Target.md#${encodedTo})`,
+		);
+		expect(rewriteBacklinksInContent(content, "Target", false, renames)).toEqual({
+			content: expected,
+			count: 1,
+		});
+	});
+
+	it("M27：单行数万未闭合 [ 快速完成（配对表 O(n)，不卡死、不改写）", () => {
+		const pathological = "[".repeat(20000) + `\n[正文](Target.md#${encodedFrom})`;
+		const started = Date.now();
+		const r = rewriteBacklinksInContent(pathological, "Target", false, renames);
+		const elapsed = Date.now() - started;
+		expect(r.content).toBe("[".repeat(20000) + `\n[正文](Target.md#${encodedTo})`);
+		expect(r.count).toBe(1);
+		expect(elapsed).toBeLessThan(1000); // 修复前同量级输入 ~1.8s，修复后应为毫秒级。
+	});
 });

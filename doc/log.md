@@ -41,6 +41,51 @@
 
 ---
 
+## 2026-08-19 M27：PR #8 审核与合入前修复（1.1.2）
+
+### 做了什么
+
+外部 PR #8「feat: 支持 Markdown 标题链接同步」（@nestealin，单 commit `d29c8eb`，21 文件 +718/−134）
+完成两轮独立审核（quality-gate 实测门槛 + 独立深度审查逐函数验证），结论「功能扎实、可合入」，
+但发现 1 个已实测的性能必改项与 3 个低危语义偏差，按用户指示修复后合入 master：
+
+- **O(L²) 性能修复（必改）**：`rewriteMarkdownBacklinks` 对「单行大量未闭合 `[` / `[x](`」的病理输入
+  逐候选重扫到行尾（实测单行 10 万 `[` → 8.2s，2 万 `[x](` → 1.8s，该函数跑在 `vault.process` 写回路径上）。
+  改为**行级配对表**（`buildBracketPairs` / `buildParenPairs`，`src/backlinks.ts`）：一次线性扫描为整行
+  所有 `[`→`]`、`(`→`)` 算好配对（转义 / 嵌套 / `<...>` / 引号 title 语义与原逐候选扫描逐字符一致），
+  主循环查表 O(1)；修复后 2 万未闭合 `[` 毫秒级。
+- **`[[wikilink]](text)` 双改写（低危）**：主循环遇 `[[…]]` 整段跳过（wikilink 已由 `WIKILINK_RE` 先行
+  处理），括号段按字面文本保留，计数不再重复（此前 `[[Target#旧]](Target.md#旧)` 双通道各改一次）。
+- **`%%…%%` / `<!--…-->` 注释区（低危）**：新增 `commentRanges` 并入排除区（与 scan.ts 注释状态机
+  同语义：`%%` 优先、未闭合延伸到文件尾、围栏内状态冻结）；注释内链接不改，注释同行结束后链接照常改。
+- **未闭合反引号（低危，保持现状）**：偏差方向（改了渲染为代码的文本）写进 `inlineCodeRanges` 注释明示。
+- testplan 先加 M27 场景行；`backlinks.test.ts` 补 4 个回归用例（注释区 / wikilink 括号段 / 嵌套未闭合
+  label 内层仍改 / 2 万未闭合 `[` 性能），42/42 通过；`M26` 的 9 例 + 既有用例全部保持。
+
+### 没做什么
+
+- 未改 `main.ts` 的触发 / 反查 / `vault.process` 写回路径，也未改 Wikilink 语义与计数口径。
+- 未处理 whitelist locale 排序脆弱性（`whitelist.test.ts:406`，本机 zh-CN 下 `localeCompare` 排序与断言
+  不符）——master 基线同样失败，属既有环境相关用例，非本次引入；CI（Linux en-US locale）不受影响。
+- 未对 PR 做线上操作：未批准 CI（GitHub 上 `action_required`，需维护者手动批准）、未在 PR 留言。
+
+### 下一步
+
+- 推送 master 后批准 PR #8 的 GitHub Actions 首次运行，确认 CI 全绿（本机 format:check 的 CRLF 检出
+  伪影在 Linux/LF 检出下不存在；test 的 locale 用例同样只在 zh-CN locale 失败）。
+- 建议在 PR 上留审核评论（性能修复已随合入落地，@nestealin 可对照）。
+- 用户可在 NesDev 继续验证 1.1.2 候选产物；若后续补 Obsidian 冒烟（含 `( ) ! ' * ~` 的标题 fragment
+  编码），可顺手验证 M26/M27 运行态。
+
+### 验证方式
+
+- `backlinks.test.ts` 42/42（含 M26 9 例 + M27 4 例）；全量 `npm test` 636/637（唯一失败为 whitelist
+  locale 环境伪影，基线同样失败）；`npm run lint` 0 错误；`npm run format:check` 全绿（工作区统一 LF 检出）。
+- `npm run test:fuzz`：默认、explore、M13 标题索引三块记分板各 5000 条 × 80 步，3/3 通过。
+- 修复代码与 master 基线 wikilink 路径逐字对照无行为回归；`release/` 重建产物与源码一致。
+
+---
+
 ## 2026-08-19 M26：Markdown 标题链接同步（1.1.2，待上游评审）
 
 ### 做了什么
@@ -123,58 +168,6 @@ Backlink 同步原先只覆盖 `[[file#heading]]` / `![[file#heading]]`；用户
 `npm run bump 1.1.1` 已同步 package.json / manifest.json / versions.json / lockfile /
 release/manifest.json；`npm run release` 重建产物入库；写 `doc/release-notes/1.1.1.md`
 （双语，发布说明本身也保持精要）并打 tag `1.1.1` 触发 Release 工作流。本周期派发 0 次。
-
----
-
-## 2026-08-19 M13 收官：同名标题被 VC 的条数上限挤出列表（1.1.0，发版）
-
-### 做了什么
-
-用户实测 1.0.32：同名标题确实都进了 VC 的词典，但**要一路打到「交叉矩阵」全名，
-`交叉矩阵.md` 里那条才出现**；短查询（「交」「交叉」「交叉矩」）下只有 `交叉矩阵 (axi)`。
-
-**根因是我上一轮的后缀撞上了 VC 的排序 + 条数上限**（`provider/suggester.ts:304-306` 与 `:319`）：
-
-```ts
-if (a.value!.length !== b.value!.length) return a.value!.length > b.value!.length ? 1 : -1;
-...
-.slice(0, maxNum)   // maxNum = settings.maxNumberOfSuggestions，VC 默认仅 5
-```
-
-VC 把**全部来源**（当前文件词 / 全库词 / 自定义词典 / 内部链接）混在一起，按**显示文本长度
-升序**排序后直接截断。为绕开 VC 的去重（它对 customDictionary 只比 `value`），同名标题必须带
-`(文件名)` 后缀——而后缀让这两条恰好成了最长候选：打「交」时被「交叉」「交叉矩阵」这类短词
-挤出前 5；查询越长竞争者越少，才勉强挤进来。**排序键是 VC 写死的，我们无法让带后缀的条目变短。**
-
-修法：自动配置时把 `maxNumberOfSuggestions` **只抬不降**到 `MIN_VC_MAX_SUGGESTIONS = 10`
-（用户显式设得更大就尊重原值；字段缺失或脏值按需补齐）。这是本轮唯一能做的补偿，且与
-`displayedTextSuffix` 同属 VC 的**全局显示项**——照既有惯例在 `vcAutoConfirmPoints` 单列一条，
-写明「全局项，只抬不降」。**只在自动配置时写，不在启动时反复重写**：否则用户日后特意把它调回 5，
-每次启动都会被我们覆盖，变成跟用户抢设置。
-
-同时发版 **1.1.0**（M13 首次进入 tag 发布）：写了 `doc/release-notes/1.1.0.md`（双语），
-Release 工作流打 tag 时按 `<tag>.md` 取用。
-
-### 没做什么
-
-- **没有缩短区分后缀**去迎合长度排序：后缀是用户拍板的「标题行带 (文件名)」，且
-  `descriptionOnSuggestion` 可能被用户关掉，此时它是唯一能分辨来源的东西，不能为排名牺牲。
-- **没有在启动同步里重放 VC 设置写入**（见上，会跟用户抢设置）——代价是用户升级后需**重跑一次
-  「自动配置」**才能拿到新的上限，这一点已在交付说明里讲明。
-- 没有动去重消歧、让路判定、观感对齐（1.0.31 / 1.0.32 的结论均不变）。
-
-### 下一步
-
-- 用户真机复测：重跑一次「自动配置」（确认框应多出「抬高条数上限」那条），然后打「交」即应
-  同时看到两条同名标题。
-- M13 至此收官。既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互。
-
-### 验证方式
-
-`npx tsc --noEmit` 干净；`npm test` 623 通过（唯一失败仍是 `whitelist.test.ts:406` Windows ICU
-已知假红）——新增 `maxNumberOfSuggestions` 三例（低于下限抬到 10 / 用户设更大时尊重原值 /
-schema 校验拒非数字）；`npm run test:fuzz` 5000×80 三块记分板全绿；lint / format:check / release
-重建单独复跑。本周期派发 0 次。
 
 ---
 

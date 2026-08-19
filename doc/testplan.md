@@ -369,6 +369,7 @@
 | **M24** | **清库压制**：`vaultClearInProgress` 置位期间，`updateBacklinks` 开，编辑器 `editor-change` 触发 | 该路径同样被压制，避免批量写回期间被放大 | ✅（`main.test.ts`） |
 | **M25** | **常规路径优先、不重复同步**：文件命中模板且够格自动触发，标题改名 | 只走常规 `applyRenumber` 一次（含其内置的 backlink 同步），不叠加该路径的第二次同步（无重复 Notice / 计数翻倍） | ✅（`main.test.ts`） |
 | **M26** | **Markdown 标题链接同步**：标题改名或编号变化时，引用方含同文件 / 跨文件 / 相对路径的 `[label](note.md#heading)` 与 `![alt](note.md#heading)`，并混有 URL 编码、angle destination、可选 title、外链、block、多级 fragment、转义语法及代码区文本 | 仅更新目标 Markdown inline link/image 的 heading fragment，并统一 URL 编码新 fragment；label、路径、title 与 `!` 原字节保留；外链、纯文件、block、多级 fragment、坏编码、转义链接、行内代码与 fenced code 保守不动；既有 Wikilink 同步及统一计数保持 | ✅（1.1.2，`backlinks.test.ts` 9 例 + `tests/user_tests/12-Markdown标题反链.md` + NesDev / Obsidian 1.12.7 运行态回读） |
+| **M27** | **Markdown 链接同步保守边界补强（PR #8 审核修复）**：标题改名时，引用方含 `%%…%%` / `<!--…-->` 注释内的链接、`[[wikilink]](literal)` 形态（wikilink 后紧跟括号段）、以及单行数万未闭合 `[` / `[x](` 的病理长行 | 注释区间与 fenced / inline code 一并排除、注释结束同行的链接照常改写；`[[…]]` 整段跳过、其后的括号段按字面文本保留（不二次改写、计数不重复）；行级括号配对表 O(n) 预处理后长输入线性时间完成、病理行不改写任何链接 | ✅（1.1.2，`backlinks.test.ts` 新增 5 例：注释中 / 注释未闭合 / wikilink+括号段 / 嵌套未闭合 label 内层仍改 / 2 万未闭合 `[` 快速完成） |
 
 ### N. 起始编号数字 startIndex（M8 批次 1） — dev + user
 

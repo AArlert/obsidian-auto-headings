@@ -177,71 +177,114 @@ function isEscapedAt(content: string, index: number): boolean {
 	return slashes % 2 === 1;
 }
 
-/** 找 Markdown link label 的配对 `]`；支持 label 内嵌套 `[]`，跨行保守放弃。 */
-function findClosingBracket(content: string, open: number): number {
-	let depth = 1;
-	for (let i = open + 1; i < content.length; i++) {
+/**
+ * 行级 `[`→`]` 配对表（key = open `[` 偏移，value = 配对 `]` 偏移）。
+ *
+ * 与逐候选扫描同语义：支持 label 内嵌套 `[]`、反斜杠转义跳过下一字符、**不跨行**（行尾清栈）。
+ * 但一次线性扫描给出整行所有配对，主循环查表 O(1)——避免「单行大量未闭合 `[` 时每个候选都
+ * 重扫到行尾」的 O(L²) 退化（PR #8 审核修复，见 testplan M27）。
+ */
+function buildBracketPairs(content: string): Map<number, number> {
+	const pairs = new Map<number, number>();
+	const stack: number[] = [];
+	for (let i = 0; i < content.length; i++) {
 		const ch = content[i];
-		if (ch === "\n" || ch === "\r") return -1;
-		if (ch === "\\") {
-			i++;
+		if (ch === "\n" || ch === "\r") {
+			stack.length = 0; // 不跨行：行尾清栈。
 			continue;
 		}
-		if (ch === "[") depth++;
-		if (ch === "]" && --depth === 0) return i;
+		if (ch === "\\") {
+			const next = content[i + 1];
+			// 转义跳过下一字符；行尾反斜杠不吞换行（否则会漏掉换行清栈）。
+			if (next !== "\n" && next !== "\r") i++;
+			continue;
+		}
+		if (ch === "[") {
+			stack.push(i);
+		} else if (ch === "]") {
+			const open = stack.pop();
+			if (open !== undefined) pairs.set(open, i);
+		}
 	}
-	return -1;
+	return pairs;
 }
 
-/** 找 inline link destination 的配对 `)`；支持裸 destination 内的平衡括号与 `<...>`。 */
-function findClosingParen(content: string, open: number): number {
-	let depth = 1;
-	let inAngleDestination = false;
-	let inTitleQuote: '"' | "'" | null = null;
-	let seenDestination = false;
-	let afterDestination = false;
-	for (let i = open + 1; i < content.length; i++) {
+/** 行级 `(` 配对扫描的栈元素：`(` 位置 + 「从该 `(` 起 depth===1」时的状态机（与逐候选扫描同语义）。 */
+interface ParenStackEntry {
+	pos: number;
+	seenDestination: boolean;
+	inAngleDestination: boolean;
+	inTitleQuote: '"' | "'" | null;
+	afterDestination: boolean;
+}
+
+/**
+ * 行级 `(`→`)` 配对表（key = open `(` 偏移，value = 配对 `)` 偏移）。
+ *
+ * 与逐候选扫描同语义：裸 destination 内平衡括号、`<...>` destination、可选引号 title、转义跳过、
+ * 不跨行（行尾清栈）。状态机只跑在栈顶（= 该 `(` 视角的 depth===1），弹栈后父级状态恢复，
+ * 与对每个 `(` 独立扫描的结果一致；一次线性扫描给整行所有 `(` 算好配对，主循环查表 O(1)。
+ */
+function buildParenPairs(content: string): Map<number, number> {
+	const pairs = new Map<number, number>();
+	const stack: ParenStackEntry[] = [];
+	for (let i = 0; i < content.length; i++) {
 		const ch = content[i];
-		if (ch === "\n" || ch === "\r") return -1;
+		if (ch === "\n" || ch === "\r") {
+			stack.length = 0;
+			continue;
+		}
 		if (ch === "\\") {
-			i++;
+			const next = content[i + 1];
+			if (next !== "\n" && next !== "\r") i++;
 			continue;
 		}
-		if (inTitleQuote) {
-			if (ch === inTitleQuote) inTitleQuote = null;
-			continue;
-		}
-		if (inAngleDestination) {
-			if (ch === ">") {
-				inAngleDestination = false;
-				afterDestination = true;
-			}
-			continue;
-		}
-		if (ch === "<" && depth === 1 && !seenDestination) {
-			seenDestination = true;
-			inAngleDestination = true;
-			continue;
-		}
-		if (depth === 1) {
-			if (!seenDestination) {
-				if (/\s/.test(ch)) continue;
-				seenDestination = true;
-			} else if (!afterDestination && /\s/.test(ch)) {
-				afterDestination = true;
+		const top = stack[stack.length - 1];
+		if (top) {
+			if (top.inTitleQuote) {
+				if (ch === top.inTitleQuote) top.inTitleQuote = null;
 				continue;
-			} else if (afterDestination) {
+			}
+			if (top.inAngleDestination) {
+				if (ch === ">") {
+					top.inAngleDestination = false;
+					top.afterDestination = true;
+				}
+				continue;
+			}
+			if (!top.seenDestination) {
+				if (/\s/.test(ch)) continue;
+				if (ch === "<") {
+					top.seenDestination = true;
+					top.inAngleDestination = true;
+					continue;
+				}
+				top.seenDestination = true;
+			} else if (!top.afterDestination && /\s/.test(ch)) {
+				top.afterDestination = true;
+				continue;
+			} else if (top.afterDestination) {
 				if (/\s/.test(ch)) continue;
 				if (ch === '"' || ch === "'") {
-					inTitleQuote = ch;
+					top.inTitleQuote = ch;
 					continue;
 				}
 			}
 		}
-		if (ch === "(") depth++;
-		if (ch === ")" && --depth === 0) return i;
+		if (ch === "(") {
+			stack.push({
+				pos: i,
+				seenDestination: false,
+				inAngleDestination: false,
+				inTitleQuote: null,
+				afterDestination: false,
+			});
+		} else if (ch === ")") {
+			const open = stack.pop();
+			if (open !== undefined) pairs.set(open.pos, i);
+		}
 	}
-	return -1;
+	return pairs;
 }
 
 /**
@@ -325,7 +368,12 @@ function fencedCodeRanges(content: string): OffsetRange[] {
 	return ranges;
 }
 
-/** 在 fenced code 之外找单行 inline code span；未闭合反引号不构成排除区。 */
+/**
+ * 在 fenced code 之外找单行 inline code span；**未闭合反引号不构成排除区**——此时该行后续
+ * 形似链接的文本仍会被改写（CommonMark 中未闭合 code span 延伸到行尾、Obsidian 渲染为代码）。
+ * 属刻意取舍：反引号游程 tokenizer 的成本与收益不成比例，失败方向是「改了渲染为代码的文本」
+ * 而非误编号（PR #8 审核修复，见 testplan M27）。
+ */
 function inlineCodeRanges(content: string, fences: OffsetRange[]): OffsetRange[] {
 	const ranges: OffsetRange[] = [];
 	let fenceIndex = 0;
@@ -369,10 +417,59 @@ function inlineCodeRanges(content: string, fences: OffsetRange[]): OffsetRange[]
 	return ranges;
 }
 
-/** Markdown 链接解析只在正文运行，代码区按原文本保留。 */
+/**
+ * `%%…%%` 与 `<!--…-->` 注释的字符区间，与 scan.ts 的注释状态机同语义：`%%` 优先、未闭合
+ * 延伸到文件尾、**围栏内注释状态冻结**（扫描跳过 fence 区间且不改变状态）。注释里的链接按
+ * 原文本保留；注释在同一行结束后，同行后续链接照常改写（PR #8 审核修复，见 testplan M27）。
+ */
+function commentRanges(content: string, fences: OffsetRange[]): OffsetRange[] {
+	const ranges: OffsetRange[] = [];
+	let state: "none" | "obsidian" | "html" = "none";
+	let start = -1;
+	let fenceIndex = 0;
+	for (let i = 0; i < content.length; i++) {
+		while (fences[fenceIndex] && fences[fenceIndex].end <= i) fenceIndex++;
+		const fence = fences[fenceIndex];
+		if (fence && fence.start <= i) {
+			i = fence.end; // 围栏内注释状态冻结：跳过区间、状态不变。
+			continue;
+		}
+		if (state === "none") {
+			if (content.startsWith("%%", i)) {
+				state = "obsidian";
+				start = i;
+				i += 1;
+			} else if (content.startsWith("<!--", i)) {
+				state = "html";
+				start = i;
+				i += 3;
+			}
+		} else if (state === "obsidian") {
+			if (content.startsWith("%%", i)) {
+				ranges.push({ start, end: i + 2 });
+				state = "none";
+				start = -1;
+				i += 1;
+			}
+		} else if (content.startsWith("-->", i)) {
+			ranges.push({ start, end: i + 3 });
+			state = "none";
+			start = -1;
+			i += 2;
+		}
+	}
+	if (state !== "none") ranges.push({ start, end: content.length });
+	return ranges;
+}
+
+/** Markdown 链接解析只在正文运行，代码区 / 注释区按原文本保留。 */
 function markdownCodeRanges(content: string): OffsetRange[] {
 	const fences = fencedCodeRanges(content);
-	return [...fences, ...inlineCodeRanges(content, fences)].sort((a, b) => a.start - b.start);
+	return [
+		...fences,
+		...commentRanges(content, fences),
+		...inlineCodeRanges(content, fences),
+	].sort((a, b) => a.start - b.start);
 }
 
 /** 对一条 Markdown destination 计算新值；不安全 / 不命中时返回 null。 */
@@ -405,6 +502,9 @@ function rewriteMarkdownBacklinks(
 	renames: Map<string, string>,
 ): { content: string; count: number } {
 	const excluded = markdownCodeRanges(content);
+	/** 行级配对表：主循环查表 O(1)，避免未闭合括号长行上的 O(L²) 退化（见 testplan M27）。 */
+	const bracketPairs = buildBracketPairs(content);
+	const parenPairs = buildParenPairs(content);
 	const chunks: string[] = [];
 	let cursor = 0;
 	let count = 0;
@@ -428,13 +528,20 @@ function rewriteMarkdownBacklinks(
 			i = openBracket + 1;
 			continue;
 		}
-		const closeBracket = findClosingBracket(content, openBracket);
+		// `[[…]]` 是 wikilink（已由 WIKILINK_RE 先行处理）：整段跳过，避免把
+		// `[[a]](text)` 形态的括号段当 Markdown 链接二次改写、计数重复（见 testplan M27）。
+		if (content[openBracket + 1] === "[") {
+			const close = content.indexOf("]]", openBracket + 2);
+			i = close >= 0 ? close + 2 : openBracket + 1; // 未闭合 wikilink 按普通文本推进。
+			continue;
+		}
+		const closeBracket = bracketPairs.get(openBracket) ?? -1;
 		const openParen = closeBracket >= 0 ? closeBracket + 1 : -1;
 		if (openParen < 0 || content[openParen] !== "(") {
 			i = openBracket + 1;
 			continue;
 		}
-		const closeParen = findClosingParen(content, openParen);
+		const closeParen = parenPairs.get(openParen) ?? -1;
 		if (closeParen < 0) {
 			i = openBracket + 1;
 			continue;
@@ -476,7 +583,8 @@ function rewriteMarkdownBacklinks(
  *
  * Markdown inline link / image 另走小型扫描器：支持嵌套 label、平衡括号与 `<destination>`，只替换
  * destination 的 fragment 并 URL 编码新锚点；label、路径、可选 title 与 `!` 原字节保留。外部 URL、
- * 转义语法、块 / 多级 fragment、坏 URL 编码、行内代码与 fenced code 均保守跳过。
+ * 转义语法、块 / 多级 fragment、坏 URL 编码、行内代码、fenced code 与 `%%…%%` / `<!--…-->`
+ * 注释区均保守跳过；`[[…]]` wikilink 整段跳过、其后的括号段按字面文本保留。
  *
  * @returns 重写后的内容与命中改写的链接数。
  */
