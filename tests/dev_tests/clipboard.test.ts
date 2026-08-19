@@ -150,7 +150,7 @@ interface ClipboardInternals {
 	templateStore: { get(name: string): Template | undefined };
 	clipboardCache: ClipboardOriginalCache;
 	sanitizeClipboardEvent(evt: unknown, doc: unknown): void;
-	restoreSanitizedPaste(evt: unknown, editor: unknown, info: unknown): void;
+	restoreSanitizedPaste(evt: unknown, editor: unknown, info: unknown): boolean;
 }
 
 function makeClipboardPlugin(opts: { pathRules?: PathRule[] } = {}) {
@@ -296,8 +296,9 @@ describe("paste 端守卫矩阵（O9，插件级）", () => {
 		const { p, sanitized } = seeded();
 		const editor = makePasteEditor(targetContent);
 		const evt = makeClipboardEvent(makeDataTransfer({ "text/plain": sanitized }));
-		p.restoreSanitizedPaste(evt, editor, { file: { path: "笔记.md" } });
-		expect(evt.defaultPrevented).toBe(true);
+		// preventDefault 本身现由 editor-paste 注册处按返回值触发（main.ts），不再是本方法的
+		// 副作用——这里改断言返回值，语义仍是「全守卫通过 → 应接管」。
+		expect(p.restoreSanitizedPaste(evt, editor, { file: { path: "笔记.md" } })).toBe(true);
 		expect(editor.inserted).toBe(original);
 	});
 

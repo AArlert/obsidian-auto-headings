@@ -25,11 +25,9 @@ async function copyToClipboard(text: string): Promise<void> {
 	} catch {
 		/* 回退到 execCommand */
 	}
-	const ta = document.createElement("textarea");
+	const ta = document.body.createEl("textarea");
 	ta.value = text;
-	ta.style.position = "fixed";
-	ta.style.opacity = "0";
-	document.body.appendChild(ta);
+	ta.setCssStyles({ position: "fixed", opacity: "0" });
 	ta.select();
 	try {
 		document.execCommand("copy");

@@ -192,9 +192,11 @@ export class PathSuggestPopup {
 			return;
 		}
 		const rect = this.inputEl.getBoundingClientRect();
-		this.el.style.left = `${rect.left}px`;
-		this.el.style.top = `${rect.bottom}px`;
-		this.el.style.width = `${rect.width}px`;
+		this.el.setCssStyles({
+			left: `${rect.left}px`,
+			top: `${rect.bottom}px`,
+			width: `${rect.width}px`,
+		});
 	}
 
 	private render(): void {

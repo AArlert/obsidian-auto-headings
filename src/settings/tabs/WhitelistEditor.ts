@@ -125,11 +125,13 @@ export function renderWhitelistEditor(
 			const textEl = row.createEl("span", { cls: "ah-wl-row-text", text: entry.text });
 			textEl.title = t.wlEditTitle;
 			textEl.addEventListener("click", () => {
-				// activeDocument：当前活动窗口的 document（弹出窗口兼容，勿用全局 document）。
-				const edit = activeDocument.createElement("input");
-				edit.type = "text";
-				edit.value = entry.text;
-				edit.className = "ah-wl-input ah-wl-row-edit";
+				// 挂在 row（textEl 的实际父节点）上创建，同文档、不必单独处理弹出窗口；
+				// createEl 默认追加到末尾，紧接着 replaceWith 会把它挪到 textEl 的位置。
+				const edit = row.createEl("input", {
+					type: "text",
+					value: entry.text,
+					cls: "ah-wl-input ah-wl-row-edit",
+				});
 				textEl.replaceWith(edit);
 				edit.focus();
 				edit.select();

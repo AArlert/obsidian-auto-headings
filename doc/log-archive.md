@@ -5,6 +5,51 @@
 
 ---
 
+## 2026-08-19 i18n 与面板文案全面瘦身（1.1.1）
+
+### 做了什么
+
+用户反馈设置面板与弹窗说明「过于繁琐、文字看得头疼」，本轮把 `src/i18n.ts` 的**全部长文案
+（中英双语同步）**压缩为「一眼看出关键句」的精要版：
+
+- **设置项 desc**：`autoNumberDesc` / `debounceDesc` / `updateBacklinksDesc` /
+  `headingLinkSuggestDesc` / `vcCoexistDesc` / `vcModeDesc` / 模板编辑各字段 desc /
+  白名单 desc / 危险区各 desc 等，删冗余从句与括号补述，只留动作 + 关键警告（如
+  「不在撤销历史内」）。
+- **分区导语**：`sectionSuggestDesc` 等压成一句；`vcCoexistFallbackHint` 去掉后半句
+  「开启联动后即会真让路」（选项行本身已讲）。
+- **确认框**：`vcAutoConfirmPoints` 五点各压到一行（保留「上限 2 万条 / 只抬不降 /
+  全局项」等关键约束）；`freezeVaultModalBody` 五件事保留①②③④⑤编号但逐条砍到最短；
+  `batchModalBody` / `foreignGuardModalBody` 同理。
+- **Notice**：`noticeBacklinksIntro` / `noticeClearedAndPaused` / `noticeFrozenVault` 等
+  缩短；**测试断言的短语一字未动**（`noticeRenumberedAndResumed` / `noticeNoRule` /
+  `noticeClearedVault` / `noticeBatchDone` / `noticeBacklinksUpdated` / 「已清除编号」/
+  「词典已截断」等），单测零改动。
+- 鸣谢段（About TAB）三条各压成一句，去掉「——」长破折号补述。
+
+英文版逐条镜像中文，删冗余从句与破折号补述，保留全部关键信息（警告/默认值/边界）。
+
+### 没做什么
+
+- **没动任何行为逻辑**：纯文案改动，键集与函数签名不变（`Messages` 接口零改动）。
+- 没动短标签/按钮/tooltip（本就精要）。
+
+### 下一步
+
+- 用户真机复测：过一遍设置面板四个 TAB + 各确认框，确认「一眼看清关键句」的观感达标。
+- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互；
+  M13 收官的「重跑自动配置后打『交』应见两条同名标题」真机复测。
+
+### 验证方式
+
+`npm run format` / `npm run lint` 绿；`npm test` 623 通过，唯一失败仍是
+`whitelist.test.ts:406` Windows ICU 已知假红（localeCompare 排序差异，与本次改动无关）；
+`npm run bump 1.1.1` 已同步 package.json / manifest.json / versions.json / lockfile /
+release/manifest.json；`npm run release` 重建产物入库；写 `doc/release-notes/1.1.1.md`
+（双语，发布说明本身也保持精要）并打 tag `1.1.1` 触发 Release 工作流。本周期派发 0 次。
+
+---
+
 ## 2026-08-19 M13 收官：同名标题被 VC 的条数上限挤出列表（1.1.0，发版）
 
 ### 做了什么

@@ -263,7 +263,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 		);
 		this.registerEvent(
 			this.app.workspace.on("editor-paste", (evt, editor, info) => {
-				this.restoreSanitizedPaste(evt, editor, info);
+				if (evt.defaultPrevented) {
+					return;
+				}
+				if (this.restoreSanitizedPaste(evt, editor, info)) {
+					evt.preventDefault();
+				}
 			}),
 		);
 
@@ -586,44 +591,47 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
-	 * paste 端回程还原（spec.md §2.8）：全部判断**同步**完成，任一守卫不过即放行原生粘贴管线
-	 * （零影响）——依次：他人已 `preventDefault` / 无文本 / LRU 未命中（外部内容或改动过、过期，
-	 * 当新内容处理）/ 目标文件编号未生效（全局关、frontmatter `false`、无模板命中——此时没有
-	 * 编号引擎兜底，还原反而把 WJ 重新引入用户声明「别碰」的文件；引擎不跑也不存在双重编号）/
-	 * 多光标（原生多光标粘贴有按行分配语义，不模仿）。全过 → 接管并整段插入原文：WJ 完好、
-	 * 编号仍是「被认领」状态，后续防抖重编正常改写序号，不产生 O9 双重编号。
+	 * paste 端回程还原（spec.md §2.8）：全部判断**同步**完成，任一守卫不过即返回 `false`——
+	 * 调用方（editor-paste 注册处）据此不调用 `preventDefault`，原生粘贴管线零影响接管。
+	 * 依次校验：他人已 `preventDefault`（调用方已判断一次，这里重复判断为防御性兜底，
+	 * 供本方法被单独调用时仍安全）/ 无文本 / LRU 未命中（外部内容或改动过、过期，当新内容
+	 * 处理）/ 目标文件编号未生效（全局关、frontmatter `false`、无模板命中——此时没有编号
+	 * 引擎兜底，还原反而把 WJ 重新引入用户声明「别碰」的文件；引擎不跑也不存在双重编号）/
+	 * 多光标（原生多光标粘贴有按行分配语义，不模仿）。全过 → 接管并整段插入原文，返回
+	 * `true`：WJ 完好、编号仍是「被认领」状态，后续防抖重编正常改写序号，不产生 O9 双重编号。
 	 */
 	private restoreSanitizedPaste(
 		evt: ClipboardEvent,
 		editor: Editor,
 		info: MarkdownView | MarkdownFileInfo,
-	): void {
+	): boolean {
 		if (evt.defaultPrevented) {
-			return;
+			return false;
 		}
 		try {
 			const text = evt.clipboardData?.getData("text/plain") ?? "";
 			if (!text) {
-				return;
+				return false;
 			}
 			const original = this.clipboardCache.lookup(text);
 			if (original === null) {
-				return;
+				return false;
 			}
 			if (
 				!info.file ||
 				!this.shouldAutoTrigger(editor.getValue()) ||
 				!this.getTemplateForFile(info.file.path)
 			) {
-				return;
+				return false;
 			}
 			if (editor.listSelections().length > 1) {
-				return;
+				return false;
 			}
-			evt.preventDefault();
 			editor.replaceSelection(original);
+			return true;
 		} catch {
 			/* 任一步失败：放行原生粘贴管线（spec §2.8 降级默认值）。 */
+			return false;
 		}
 	}
 
@@ -2149,6 +2157,11 @@ function linkBasename(path: string): string {
  * 我们接管后照样提供（剥 WJ 后），复制到 Word 等富文本目标不丢格式（spec.md §2.8 copy/cut 端）。
  */
 function renderSelectionHtml(doc: Document, selection: Selection): string {
+	// 特意保留 doc.createElement（而非 createEl 助手）：容器从不挂进任何可见 DOM，doc 形参
+	// 是纯粹为单测可注入而设——单测环境无真实 DOM/Obsidian 运行时，也没有全局 createEl
+	// （见 obsidian-mock.ts），换掉会让 clipboard.test.ts「阅读模式路径」的 mock doc 落空。
+	// obsidianmd/prefer-create-el 对此按下不表：分离节点不追加到任何父节点，规则的适用前提
+	// （应挂到 Obsidian 管理的 DOM 树）本就不成立。
 	const container = doc.createElement("div");
 	for (let i = 0; i < selection.rangeCount; i++) {
 		container.appendChild(selection.getRangeAt(i).cloneContents());

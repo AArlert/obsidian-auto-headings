@@ -41,6 +41,93 @@
 
 ---
 
+## 2026-08-19 Community Hub 审核修复（1.1.3）
+
+### 做了什么
+
+用户贴出 Obsidian Community Hub 自动代码检查报告（1 error + 5 warning），逐条核实现状后修复
+真正仍存在的问题（发现报告本身**部分过期**——ForeignNumberingCleanupModal.ts / PathRules.ts /
+WhitelistEditor.ts 的多处 `prefer-create-el` 位置当前代码早已用 `createEl`，报告引用的是旧快照，
+应与 [[obsidian-community-hub-distribution]] 记录的 Community Hub 索引滞后是同一根因）：
+
+- **`no-static-styles-assignment`（error，阻断项）**：`VcIntegrationSection.ts` 复制回退用的临时
+  textarea 两行 `.style.x=` 改 `setCssStyles`；顺手排查全仓库 `.style.` 赋值，额外发现报告**未提及**
+  的 `PathSuggest.ts`（路径建议弹窗定位，3 行）同类写法一并改掉，避免下次扫描再次因同一条规则挂掉。
+- **`prefer-create-el`（warning）**：核实后仅 3 处仍是真问题——`VcIntegrationSection.ts:28`
+  （随上面一起改，`document.body.createEl` 顺带消掉一次多余的 `appendChild`）、`WhitelistEditor.ts:129`
+  （行内编辑输入框，改用 `row.createEl(...)` 而非 `activeDocument.createElement`——`row` 就是
+  `textEl` 的实际父节点，同文档无歧义，`replaceWith` 同步执行不会闪烁）。`main.ts:2152`
+  （`renderSelectionHtml` 的分离容器）**特意保留不改**：该函数以 `doc: Document` 为形参正是为了
+  单测可注入 mock（`clipboard.test.ts`「阅读模式路径」用例），而单测环境 `vitest.config.ts` 是
+  `environment: "node"`、`obsidian-mock.ts` 不提供全局 `createEl`——换了会让该用例静默退化（异常
+  被 `sanitizeClipboardEvent` 的降级 catch 吞掉，`preventDefault`/`setData` 都不会发生）。已在代码
+  加注释说明，接受这一条 warning 长期挂着。
+- **`editor-paste` 的 `defaultPrevented` 检查 + `preventDefault` 位置（warning ×2）**：根因是检查
+  工具做不了跨函数静态分析——真实逻辑早就正确（`restoreSanitizedPaste` 内部本就先判
+  `defaultPrevented`、只在全部守卫通过时才 `preventDefault`），只是这层判断裹在私有方法里、
+  检查工具看不见注册处那个箭头函数字面量里有没有这两行。改法：注册处内联 `defaultPrevented`
+  前置判断 + 按 `restoreSanitizedPaste` 返回值决定是否 `preventDefault`；方法本身改回返回
+  `boolean`（原为 `void`），**内部仍保留一份 `defaultPrevented` 早退**（防御性冗余，换来该方法被
+  单测直接单独调用时仍安全——见下）。
+- 同步改了 `tests/dev_tests/clipboard.test.ts`：本地 `ClipboardInternals` 接口的
+  `restoreSanitizedPaste` 返回类型 `void → boolean`；「全守卫通过」用例把
+  `expect(evt.defaultPrevented).toBe(true)` 改成断言返回值（该方法自己不再触发
+  `preventDefault`，那是调用方注册处的职责）。其余 9 个 O9 守卫矩阵用例逐条核对过，均不依赖
+  「方法自身调用 preventDefault」这个已变化的细节，未改。
+- `getSettingDefinitions()`（warning，SettingsTab.ts:40，Obsidian 1.13.0 新增声明式设置搜索
+  API）**判断为超出本次范围，未实现**：读了已安装的 `node_modules/obsidian/obsidian.d.ts`
+  确认真实签名——一旦 `getSettingDefinitions()` 返回非空数组，Obsidian 1.13+ 就**不再调用**
+  `display()`，整页改由声明式定义渲染；本插件设置页现状是 4 个手写 TAB（含路径规则表、
+  可行内编辑/带命中角标的白名单编辑器等高度动态 UI），贸然只声明部分设置会让未声明的部分在
+  1.13+ 用户面前直接消失，是真实破坏性风险而非纯新增。API 本身留了退路——
+  `SettingDefinitionPage.page?: () => SettingPage` 允许某个子页保持命令式渲染（`SettingPage`
+  是 `abstract class { containerEl; abstract display(): void }`，形状与现有 `renderXxxTab(tab,
+  containerEl)` 函数很接近，理论上可行），但四个 TAB 该拆成纯声明式 / 保留命令式 page、
+  manifest 最低版本 1.8.7 意味着 `display()` 兜底还得长期共存——这是架构决策，留给用户拍板
+  是否值得开一个新 Milestone，本周期只记录调研结论，不擅自实现。
+- 质量门槛：`npm run build`（tsc + esbuild）、`npm run lint`（eslint）全绿；`npm test`
+  636/637——唯一失败是 [[windows-env-quirks]] 记录的 `whitelist.test.ts:406` zh-CN locale
+  排序环境伪影，与本次改动无关，`clipboard.test.ts` 30/30 全过（含改动最直接触及的「全守卫
+  通过」「他人已 preventDefault」两条）。本周期派发 1 次（quality-gate × 1，验证本次改动）。
+
+### 没做什么
+
+- 未实现 `getSettingDefinitions()`——原因见上，判断为独立 Milestone 量级的架构决策。
+- 未处理 `main.ts:2152` 的 `prefer-create-el` warning——原因见上（单测可注入性 vs lint 合规的
+  取舍，已判断为不值得，代码内联注释说明）。
+- 未改任何用户可见行为——本周期全部改动是 DOM 构造方式 / 内部函数签名的等价重构，不涉及
+  编号、Backlink、剪贴板还原等功能逻辑本身。
+- 未验证 Community Hub 重新扫描后是否真的转绿——这需要 tag/Release 真正发布后由 Community
+  Hub 侧重新抓取，本机看不到。
+
+### 下一步
+
+- 已 `npm run bump` → `1.1.2 → 1.1.3`（纯合规修复，无用户可见行为变化，但 Community Hub 的
+  审核大概率是照已发布 Release 的内容扫描，1.1.2 的 tag 已指向旧提交，不出新版本这批修复它
+  看不见——判断为需要新 tag 才能让审核转绿，而非常规「仅行为改动才 bump」的例外）。已写
+  `doc/release-notes/1.1.3.md`（双语，如实说明「无用户可见行为变化，修复审核发现」）。
+- 待 `npm run preflight` 全绿后提交 + 打 `1.1.3` tag 并推送，`release.yml` 会自动创建 GitHub
+  Release（同 1.1.1/1.1.2 的自动化路径，见上一块记录）。
+- 用户可在打完 tag 后回 Community Hub 维护者面板重新触发检查，确认这批修复真的清掉了对应
+  条目（本机没有手段验证 Community Hub 侧的重新扫描结果）。
+- `getSettingDefinitions()` 迁移：若用户认为值得做，建议开新 Milestone（当前最大到 M13），
+  按上面记的 API 形状（`SettingDefinitionPage.page` 命令式子页 + `display()` 长期共存）评估
+  工作量再排入 Roadmap，不建议下个周期直接动手实现。
+
+### 验证方式
+
+- `npm run build` / `npm run lint` 全绿；`npm test` 636/637（唯一失败为既有 locale 环境伪影，
+  基线同样失败）；`clipboard.test.ts` 30/30（quality-gate 代跑，见本块「做了什么」的门槛记录）。
+- `main.ts` 的 `restoreSanitizedPaste` 契约变化（`void → boolean`，`preventDefault` 调用点从
+  方法内部移到调用方）逐条核对过全部 10 个「paste 端守卫矩阵」用例：仅 1 个直接依赖旧契约
+  （已同步改断言），其余 9 个不受影响。
+- VcIntegrationSection / PathSuggest / WhitelistEditor 三处 DOM 构造改动**无自动化测试覆盖**
+  （这几个渲染函数向来是仓库既定的手验范围，`obsidian-mock.ts` 的 `PluginSettingTab.display()`
+  与 `Modal.open()` 都是空实现，见该文件注释）——只靠人工审代码逻辑确认等价，建议用户在真机
+  过一遍：复制词典路径按钮、白名单词条点击行内改名、路径规则输入框的建议弹窗定位。
+
+---
+
 ## 2026-08-19 M27：PR #8 审核与合入前修复（1.1.2）
 
 ### 做了什么
@@ -71,8 +158,26 @@
 
 ### 下一步
 
-- 已打并推送 `1.1.2` tag（annotated，指向 `164d01a`）；GitHub Release 待维护者创建（网页粘贴
-  `doc/release-notes/1.1.2.md` 内容即可）。
+- ~~已打并推送 `1.1.2` tag；GitHub Release 待维护者创建~~——**订正**：`release.yml` 在 tag push 后
+  自动创建，无需手动步骤；此前误判「需网页手动创建」并写错下一步，导致用户一度看到 Obsidian
+  端「manifest 版本无匹配 release」的过期提示。已用 GitHub API 核实 Release 1.1.2：`draft=false`
+  `prerelease=false`、tag 精确匹配（无 `v` 前缀）、`main.js`/`manifest.json`/`styles.css` 三个资产均
+  `state=uploaded`，资产内 manifest.json 版本号也是 `1.1.2`，发布于 `2026-08-19T05:33:37Z`——现状正常。
+- **新发现（用户实报「没人能下载插件」触发排查）**：真正卡住的不是 GitHub，是 **Community Hub**
+  （`community.obsidian.md/plugins/auto-headings`，2026-05 起取代 `obsidian-releases` PR 机制，见
+  `spec.md` M7 一行）——公开页面用浏览器 `read_page` 核实：插件确实「已上架且可搜索安装」，但
+  `Current version` 卡在 `1.1.0`、`Updates` 计数 16（=1.1.0 为止的历史发布数），未拉到 1.1.1/1.1.2
+  （二者 GitHub Release 均已核实 `draft=false`/`prerelease=false`/资产齐全，1.1.1 发布于
+  `2026-08-19T00:44:07Z`、1.1.2 于 `05:33:37Z`）。用户贴出的「manifest 版本无匹配 release / 修复」
+  卡片应是 Community Hub **登录后的维护者面板**（公开页无此横幅，登录态我无法代登）——GitHub 侧
+  现已全部满足匹配条件，**下一步需用户本人登录 community.obsidian.md 打开该插件的维护者面板，
+  点击「修复」触发重新校验**，预期会通过并拉到 1.1.2。若点击后仍失败，需要用户描述面板具体
+  报错以便继续排查（可能是索引节流 / webhook 未触发之类的新问题）。
+  另：网页摘要曾误报「Obsidian's manual/editorial review is still pending」——用真实浏览器
+  `read_page` 复核后，DOM 中并无此文本（页面上是 `Review: Satisfactory` 评分项），已判定为
+  fetch 摘要幻觉，未采信；`community-plugins.json`（legacy）已确认对本插件不再是准源，排查同类
+  问题时直接查 Community Hub 页面，不要查这个旧文件（6760 条大文件用一次性摘要 fetch 会截断，
+  需 `curl` 落盘 + 本地 grep/node 解析才可信）。
 - 推送 master 后批准 PR #8 的 GitHub Actions 首次运行，确认 CI 全绿（本机 format:check 的 CRLF 检出
   伪影在 Linux/LF 检出下不存在；test 的 locale 用例同样只在 zh-CN locale 失败）。
 - 建议在 PR 上留审核评论（性能修复已随合入落地，@nestealin 可对照）。
@@ -125,51 +230,6 @@ Backlink 同步原先只覆盖 `[[file#heading]]` / `![[file#heading]]`；用户
   相对路径 2；Markdown 5、Wikilink 4），MetadataCache 的目标文件与标题 fragment 全部精确命中；
   8 类保守跳过项原字节保持，`dev:errors` 无错误。
 - `release/` 与 NesDev 已安装的 `main.js` / `manifest.json` / `styles.css` 三份 SHA-256 分别一致。
-
----
-
-## 2026-08-19 i18n 与面板文案全面瘦身（1.1.1）
-
-### 做了什么
-
-用户反馈设置面板与弹窗说明「过于繁琐、文字看得头疼」，本轮把 `src/i18n.ts` 的**全部长文案
-（中英双语同步）**压缩为「一眼看出关键句」的精要版：
-
-- **设置项 desc**：`autoNumberDesc` / `debounceDesc` / `updateBacklinksDesc` /
-  `headingLinkSuggestDesc` / `vcCoexistDesc` / `vcModeDesc` / 模板编辑各字段 desc /
-  白名单 desc / 危险区各 desc 等，删冗余从句与括号补述，只留动作 + 关键警告（如
-  「不在撤销历史内」）。
-- **分区导语**：`sectionSuggestDesc` 等压成一句；`vcCoexistFallbackHint` 去掉后半句
-  「开启联动后即会真让路」（选项行本身已讲）。
-- **确认框**：`vcAutoConfirmPoints` 五点各压到一行（保留「上限 2 万条 / 只抬不降 /
-  全局项」等关键约束）；`freezeVaultModalBody` 五件事保留①②③④⑤编号但逐条砍到最短；
-  `batchModalBody` / `foreignGuardModalBody` 同理。
-- **Notice**：`noticeBacklinksIntro` / `noticeClearedAndPaused` / `noticeFrozenVault` 等
-  缩短；**测试断言的短语一字未动**（`noticeRenumberedAndResumed` / `noticeNoRule` /
-  `noticeClearedVault` / `noticeBatchDone` / `noticeBacklinksUpdated` / 「已清除编号」/
-  「词典已截断」等），单测零改动。
-- 鸣谢段（About TAB）三条各压成一句，去掉「——」长破折号补述。
-
-英文版逐条镜像中文，删冗余从句与破折号补述，保留全部关键信息（警告/默认值/边界）。
-
-### 没做什么
-
-- **没动任何行为逻辑**：纯文案改动，键集与函数签名不变（`Messages` 接口零改动）。
-- 没动短标签/按钮/tooltip（本就精要）。
-
-### 下一步
-
-- 用户真机复测：过一遍设置面板四个 TAB + 各确认框，确认「一眼看清关键句」的观感达标。
-- 既有待办不变：P12 / E36 / O11① / O5f / H12 / H9 / Dataview / J18 的 DOM 交互；
-  M13 收官的「重跑自动配置后打『交』应见两条同名标题」真机复测。
-
-### 验证方式
-
-`npm run format` / `npm run lint` 绿；`npm test` 623 通过，唯一失败仍是
-`whitelist.test.ts:406` Windows ICU 已知假红（localeCompare 排序差异，与本次改动无关）；
-`npm run bump 1.1.1` 已同步 package.json / manifest.json / versions.json / lockfile /
-release/manifest.json；`npm run release` 重建产物入库；写 `doc/release-notes/1.1.1.md`
-（双语，发布说明本身也保持精要）并打 tag `1.1.1` 触发 Release 工作流。本周期派发 0 次。
 
 ---
 
