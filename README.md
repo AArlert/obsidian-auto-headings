@@ -8,7 +8,7 @@ Automatic heading numbering for [Obsidian](https://obsidian.md) — the kind tha
 
 **You insert a section in the middle of a long document, and now every number after it is wrong.** Manually renumbering `2.3` → `2.4` → `2.5` … across a 40-heading spec or a semester's worth of lecture notes is tedious and error-prone. Auto Headings recomputes the whole file automatically, every time you stop typing.
 
-**You rename a numbered heading, and every `[[note#heading]]` link pointing at it breaks.** Most numbering plugins only touch the number and leave the link text stale. Auto Headings' backlink sync rewrites every reference across your vault in the same edit — rename the text, not just the number, and links still resolve.
+**You rename a numbered heading, and every `[[note#heading]]` or `[label](note.md#heading)` link pointing at it breaks.** Most numbering plugins only touch the number and leave the link text stale. Auto Headings' backlink sync rewrites both Wikilinks and Markdown links across your vault in the same edit — rename the text, not just the number, and links still resolve.
 
 **One numbering style never fits your whole vault.** Meeting notes want `1 / 1.1 / 1.1.1`. A book manuscript wants `第一章` / `一、`. An academic paper wants to skip "Contents" and "References" from the count entirely. Auto Headings lets every folder — even every file — use its own template, with a whitelist for the headings that shouldn't be numbered at all.
 
@@ -51,6 +51,7 @@ Most heading-numbering plugins update the number but leave stale link text behin
 
 <!-- other.md -->
 See [[note#Foo]] for details.
+See [the same section](note.md#Foo) in Markdown-link style.
 ```
 
 You edit the heading — text, not just the number:
@@ -65,6 +66,7 @@ The reference updates itself, automatically, in the same edit:
 ```
 <!-- other.md -->
 See [[note#Foobar]] for details.
+See [the same section](note.md#Foobar) in Markdown-link style.
 ```
 
 No broken anchors, no manual find-and-replace across your vault. The approach builds on Header Enhancer, the only other plugin that tackles this problem, with several targeted improvements layered on top — atomic writes so an interrupted update can't half-corrupt a file, safer handling of duplicate headings, and more. (A few edge cases — duplicate heading names, block references, multi-level anchors — are left untouched on purpose; see [Notes](#notes).)
@@ -186,7 +188,7 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 ## Notes
 
 -   **Language**: the plugin UI follows your Obsidian language automatically (English / 简体中文), or can be locked in settings. This README has a [Chinese version](README.zh.md).
--   **Backlink sync limits**: to avoid ambiguous edits, sync skips duplicate heading names (same title in multiple places), block references (`^id`), and multi-level anchors (`#A#B`). Turning the sync on doesn't retroactively fix links that were already broken before it was enabled. It can also be turned off in **Settings → General**.
+-   **Backlink sync limits**: Wikilinks and inline Markdown links/images are supported (Markdown fragments are URL-encoded on write). To avoid ambiguous or accidental edits, sync skips duplicate heading names, block references (`^id`), multi-level anchors (`#A#B`), external URLs, and Markdown-looking text inside inline/fenced code. Turning the sync on doesn't retroactively fix links that were already broken before it was enabled. It can also be turned off in **Settings → General**.
 -   **Undo**: single-file rewrites are one editor transaction — a single `Ctrl/Cmd+Z` undoes them. Backlink updates to _other_ files are not part of that transaction. The vault-wide clear is **not** in the undo history; back up first.
 -   **Mobile**: supported (`isDesktopOnly: false`).
 

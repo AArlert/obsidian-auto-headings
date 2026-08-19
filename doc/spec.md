@@ -965,12 +965,13 @@ Editor onChange 事件触发
 
 ### 3.12 Backlink 同步（M7，1.0 发布前置）
 
-> 「改标题/编号后 `[[file#heading]]` 链接失效」是社区
+> 「改标题/编号后 `[[file#heading]]` / `[说明](file.md#heading)` 链接失效」是社区
 > **呼声第一**的痛点，目前仅 Header Enhancer 解决。本插件**每次编号都会改写标题文本**（加 / 改 / 去前缀），
 > 正是该痛点的高发场景。故把 Backlink 同步定为 **1.0 上架前必做**，补齐唯一硬短板。
 
 **问题。** 编号把 `## 简介` 改成 `## 1 简介`（或改样式 `一、简介` → `1 简介`，或清除还原成 `## 简介`），
-任何指向旧标题锚点的内部链接——`[[file#简介]]`、`[[#简介]]`、`[[file#简介|别名]]`——都会断链。Obsidian
+任何指向旧标题锚点的内部链接——`[[file#简介]]`、`[[#简介]]`、`[[file#简介|别名]]`、
+`[说明](file.md#简介)`——都会断链。Obsidian
 **不会**因标题文本变化自动修链（其自动修链只走「重命名文件 / 用命令重命名标题」流程，不覆盖插件直接改写正文）。
 
 **参考实现：** 唯一解决此痛点的 **Header Enhancer**（hobeedzc/obsidian-header-enhancer-plugin 的
@@ -1009,14 +1010,20 @@ Editor onChange 事件触发
    一并写回——不经过 `vault.process`，故不读盘、不与本文件编辑器的未落盘改动竞态。
 3. **反查引用方** `metadataCache.getBacklinksForFile(target)`：取 `.data` Map 的 sourcePath 列表（= 链向
    本文件的**别的**文件；本文件自身这一条已在步骤②处理，`syncBacklinks` 显式跳过避免重复/竞态）。
-4. **重写锚点** `rewriteBacklinksInContent`（纯函数）：在每个引用文件里正则扫 `[[…]]` / `![[…]]`，对
-   「路径段 basename 命中本文件、subpath 归一后落在改名表」的链接替换 subpath，**保留别名 `|alias` 与嵌入 `!`**。
+4. **重写锚点** `rewriteBacklinksInContent`（纯函数）：
+   - wikilink 扫 `[[…]]` / `![[…]]`，对「路径段 basename 命中本文件、subpath 归一后落在改名表」
+     的链接替换 subpath，**保留别名 `|alias` 与嵌入 `!`**；
+   - Markdown inline link/image 扫 `[label](destination)` / `![alt](destination)`，支持同文件、相对路径、
+     URL 编码、嵌套 label、平衡括号、`<destination>` 与可选 title；仅替换并 URL 编码 fragment，
+     label / 路径 / title / `!` 原样保留。外链、转义语法、块 / 多级 fragment、坏编码以及行内 / fenced
+     code 保守跳过。两种语法的命中数统一汇总。
 5. **写回与反馈**：别的文件用 **`vault.process(file, fn)`** 原子 read-modify-write；本文件自身的命中数
    （步骤②）与别的文件的命中数相加，给一条 Notice（`已更新 N 处链接`）。
 
 **比 Header Enhancer 改进的四处：**
 1. **原子写入** `vault.process`（它用 `vault.read`+`vault.modify`，读改写非原子、可能覆盖并发编辑）。
-2. **保留别名 / 嵌入**：它的 `backlinks.ts` 不区分别名与块引用；我们解析 `|alias`、`!` 嵌入并保留。
+2. **保留别名 / 嵌入 + Markdown 链接**：它的 `backlinks.ts` 不区分别名与块引用；我们解析并保留
+   wikilink 的 `|alias` / `!`，且支持 Markdown inline link/image 的 URL 编码 fragment、label 与 title。
 3. **重复标题消歧**：它按子串匹配易错改；我们对重复锚点**保守不改**（剔出改名表），避免错改，登记 testplan 已知限制。
 4. **自动路径 gate**：它纯命令驱动；我们有防抖自动路径，故**仅当改名表非空才进入同步**（日常打字标题文本不变 → 零开销）。
 

@@ -30,6 +30,7 @@
 | [`07-改配置后再触发.md`](./07-改配置后再触发.md) | 状态转移：已编号后改分隔符再触发，旧前缀被替换而非叠加（testplan B1/B4/B5） |
 | [`08-按路径选模板与双层开关.md`](./08-按路径选模板与双层开关.md) | 按路径规则选模板 + 全局自动编号 / frontmatter 双层开关（testplan I/K 类） |
 | [`09-UVM新发现的侵蚀类bug.md`](./09-UVM新发现的侵蚀类bug.md) | 0.6.2 UVM 发现的侵蚀 / 吞标题类 bug（U1/U2/U3，**已全修**，作复验样例） |
+| [`12-Markdown标题反链.md`](./12-Markdown标题反链.md) | Markdown link/image 与 Wikilink 的标题锚点同步（testplan M26） |
 
 ## 手动回归记录 ★
 

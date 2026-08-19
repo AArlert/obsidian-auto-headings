@@ -34,7 +34,8 @@ export interface AutoHeadingsSettings {
 	language: LangSetting;
 	/**
 	 * Backlink 同步（Milestone 7，见 spec.md §3.12）：标题文本一旦被改写（无论是否由编号引起），自动
-	 * 更新指向该标题的内部链接锚点 `[[file#标题]]`——**全局生效，与是否命中编号模板 / 是否实际写入
+	 * 更新指向该标题的 wikilink / Markdown 链接锚点（`[[file#标题]]` / `[说明](file.md#标题)`）——
+	 * **全局生效，与是否命中编号模板 / 是否实际写入
 	 * 编号无关**（1.0.9 起由原「总开关 + 独立触发」两个开关合一，见 main.ts
 	 * `shouldBacklinkStandaloneTrigger`）。**默认开**（0.7.11 上架前重估：它是 1.0 的头牌卖点，且有
 	 * 重复标题保守不改等护栏；首次实际同步时弹一次说明 Notice 告知，见 `backlinksIntroShown`）。仍受
