@@ -67,6 +67,29 @@ describe("parseHeadings", () => {
 		expect(headings.map((h) => h.text)).toEqual(["代码块外的标题"]);
 	});
 
+	it("同符号但数量不足的行不闭合围栏（CommonMark：闭合须 ≥ 开启数量，issue #9）", () => {
+		// 外层 4 个反引号包一段示例 Markdown，内嵌 3 个反引号的 yaml 围栏（数量不足，不闭合外层）。
+		// 内外两层的 `#` 行都应被忽略，直到真正数量 ≥4 的收尾行才回到正文。
+		const content = [
+			"## 真标题",
+			"````markdown",
+			"# 这是外层代码块",
+			"```yaml",
+			"# 这是最里层代码块",
+			"```",
+			"````",
+			"## 又一个真标题",
+		].join("\n");
+		const headings = parseHeadings(content);
+		expect(headings.map((h) => h.text)).toEqual(["真标题", "又一个真标题"]);
+	});
+
+	it("同符号数量更多的闭合行合法（闭合数量 > 开启数量也算闭合）", () => {
+		const content = ["```", "# 仍在代码块内", "`````", "## 代码块外的标题"].join("\n");
+		const headings = parseHeadings(content);
+		expect(headings.map((h) => h.text)).toEqual(["代码块外的标题"]);
+	});
+
 	it("带语言标识的围栏起始行也能正确识别", () => {
 		const content = ["```ts", "# const x = 1; // 不是标题", "```", "## 标题"].join("\n");
 		const headings = parseHeadings(content);

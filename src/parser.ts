@@ -75,8 +75,9 @@ export function hasSkipMarker(headingText: string): boolean {
 /**
  * 将完整文件内容解析为标题列表。
  *
- * 跳过区域的识别规则见 {@link scanSkipRegions}：围栏代码块须由**同种**栅栏符号闭合
- * （CommonMark 行为）；注释块按字符级配对，某行是否算标题只看它**行首**是否被遮蔽。
+ * 跳过区域的识别规则见 {@link scanSkipRegions}：围栏代码块须由**同种**栅栏符号、且**数量
+ * ≥ 开启行**闭合（CommonMark 行为，数量不足视为块内普通内容）；注释块按字符级配对，某行是否
+ * 算标题只看它**行首**是否被遮蔽。
  * 区域内部的所有 `#` 行都被忽略——不编号、不推进计数器、不进 backlink 快照。
  */
 export function parseHeadings(content: string): Heading[] {

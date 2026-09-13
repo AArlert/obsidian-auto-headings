@@ -5,6 +5,46 @@
 
 ---
 
+## 2026-08-19 M26：Markdown 标题链接同步（1.1.2，待上游评审）
+
+### 做了什么
+
+Backlink 同步原先只覆盖 `[[file#heading]]` / `![[file#heading]]`；用户使用可移植的标准 Markdown
+链接 `[label](file.md#heading)` 时，标题编号或改名后 fragment 会停在旧值。本轮先把实现从旧工作基线
+重新移植到最新 `upstream/master`（1.1.1，`52b41a2`），再补齐 Markdown inline link/image：
+
+- `rewriteBacklinksInContent` 新增小型 Markdown 扫描器，支持同文件、跨文件、相对路径、URL 编码文件名
+  与 fragment、嵌套 label、平衡括号、`<destination>`、引号 title、image/embed；只替换 destination 的
+  fragment，新 fragment 统一 URL 编码，label / path / title / `!` 原字节保留。
+- 外部 scheme / protocol-relative URL、纯文件链接、块引用、多级 fragment、坏 URL 编码、转义链接、
+  行内代码与 fenced code 保守不改；既有 Wikilink 改写与统一 Notice 计数保持原行为。
+- 先补 `backlinks.test.ts` 的 M26 用例并观察到 8 个预期失败、30 个既有用例通过，再落实现使该文件
+  38/38 通过；补双语 README / 设置文案 / spec / testplan / 手验夹具与双语 release note。
+- `npm run bump 1.1.2` 同步版本文件，`npm run release` 重建可安装产物。
+
+### 没做什么
+
+- 这仍是“标题发生变化时同步引用”的确定性修复，不猜测或追溯修补已经陈旧的历史断链。
+- 不改块引用 `^id`、多级锚点、重复标题的保守策略，也不把普通段落引用伪装成标题能力。
+- 没有改 `main.ts` 的触发、反查和 `vault.process` 原子写回路径，也没有改变 Wikilink 语义。
+
+### 下一步
+
+- 提交上游 PR，跟进 GitHub CI 与维护者评审；若需调整，以保持现有安全边界和兼容性为前提收敛。
+- 上游评审期间可继续在 NesDev 使用 1.1.2 候选产物，不另行维护分叉发布线。
+
+### 验证方式
+
+- Node 22.20.0：`npm run preflight` 全绿；其中全量 `npm test` 18 个文件、633/633 通过，
+  build / docs / lint / format:check / release 全部通过。
+- `npm run test:fuzz`：默认、explore、M13 标题索引三块记分板各跑 5000 条 × 80 步，3/3 通过。
+- NesDev / Obsidian 1.12.7：1.1.2 候选产物对 9 个标题引用完成真实命令验证（同文件 2、跨文件 5、
+  相对路径 2；Markdown 5、Wikilink 4），MetadataCache 的目标文件与标题 fragment 全部精确命中；
+  8 类保守跳过项原字节保持，`dev:errors` 无错误。
+- `release/` 与 NesDev 已安装的 `main.js` / `manifest.json` / `styles.css` 三份 SHA-256 分别一致。
+
+---
+
 ## 2026-08-19 i18n 与面板文案全面瘦身（1.1.1）
 
 ### 做了什么

@@ -2,7 +2,9 @@
  * 「跳过区域」块级扫描器（M12「注释块跳过」，见 spec.md §3.17）。
  *
  * 唯一权威地回答一个问题：**某一行是否落在插件不该介入的区域里**。目前两类区域：
- * - **围栏代码块**（``` / ~~~，须同种符号闭合，CommonMark 行为）——原实现在 `parser.ts`。
+ * - **围栏代码块**（``` / ~~~，须同种符号闭合、且闭合行数量 ≥ 开启行数量，CommonMark 行为）——
+ *   原实现在 `parser.ts`。数量不达标的行不闭合、也不算定界行，只是围栏内的普通内容——这也是
+ *   「外层 4 根反引号包内层 3 根」这类嵌套写法保持整体不闭合的机制（issue #9）。
  * - **注释块**（`%%…%%` 与 `<!--…-->`）——本次新增。
  *
  * 独立成模块的理由：这是 `parser.ts`（标题识别）与 `numbering.ts`（残留清理）共享的块级原语，
@@ -96,21 +98,32 @@ export function scanSkipRegions(lines: readonly string[]): SkipState[] {
 	const out: SkipState[] = [];
 	let inFence = false;
 	let fenceChar = "";
+	let fenceLen = 0;
 	let openComment: CommentKind | null = null;
 
 	for (const line of lines) {
 		const fence = line.match(FENCE_RE);
 		if (fence) {
-			const char = fence[1][0];
+			const run = fence[1];
+			const char = run[0];
 			if (!inFence) {
 				inFence = true;
 				fenceChar = char;
-			} else if (char === fenceChar) {
+				fenceLen = run.length;
+				out.push({ inFence: true, isFenceMarker: true, inComment: openComment !== null });
+				continue;
+			}
+			if (char === fenceChar && run.length >= fenceLen) {
 				inFence = false;
 				fenceChar = "";
+				fenceLen = 0;
+				out.push({ inFence: true, isFenceMarker: true, inComment: openComment !== null });
+				continue;
 			}
-			// 定界行本身既不可能是标题、也不可能携带残留；注释状态在围栏边界上冻结不推进。
-			out.push({ inFence: true, isFenceMarker: true, inComment: openComment !== null });
+			// CommonMark：闭合围栏须同种符号、且数量 ≥ 开启围栏。数量不足（或符号不同）的这一行
+			// 不是定界行，只是围栏内的普通内容——嵌套写法（外层 4 个反引号包内层 3 个）的内层
+			// 起止行都落在这一分支，原样冻结在围栏内，不会被误判为「闭合后又重新开启」。
+			out.push({ inFence: true, isFenceMarker: false, inComment: openComment !== null });
 			continue;
 		}
 		if (inFence) {

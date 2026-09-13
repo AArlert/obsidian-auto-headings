@@ -41,6 +41,70 @@
 
 ---
 
+## 2026-09-13 修复嵌套围栏数量不匹配致编号重置（1.1.4，issue #9）
+
+### 做了什么
+
+用户报告（[issue #9](https://github.com/AArlert/obsidian-auto-headings/issues/9)，附截图）：多层
+代码块嵌套、内层围栏用注释符号 `#` 时，其后标题序号会从 1 重新开始。用 GitHub API 取 issue 原文
++ 下载截图核实（WebFetch 摘要与 API 原文一致，本次未撞上 [[webfetch-verification-blind-spots]]
+记录的截断/编造问题），复现出的具体场景是：外层 4 个反引号围栏包一段示例 Markdown，内嵌一段
+3 个反引号的 yaml 围栏，两层都各有一行 `#` 开头的注释。
+
+- **根因定位**（派 `repo-scout` 定位 + 主模型用 vitest 写 scratch 测试实测复现）：`src/scan.ts`
+  的 `scanSkipRegions` 围栏状态机（`FENCE_RE` 捕获组其实带了完整反引号游程长度，但状态机只取
+  `fence[1][0]` 比较**符号种类**，从未比较**数量**）。按 CommonMark，闭合围栏须同符号**且数量
+  ≥ 开启行**；内层 3 个反引号本不该闭合外层 4 个反引号的围栏，但旧实现见到同符号就直接切换
+  `inFence`，导致内层 3 反引号「关闭」了外层围栏，内层 `# 这是最里层代码块` 被当成真标题
+  （level 1，浅于周围 H2 标题），推进计数器时把更深层的 H2 计数器清零——这就是「序号被清零
+  回 1」的完整链路，用 `renumberContent` 实测复现出与截图完全一致的 `## 2 标题二` → `## 1
+  标题三`（而非线性递增到 4），根因链条到此闭环，无需再猜。
+- **修复**：`scanSkipRegions` 新增 `fenceLen` 状态，闭合判定改为「同符号 **且** 本行游程长度
+  ≥ 开启时的长度」；数量不足（或符号不同）的类围栏行不再切换 `inFence`、也不再标记为
+  `isFenceMarker`，原样落入「围栏内普通内容」分支——语义上更贴合 `SkipState.isFenceMarker`
+  自己的文档定义（「本行**就是**围栏定界行」），不只是打个补丁。`parser.ts`、`scan.ts` 顶部
+  文档注释与 `doc/spec.md` §3.17（新增裁决表 R11）同步更新，避免下次改动时规格与实现再次漂移。
+- **回归测试**：`parser.test.ts` 新增 2 例（数量不足不闭合的嵌套写法；数量更多的闭合行合法，
+  对称验证没有矫枉过正）；`known_bugs.test.ts` 新增 issue #9 端到端 describe 块，直接断言
+  `renumberContent` 在 issue 原始场景下的输出（含幂等性）。`doc/testplan.md` 补 `E3b` 行
+  （✅，链接两个回归测试）。
+- 质量门槛：派 `quality-gate` 跑 `npm test`（639 通过，唯一失败是既有 zh-CN locale 排序环境
+  伪影，与本次无关）、`lint`、`format:check` 全绿；核心逻辑改动按规则额外跑一遍 `test:fuzz`
+  （5000 序列 × 80 步）全绿。本周期派发 2 次（repo-scout × 1 定位根因，quality-gate × 1 验证）。
+
+### 没做什么
+
+- 未改 `isSkipped()` 的对外行为——`isFenceMarker` 语义收紧后 `inFence` 仍覆盖同一行，
+  `isSkipped = inFence || isFenceMarker || inComment` 的外部可见结果（哪些行被跳过）不变，
+  只有「这一行算不算定界行本身」这个内部细节更准了，`cleanDemotedResidue` 因此受益
+  （之前会把这类误判的类围栏行当定界行跳过清理，现在正确按「围栏内普通内容」走
+  `scope.fences` 开关）——顺带验证过 `cleanup.test.ts` 全过，未额外补测试（行为改进但无
+  用户可见入口触发这条路径的已知场景，且现有测试已覆盖足够多样例）。
+- 未处理 `doc/testplan.md` 里 E3（不同符号不闭合）状态标记为 🔲 但实际早被
+  `parser.test.ts`「不同栅栏符号不互相闭合」覆盖的既有偏差——与本次改动无关的历史遗留，
+  不在本 issue 范围内，未顺手修，留给下次涉及该区域时处理。
+
+### 下一步
+
+- 已 `npm run bump` → `1.1.3 → 1.1.4`；已写 `doc/release-notes/1.1.4.md`（双语，如实描述
+  用户可见的编号 bug 修复）。
+- 待 `npm run preflight` 全绿后提交（含 `release/`）、按 §5.1 合并回 `master`，打 `1.1.4` tag
+  并推送，`release.yml` 自动创建 GitHub Release。
+- 可考虑回 issue #9 留评论告知已修复、将在 1.1.4 发布，但本仓库当前无 `gh` CLI
+  （见 [[windows-env-quirks]]），需用户自己评论或后续会话走 API/网页操作。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/parser.test.ts tests/dev_tests/known_bugs.test.ts`：新增用例
+  与既有用例全过。
+- `npm test` 639 通过（1 个既有 locale 环境伪影，基线同样失败，非本次引入）；`lint` /
+  `format:check` / `test:fuzz`（5000×80）全绿。
+- 用 issue 原始截图的确切文本（外层 4 反引号 + 内层 3 反引号 yaml，各一行 `#` 注释）跑
+  `renumberContent`，修复前输出 `## 1 标题三`（复现截图），修复后输出 `## 3 标题三`
+  （正确续号），且二次调用幂等。
+
+---
+
 ## 2026-08-19 Community Hub 审核修复（1.1.3）
 
 ### 做了什么
@@ -190,46 +254,6 @@ WhitelistEditor.ts 的多处 `prefer-create-el` 位置当前代码早已用 `cre
   locale 环境伪影，基线同样失败）；`npm run lint` 0 错误；`npm run format:check` 全绿（工作区统一 LF 检出）。
 - `npm run test:fuzz`：默认、explore、M13 标题索引三块记分板各 5000 条 × 80 步，3/3 通过。
 - 修复代码与 master 基线 wikilink 路径逐字对照无行为回归；`release/` 重建产物与源码一致。
-
----
-
-## 2026-08-19 M26：Markdown 标题链接同步（1.1.2，待上游评审）
-
-### 做了什么
-
-Backlink 同步原先只覆盖 `[[file#heading]]` / `![[file#heading]]`；用户使用可移植的标准 Markdown
-链接 `[label](file.md#heading)` 时，标题编号或改名后 fragment 会停在旧值。本轮先把实现从旧工作基线
-重新移植到最新 `upstream/master`（1.1.1，`52b41a2`），再补齐 Markdown inline link/image：
-
-- `rewriteBacklinksInContent` 新增小型 Markdown 扫描器，支持同文件、跨文件、相对路径、URL 编码文件名
-  与 fragment、嵌套 label、平衡括号、`<destination>`、引号 title、image/embed；只替换 destination 的
-  fragment，新 fragment 统一 URL 编码，label / path / title / `!` 原字节保留。
-- 外部 scheme / protocol-relative URL、纯文件链接、块引用、多级 fragment、坏 URL 编码、转义链接、
-  行内代码与 fenced code 保守不改；既有 Wikilink 改写与统一 Notice 计数保持原行为。
-- 先补 `backlinks.test.ts` 的 M26 用例并观察到 8 个预期失败、30 个既有用例通过，再落实现使该文件
-  38/38 通过；补双语 README / 设置文案 / spec / testplan / 手验夹具与双语 release note。
-- `npm run bump 1.1.2` 同步版本文件，`npm run release` 重建可安装产物。
-
-### 没做什么
-
-- 这仍是“标题发生变化时同步引用”的确定性修复，不猜测或追溯修补已经陈旧的历史断链。
-- 不改块引用 `^id`、多级锚点、重复标题的保守策略，也不把普通段落引用伪装成标题能力。
-- 没有改 `main.ts` 的触发、反查和 `vault.process` 原子写回路径，也没有改变 Wikilink 语义。
-
-### 下一步
-
-- 提交上游 PR，跟进 GitHub CI 与维护者评审；若需调整，以保持现有安全边界和兼容性为前提收敛。
-- 上游评审期间可继续在 NesDev 使用 1.1.2 候选产物，不另行维护分叉发布线。
-
-### 验证方式
-
-- Node 22.20.0：`npm run preflight` 全绿；其中全量 `npm test` 18 个文件、633/633 通过，
-  build / docs / lint / format:check / release 全部通过。
-- `npm run test:fuzz`：默认、explore、M13 标题索引三块记分板各跑 5000 条 × 80 步，3/3 通过。
-- NesDev / Obsidian 1.12.7：1.1.2 候选产物对 9 个标题引用完成真实命令验证（同文件 2、跨文件 5、
-  相对路径 2；Markdown 5、Wikilink 4），MetadataCache 的目标文件与标题 fragment 全部精确命中；
-  8 类保守跳过项原字节保持，`dev:errors` 无错误。
-- `release/` 与 NesDev 已安装的 `main.js` / `manifest.json` / `styles.css` 三份 SHA-256 分别一致。
 
 ---
 

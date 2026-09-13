@@ -111,3 +111,36 @@ describe("bug 回归（0.7.20 双哨兵自愈 E14–E18：删后缀致序号重�
 		expect(renumberContent(one, DEFAULT_TEMPLATE)).toBe(one);
 	});
 });
+
+describe("bug 回归（issue #9：嵌套围栏反引号数量不匹配致编号重置）", () => {
+	// 用户报告：外层 4 根反引号包一段示例 Markdown，内含 3 根反引号的 yaml 围栏，两层内容都有
+	// `#` 开头的行。根因：scan.ts 的围栏状态机只比较符号种类、不比较数量，内层 3 根反引号被
+	// 误判为「闭合」了外层 4 根反引号的围栏，导致内层 `# 这是最里层代码块` 被当成真标题（level
+	// 1，浅于 topLevel=H2 的周围标题），推进计数器时把更深层的 H2 计数器重置，下一个真标题
+	// 「标题三」序号从 3 错误地掉回 1。修复：闭合须同符号且数量 ≥ 开启行，数量不足的行原样
+	// 冻结在围栏内、不当定界行。
+	const nested = [
+		"## 标题一",
+		"## 标题二",
+		"````markdown",
+		"# 这是外层代码块",
+		"",
+		"```yaml",
+		"# 这是最里层代码块",
+		"```",
+		"````",
+		"## 标题三",
+	].join("\n");
+
+	it("内层三根反引号不提前闭合外层四根反引号，标题三续号为 3 而非重置为 1", () => {
+		const result = renumberContent(nested, DEFAULT_TEMPLATE);
+		const lines = result.split("\n");
+		expect(lines[0]).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}标题一`);
+		expect(lines[1]).toBe(`## ${WORD_JOINER}2 ${WORD_JOINER}标题二`);
+		// 围栏内两行 `#` 原样保留，未被当成标题改写。
+		expect(lines[3]).toBe("# 这是外层代码块");
+		expect(lines[6]).toBe("# 这是最里层代码块");
+		expect(lines[9]).toBe(`## ${WORD_JOINER}3 ${WORD_JOINER}标题三`);
+		expect(renumberContent(result, DEFAULT_TEMPLATE)).toBe(result); // 幂等
+	});
+});
