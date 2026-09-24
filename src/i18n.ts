@@ -155,6 +155,20 @@ export interface Messages {
 	batchModalBody: (pattern: string, count: number) => string;
 	batchModalConfirm: string;
 	batchModalCancel: string;
+	/** M14 路径规则的编号模式列（spec §3.22）。 */
+	pathColMode: string;
+	pathModeWrite: string;
+	pathModeVirtual: string;
+	pathModeTooltip: string;
+	batchRenumberVirtualTooltip: string;
+	/** M14 模式切换确认框。 */
+	modeModalTitle: string;
+	modeModalLeaving: (count: number, toVirtual: number, toNone: number) => string;
+	modeModalClearLabel: string;
+	modeModalEntering: (count: number) => string;
+	modeModalWriteLabel: string;
+	modeModalConfirm: string;
+	noticeModeCleared: (count: number) => string;
 
 	// —— 模板区 ——
 	templatesHeading: string;
@@ -473,6 +487,23 @@ const zh: Messages = {
 		"「不编号」、frontmatter 关闭或含未接管外来编号的文件自动跳过。已打开的文件可撤销，未打开的直接改写。",
 	batchModalConfirm: "重新编号",
 	batchModalCancel: "取消",
+	pathColMode: "模式",
+	pathModeWrite: "写入文件",
+	pathModeVirtual: "仅显示",
+	pathModeTooltip:
+		"写入文件：编号写进笔记，外部编辑器、GitHub、Publish 里也能看到。仅显示：编号只在 Obsidian 里显示，笔记内容一个字都不改。",
+	batchRenumberVirtualTooltip: "该规则为「仅显示」，编号不写入文件，无需批量编号",
+	modeModalTitle: "编号模式变更",
+	modeModalLeaving: (count, toVirtual, toNone) =>
+		`有 ${count} 个文件里有本插件写入的编号，改动后插件不再往这些文件写编号` +
+		`（${toVirtual} 个改为仅显示，${toNone} 个不再编号）。`,
+	modeModalClearLabel:
+		"清除这些文件里本插件写入的编号（手写编号不受影响）。不勾选则保留现有编号，改为仅显示的文件会提示有旧编号残留。",
+	modeModalEntering: (count) => `有 ${count} 个文件将从「仅显示」改为「写入文件」。`,
+	modeModalWriteLabel:
+		"立即给这些文件写入编号（不勾选则在下次编辑时写入；已打开的文件会马上更新）",
+	modeModalConfirm: "确认",
+	noticeModeCleared: (count) => `已清除 ${count} 个文件中本插件写入的编号`,
 
 	templatesHeading: "模板",
 	templatesDesc: "定义各级标题的编号格式与白名单；哪个文件用哪个模板由上方「路径规则」决定。",
@@ -573,7 +604,7 @@ const zh: Messages = {
 	clearVaultBtn: "清除全库编号…",
 	freezeVaultName: "固化编号并交还所有权（全库）",
 	freezeVaultDesc:
-		"**保留**现有编号、只移除不可见标记，此后插件停止一切自动编号。适合「想留住编号但不想再被管」或准备卸载；不可逆、不在撤销历史内，建议先备份。",
+		"**保留**现有编号、只移除不可见标记，此后插件停止一切自动编号。适合「想留住编号但不想再被管」或准备卸载；不可逆、不在撤销历史内，建议先备份。注意：「仅显示」模式的编号本来就不在文件里，固化后会随之消失。",
 	freezeVaultBtn: "固化编号并交还所有权…",
 	retiredBannerTitle: "插件已交还编号所有权",
 	retiredBannerBody:
@@ -783,6 +814,25 @@ const en: Messages = {
 		"open files support undo, closed files are rewritten directly.",
 	batchModalConfirm: "Renumber",
 	batchModalCancel: "Cancel",
+	pathColMode: "Mode",
+	pathModeWrite: "Write to file",
+	pathModeVirtual: "Display only",
+	pathModeTooltip:
+		"Write to file: numbers are written into the note and show up in external editors, GitHub and Publish. Display only: numbers are shown inside Obsidian and the note is never changed.",
+	batchRenumberVirtualTooltip:
+		"This rule is display-only — numbers are never written, nothing to renumber",
+	modeModalTitle: "Numbering mode change",
+	modeModalLeaving: (count, toVirtual, toNone) =>
+		`${count} file(s) contain numbers written by this plugin, and the plugin will stop writing to them ` +
+		`(${toVirtual} switch to display-only, ${toNone} to no numbering).`,
+	modeModalClearLabel:
+		"Remove the numbers this plugin wrote in these files (hand-written numbers are left alone). If unchecked, the numbers stay; display-only files will flag them as leftovers.",
+	modeModalEntering: (count) =>
+		`${count} file(s) will switch from display-only to write-to-file.`,
+	modeModalWriteLabel:
+		"Write numbers into these files now (otherwise on the next edit; open files update right away)",
+	modeModalConfirm: "Confirm",
+	noticeModeCleared: (count) => `Removed plugin-written numbers from ${count} file(s)`,
 
 	templatesHeading: "Templates",
 	templatesDesc:
@@ -894,7 +944,7 @@ const en: Messages = {
 	clearVaultBtn: "Clear vault numbering…",
 	freezeVaultName: "Freeze numbering and release ownership (entire vault)",
 	freezeVaultDesc:
-		"**Keeps** your numbers and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For “keep the numbers, drop the plugin” (e.g. before uninstalling). Irreversible and NOT in undo history — back up first.",
+		"**Keeps** your numbers and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For “keep the numbers, drop the plugin” (e.g. before uninstalling). Irreversible and NOT in undo history — back up first. Note: numbers in display-only mode were never in the files, so they disappear after freezing.",
 	freezeVaultBtn: "Freeze numbering and release ownership…",
 	retiredBannerTitle: "The plugin has released ownership of your numbering",
 	retiredBannerBody:

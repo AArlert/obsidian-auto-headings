@@ -2446,3 +2446,99 @@ describe("M14 周期 2：清除残留命令与刷新广播（testplan V14 / V25�
 		expect(ed.getValue()).toBe("## 甲"); // 仅显示文件：只刷新显示，不写。
 	});
 });
+
+describe("M14 周期 3：模式切换的规划与执行（testplan V15 / V16 / V18）", () => {
+	type ModeInternals = {
+		planModeTransition(
+			before: PathRule[],
+			after: PathRule[],
+		): Promise<{ toVirtual: string[]; toNone: string[]; toWrite: string[] }>;
+		applyModeTransition(
+			plan: { toVirtual: string[]; toNone: string[]; toWrite: string[] },
+			opts: { clear: boolean; write: boolean },
+		): Promise<void>;
+	};
+	const W = WORD_JOINER;
+	const before = (): PathRule[] => [
+		{ pattern: "/", template: "默认" },
+		{ pattern: "v/", template: "默认" },
+		{ pattern: "v/keep/", template: "默认", mode: "write" },
+	];
+
+	it("V15：只列出真有插件编号的文件；清除只剥插件编号、手写编号保留、不写 fm:false", async () => {
+		const rules = before();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: {
+				"v/x.md": `## ${W}1 ${W}概述\n## 2.1 手写`,
+				"v/plain.md": "## 没有编号",
+				"v/keep/y.md": `## ${W}1 ${W}保留`,
+				"a.md": `## ${W}1 ${W}根`,
+			},
+		});
+		const m = p as unknown as ModeInternals;
+		const after = rules.map((r) => ({ ...r }));
+		after[1].mode = "virtual";
+		const plan = await m.planModeTransition(rules, after);
+		expect(plan).toEqual({ toVirtual: ["v/x.md"], toNone: [], toWrite: [] });
+
+		p.settings.pathRules = after;
+		await m.applyModeTransition(plan, { clear: true, write: false });
+		expect(vaultFiles.get("v/x.md")).toBe("## 概述\n## 2.1 手写");
+		expect(vaultFiles.get("v/keep/y.md")).toBe(`## ${W}1 ${W}保留`); // 更具体的写入规则不受影响
+		expect(vaultFiles.get("a.md")).toBe(`## ${W}1 ${W}根`);
+		expect(Notice.messages).toContain("已清除 1 个文件中本插件写入的编号");
+	});
+
+	it("V16：清除改了标题文本，其他笔记里的链接跟着更新", async () => {
+		const rules = before();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			updateBacklinks: true,
+			vaultFiles: { "v/x.md": `## ${W}1 ${W}概述`, "b.md": "跳到 [[x#1 概述]]。" },
+		});
+		const m = p as unknown as ModeInternals;
+		const after = rules.map((r) => ({ ...r }));
+		after[1].mode = "virtual";
+		const plan = await m.planModeTransition(rules, after);
+		p.settings.pathRules = after;
+		await m.applyModeTransition(plan, { clear: true, write: false });
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe("跳到 [[x#概述]]。");
+	});
+
+	it("不勾清除：文件原样保留（仅显示时按残留处理）", async () => {
+		const rules = before();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: { "v/x.md": `## ${W}1 ${W}概述` },
+		});
+		const m = p as unknown as ModeInternals;
+		const after = rules.map((r) => ({ ...r }));
+		after[1].mode = "virtual";
+		const plan = await m.planModeTransition(rules, after);
+		p.settings.pathRules = after;
+		await m.applyModeTransition(plan, { clear: false, write: false });
+		expect(vaultFiles.get("v/x.md")).toBe(`## ${W}1 ${W}概述`);
+	});
+
+	it("V18：仅显示 → 写入并勾选立即写入：这些文件马上编号", async () => {
+		const rules: PathRule[] = [
+			{ pattern: "/", template: "默认" },
+			{ pattern: "v/", template: "默认", mode: "virtual" },
+		];
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: { "v/x.md": "## 概述", "a.md": "## 根" },
+		});
+		const m = p as unknown as ModeInternals;
+		const after = rules.map((r) => ({ ...r }));
+		after[1].mode = "write";
+		const plan = await m.planModeTransition(rules, after);
+		expect(plan.toWrite).toEqual(["v/x.md"]);
+		p.settings.pathRules = after;
+		await m.applyModeTransition(plan, { clear: false, write: true });
+		expect(vaultFiles.get("v/x.md")).toBe(`## ${W}1 ${W}概述`);
+		expect(vaultFiles.get("a.md")).toBe("## 根"); // 不在切换范围内的文件不动
+	});
+});

@@ -107,6 +107,11 @@ export function clearPluginNumberingContent(content: string, options: CleanupOpt
 	return lines.join("\n");
 }
 
+/** 内容里是否有本插件写入的编号（{@link clearPluginNumberingContent} 会不会改动它）。 */
+export function hasPluginNumbering(content: string): boolean {
+	return content.includes(WORD_JOINER) && clearPluginNumberingContent(content) !== content;
+}
+
 /**
  * 剥离内容中**外来 / 手写**（**非本插件写入**）的标题编号前缀，返回清理后的全文（0.6.6，spec §3.10）。
  *

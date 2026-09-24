@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-08-19","version":"1.0.31","summary":"M13 第六轮：用户实测暴露 1.0.29 的设计错误——让路默认 + 联动默认关两个默认叠加 = 装了 VC 就没有标题建议，且此前只用面板警告去兜（用户不开设置就看不到）。shouldYieldSuggestToVc 加第三条件「联动必须开着」，死角不可达；警告改为如实告知谁在接管。按用户要求：本插件优先且联动关时隐藏 VC 配置（联动已开或未装 VC 时仍渲染，避免隐身状态）。"}
 {"type":"log","date":"2026-08-19","version":"1.0.30","summary":"M13 第五轮：只改文案与面板渲染。放弃「按需让路」（VC 先挑）方案——两边都命中时标题候选照样消失，而这是常态不是边角。新增分区导语 sectionSuggestDesc，重写 vcCoexistDesc / vcModeDesc / headingLinkSuggestDesc（中英同步）：词典的职责是「合并两边候选」，不是补全的前置条件。"}
 {"type":"log","date":"2026-08-19","version":"1.0.29","summary":"M13 第四轮（接手 DS 的 1.0.28）：Q22 改在触发词边界层修——推翻交接方案，后者不收窄替换区间会吃掉用户已打的字；Q23 与 VC 共存默认让路 + 开关 + 死角警告；UI icon/面板分区；UVM 补 Q22 对拍。fuzz 5000×80 全绿。"}
 {"type":"log","date":"2026-08-11","version":"1.0.28","summary":"M13 第三轮：UVM 压测拓展（uvm/heading-index.ts 参考模型对拍）当场抓出并修复 U5–U7 三个索引 bug；启动词典同步（升级场景自动重写+reload 重试）；建议框补 icon。Q22「一笔事务」尾部词触发登记待实现。test:fuzz 5000×80 三块记分板全绿，门槛绿（whitelist ICU 假红除外）。"}

@@ -287,8 +287,8 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 
 .ah-path-row {
 	display: grid;
-	/* 拖拽手柄 行号 路径模式 模板 批量重编号 删除 */
-	grid-template-columns: 24px 32px 1fr 1fr 28px 28px;
+	/* 拖拽手柄 行号 路径模式 模板 编号模式（M14） 批量重编号 删除 */
+	grid-template-columns: 24px 32px 1fr 1fr minmax(96px, 0.8fr) 28px 28px;
 	gap: 6px;
 	align-items: center;
 }
@@ -800,7 +800,7 @@ button.ah-tab.ah-tab-active:hover {
 }
 
 .ah-path-table .ah-path-row {
-	min-width: 480px;
+	min-width: 580px;
 }
 
 /* —— 「路径模板」TAB 分区节头视觉强化（0.7.16，testplan L20）——

@@ -33,6 +33,7 @@ import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
 	clearPluginNumberingContent,
+	hasPluginNumbering,
 	hasUnclaimedForeignNumbering,
 	previewForeignNumberingCleanup,
 	type ForeignNumberingPreviewItem,
@@ -62,6 +63,7 @@ import {
 } from "./virtual/compute";
 import { virtualNumberingExtension, virtualRefreshEffect } from "./virtual/editorExtension";
 import { createVirtualPostProcessor } from "./virtual/readingView";
+import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
 import { HeadingIndex } from "./headingindex";
 import { HeadingLinkSuggest } from "./headingsuggest";
@@ -72,6 +74,17 @@ import {
 	VC_DICTIONARY_THROTTLE_MS,
 	vcDictionaryPath,
 } from "./vcintegration";
+
+/** 批量改写单个文件的结果。 */
+type BatchOutcome = "changed" | "unchanged" | "skipped";
+
+/** 批量改写的汇总：各结果的文件数 + 顺带同步的 backlink 处数。 */
+export interface BatchResult {
+	changed: number;
+	unchanged: number;
+	skipped: number;
+	links: number;
+}
 
 /** M13：初始标题索引扫描的批量大小（文件数），每批让出主线程一次（方案 §2.4，可调常量）。 */
 const INITIAL_SCAN_BATCH_SIZE = 200;
@@ -1478,7 +1491,136 @@ export default class AutoHeadingsPlugin extends Plugin {
 			new Notice(m.noticeBatchNoMatch);
 			return;
 		}
-		// path → editor 映射：已打开的文件走编辑器通道。
+		const r = await this.renumberFiles(files);
+		new Notice(m.noticeBatchDone(r.changed, r.unchanged, r.skipped));
+		await this.notifyBacklinkTotal(r.links);
+	}
+
+	/**
+	 * 规划一次路径规则变动引起的模式切换（M14，spec §3.22「切换模式」）：比较改动前后每个文件的有效
+	 * 模式；「离开写入」的文件只保留**真有本插件编号**的（没有就不必问用户），内容取已打开编辑器里的
+	 * 当前值（可能有未落盘的改动），否则 `cachedRead`。
+	 */
+	async planModeTransition(before: PathRule[], after: PathRule[]): Promise<ModeTransition> {
+		const files = this.app.vault.getMarkdownFiles();
+		const diff = diffNumberingModes(
+			before,
+			after,
+			files.map((f) => f.path),
+		);
+		const editors = this.openEditorsByPath();
+		const byPath = new Map(files.map((f) => [f.path, f]));
+		const withNumbering = async (paths: string[]): Promise<string[]> => {
+			const kept: string[] = [];
+			for (const path of paths) {
+				const file = byPath.get(path);
+				const content =
+					editors.get(path)?.getValue() ??
+					(file ? await this.app.vault.cachedRead(file).catch(() => "") : "");
+				if (hasPluginNumbering(content)) {
+					kept.push(path);
+				}
+			}
+			return kept;
+		};
+		return {
+			toVirtual: await withNumbering(diff.toVirtual),
+			toNone: await withNumbering(diff.toNone),
+			toWrite: diff.toWrite,
+		};
+	}
+
+	/**
+	 * 执行模式切换的文件改写（**在新规则落盘之后**调用）：`clear` 只剥本插件写入的编号，`write` 对
+	 * 「仅显示 → 写入」的文件立即编号。两者都走批量通道（含 backlink 同步），链接 Notice 汇总一次。
+	 */
+	async applyModeTransition(
+		plan: ModeTransition,
+		opts: { clear: boolean; write: boolean },
+	): Promise<void> {
+		const files = this.app.vault.getMarkdownFiles();
+		const pick = (paths: string[]) => {
+			const wanted = new Set(paths);
+			return files.filter((f) => wanted.has(f.path));
+		};
+		const m = this.messages();
+		let links = 0;
+		if (opts.clear) {
+			const r = await this.clearPluginNumberingInFiles(
+				pick([...plan.toVirtual, ...plan.toNone]),
+			);
+			new Notice(m.noticeModeCleared(r.changed));
+			links += r.links;
+		}
+		if (opts.write && plan.toWrite.length > 0) {
+			const r = await this.renumberFiles(pick(plan.toWrite));
+			new Notice(m.noticeBatchDone(r.changed, r.unchanged, r.skipped));
+			links += r.links;
+		}
+		await this.notifyBacklinkTotal(links);
+	}
+
+	/**
+	 * 逐文件按各自解析的模板重编号（批量重编号与「仅显示 → 写入」的立即写入共用）。跳过：「不编号」、
+	 * 无可用模板、仅显示文件、frontmatter `false`、未接管的外来编号（J10 守卫同源）。
+	 */
+	async renumberFiles(files: readonly TFile[]): Promise<BatchResult> {
+		const { prefixes, suffixes } = this.strippableAffixes();
+		return this.batchRewrite(files, (file, content) => {
+			const template = this.getTemplateForFile(file.path);
+			if (
+				!template ||
+				this.isVirtualFile(file.path) ||
+				readFileSwitch(content) === false ||
+				hasUnclaimedForeignNumbering(content)
+			) {
+				return null;
+			}
+			return renumberContent(content, template, {
+				strippablePrefixes: prefixes,
+				strippableSuffixes: suffixes,
+			});
+		});
+	}
+
+	/**
+	 * 逐文件只剥本插件写入的编号（M14「写入 → 仅显示」切换，spec §3.22）：手写编号不动、不写 `fm:false`，
+	 * 与重编号走同一对批量通道（含 backlink 同步）。
+	 */
+	async clearPluginNumberingInFiles(files: readonly TFile[]): Promise<BatchResult> {
+		const { prefixes, suffixes } = this.strippableAffixes();
+		return this.batchRewrite(files, (_file, content) =>
+			clearPluginNumberingContent(content, {
+				strippablePrefixes: prefixes,
+				strippableSuffixes: suffixes,
+			}),
+		);
+	}
+
+	/**
+	 * 批量改写的两条通道：已打开的文件走编辑器事务（可撤销，且不会被编辑器里未落盘的内容覆盖——
+	 * 见 {@link foldSelfBacklinks} 的根因说明），未打开的走 `vault.process`（原子读改写）。
+	 * `transform` 返回 `null` 表示跳过该文件。backlink Notice 交调用方汇总，避免一次弹出几十条。
+	 */
+	private async batchRewrite(
+		files: readonly TFile[],
+		transform: (file: TFile, content: string) => string | null,
+	): Promise<BatchResult> {
+		const editors = this.openEditorsByPath();
+		const result: BatchResult = { changed: 0, unchanged: 0, skipped: 0, links: 0 };
+		for (const file of files) {
+			const editor = editors.get(file.path);
+			const r = editor
+				? await this.rewriteViaEditor(editor, file, transform)
+				: await this.rewriteViaVault(file, transform);
+			result[r.outcome]++;
+			result.links += r.links;
+		}
+		return result;
+	}
+
+	/** 已打开的 Markdown 文件 → 其编辑器（批量改写优先走编辑器事务，不覆盖未落盘的改动）。 */
+	private openEditorsByPath(): Map<string, Editor> {
 		const editors = new Map<string, Editor>();
 		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
 			const view = leaf.view as unknown as {
@@ -1489,86 +1631,46 @@ export default class AutoHeadingsPlugin extends Plugin {
 				editors.set(view.file.path, view.editor);
 			}
 		}
-		let changed = 0;
-		let unchanged = 0;
-		let skipped = 0;
-		let links = 0;
-		for (const file of files) {
-			const template = this.getTemplateForFile(file.path);
-			if (!template || this.isVirtualFile(file.path)) {
-				// 解析为「不编号」伪模板、无可用模板（如更具体规则引用已失效模板），或被更具体的
-				// 仅显示规则覆盖（M14：仅显示文件永不写编号）。
-				skipped++;
-				continue;
-			}
-			const editor = editors.get(file.path);
-			const result = editor
-				? await this.batchRenumberViaEditor(editor, file, template)
-				: await this.batchRenumberViaVault(file, template);
-			if (result.outcome === "skipped") {
-				skipped++;
-			} else if (result.outcome === "changed") {
-				changed++;
-			} else {
-				unchanged++;
-			}
-			links += result.links;
-		}
-		new Notice(m.noticeBatchDone(changed, unchanged, skipped));
-		await this.notifyBacklinkTotal(links);
+		return editors;
 	}
 
-	/** 已打开文件的批量重编号通道：与 {@link applyRenumber} 同构，但 backlink Notice 交批量端汇总。 */
-	private async batchRenumberViaEditor(
+	/** 已打开文件的改写通道：与 {@link applyRenumber} 同构，但 backlink Notice 交批量端汇总。 */
+	private async rewriteViaEditor(
 		editor: Editor,
-		file: LinkTarget,
-		template: Template,
-	): Promise<{ outcome: "changed" | "unchanged" | "skipped"; links: number }> {
+		file: TFile,
+		transform: (file: TFile, content: string) => string | null,
+	): Promise<{ outcome: BatchOutcome; links: number }> {
 		const oldContent = editor.getValue();
-		if (readFileSwitch(oldContent) === false || hasUnclaimedForeignNumbering(oldContent)) {
+		const next = transform(file, oldContent);
+		if (next === null) {
 			return { outcome: "skipped", links: 0 };
 		}
-		const { prefixes, suffixes } = this.strippableAffixes();
-		const fold = this.foldSelfBacklinks(
-			file,
-			oldContent,
-			renumberContent(oldContent, template, {
-				strippablePrefixes: prefixes,
-				strippableSuffixes: suffixes,
-			}),
-		);
+		const fold = this.foldSelfBacklinks(file, oldContent, next);
 		const wrote = this.writeLineDiff(editor, oldContent, fold.content);
 		this.headingSnapshots.set(file.path, snapshotHeadings(fold.content));
 		const links = await this.syncBacklinksCounted(file, fold.renames, fold.selfCount);
 		return { outcome: wrote ? "changed" : "unchanged", links };
 	}
 
-	/** 未打开文件的批量重编号通道：`vault.process` 原子读改写（守卫命中时原样返回、不写入）。 */
-	private async batchRenumberViaVault(
+	/** 未打开文件的改写通道：`vault.process` 原子读改写（跳过时原样返回、不写入）。 */
+	private async rewriteViaVault(
 		file: TFile,
-		template: Template,
-	): Promise<{ outcome: "changed" | "unchanged" | "skipped"; links: number }> {
+		transform: (file: TFile, content: string) => string | null,
+	): Promise<{ outcome: BatchOutcome; links: number }> {
 		// 结果经对象属性带出闭包（TS 的流分析不追踪闭包内赋值，直接用局部 let 会误判比较恒假）。
 		const box: {
-			outcome: "changed" | "unchanged" | "skipped";
+			outcome: BatchOutcome;
 			renames: HeadingRename[];
 			selfCount: number;
 			content: string;
 		} = { outcome: "unchanged", renames: [], selfCount: 0, content: "" };
 		await this.app.vault.process(file, (content) => {
-			if (readFileSwitch(content) === false || hasUnclaimedForeignNumbering(content)) {
+			const next = transform(file, content);
+			if (next === null) {
 				box.outcome = "skipped";
 				return content;
 			}
-			const { prefixes, suffixes } = this.strippableAffixes();
-			const fold = this.foldSelfBacklinks(
-				file,
-				content,
-				renumberContent(content, template, {
-					strippablePrefixes: prefixes,
-					strippableSuffixes: suffixes,
-				}),
-			);
+			const fold = this.foldSelfBacklinks(file, content, next);
 			box.renames = fold.renames;
 			box.selfCount = fold.selfCount;
 			box.content = fold.content;

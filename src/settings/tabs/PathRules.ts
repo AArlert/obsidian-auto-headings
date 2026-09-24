@@ -6,9 +6,11 @@ import {
 	findDuplicatePatternIndex,
 	hasRootRule,
 	NO_NUMBERING_TEMPLATE,
+	ruleMode,
 	type PathCandidate,
 	type PathRule,
 } from "../../pathrules";
+import { cloneRules, isQuietTransition, type ModeTransition } from "../../virtual/modeSwitch";
 import { DEFAULT_TEMPLATE_NAME } from "../../templates/schema";
 import { closeAllPathSuggestPopups, type PathSuggestLabels, PathSuggestPopup } from "./PathSuggest";
 
@@ -57,17 +59,24 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 				.setButtonText(t.addRootRule)
 				.setCta()
 				.onClick(async () => {
-					rules.unshift({ pattern: "/", template: DEFAULT_TEMPLATE_NAME });
-					await plugin.saveSettings();
-					plugin.renumberActiveFile();
-					tab.display();
+					await commitRules(tab, [
+						{ pattern: "/", template: DEFAULT_TEMPLATE_NAME },
+						...cloneRules(rules),
+					]);
 				}),
 		);
 	}
 
 	new Setting(containerEl).addButton((btn) =>
 		btn.setButtonText(t.addRule).onClick(async () => {
-			rules.push({ pattern: "", template: DEFAULT_TEMPLATE_NAME });
+			// 新规则的模式跟随根规则（M14）：新装用户根规则是「仅显示」，新加的文件夹规则若默认写入，
+			// 一填路径就会开始往文件里写编号，违背他们没做过的选择。路径为空时不匹配任何文件，直接存。
+			const root = rules.find((r) => r.pattern.trim() === "/");
+			rules.push({
+				pattern: "",
+				template: DEFAULT_TEMPLATE_NAME,
+				...(root && ruleMode(root) === "virtual" ? { mode: "virtual" as const } : {}),
+			});
 			await plugin.saveSettings();
 			tab.display();
 		}),
@@ -76,7 +85,7 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 	// —— 规则表格（可滚动；表头 sticky）——
 	const table = containerEl.createDiv({ cls: "ah-path-table" });
 	const head = table.createDiv({ cls: "ah-path-row ah-path-head" });
-	for (const label of ["", "#", t.pathColPattern, t.pathColTemplate, "", ""]) {
+	for (const label of ["", "#", t.pathColPattern, t.pathColTemplate, t.pathColMode, "", ""]) {
 		head.createDiv({ cls: "ah-path-cell", text: label });
 	}
 
@@ -122,20 +131,23 @@ function renderPathRuleRow(
 			.map((c) => c.path);
 		// 手动输入未选建议项时的兜底：填的是某个真实文件夹名却漏打尾斜杠，自动补全
 		// （testplan K13）；已选自建议弹窗的路径已在 `selectSuggestion` 里补过，这里是幂等的。
-		rule.pattern = autocompleteFolderSlash(input.value, folderPaths).trim();
+		const next = autocompleteFolderSlash(input.value, folderPaths).trim();
+		if (next === previous) {
+			input.value = previous; // 没改（失焦也会触发）：不存盘、不弹切换确认框。
+			return;
+		}
+		const after = cloneRules(rules);
+		after[index].pattern = next;
 		// 阻断保存：同一路径模式（归一化后）不允许被两条规则同时占用，否则命中哪条取决于
 		// 「靠后者胜出」的内部兜底顺序，用户体验上等于随机（见 pathrules.ts findDuplicatePatternIndex）。
-		const dupIndex = findDuplicatePatternIndex(rules, index);
+		const dupIndex = findDuplicatePatternIndex(after, index);
 		if (dupIndex !== -1) {
-			rule.pattern = previous;
 			input.value = previous;
 			new Notice(t.pathDuplicateWarn(dupIndex + 1));
 			return;
 		}
-		input.value = rule.pattern;
-		await plugin.saveSettings();
-		plugin.renumberActiveFile();
-		tab.display(); // 重新渲染以更新「兜底提示条」等。
+		input.value = next;
+		await commitRules(tab, after); // 内含重新渲染（更新「兜底提示条」等）。
 	};
 
 	const suggest = new PathSuggestPopup(
@@ -201,11 +213,31 @@ function renderPathRuleRow(
 		opt.selected = true;
 	}
 	select.addEventListener("change", () => {
-		rule.template = select.value;
-		void plugin.saveSettings().then(() => {
-			plugin.renumberActiveFile();
-			tab.display(); // 重绘行内状态：切到/切出「不编号」要同步置灰/恢复批量按钮（K16）。
-		});
+		const after = cloneRules(rules);
+		after[index].template = select.value;
+		// 内含重绘：切到/切出「不编号」要同步置灰/恢复批量按钮（K16）与模式下拉框。
+		void commitRules(tab, after);
+	});
+
+	// 编号模式下拉（M14，spec §3.22）：写入文件 / 仅显示。「不编号」规则没有编号可言，置灰。
+	const modeCell = row.createDiv({ cls: "ah-path-cell" });
+	const modeSelect = modeCell.createEl("select", { cls: "dropdown" });
+	modeSelect.title = t.pathModeTooltip;
+	const modeOptions: Array<[string, string]> = [
+		["write", t.pathModeWrite],
+		["virtual", t.pathModeVirtual],
+	];
+	for (const [value, text] of modeOptions) {
+		const opt = modeSelect.createEl("option", { value, text });
+		if (ruleMode(rule) === value) {
+			opt.selected = true;
+		}
+	}
+	modeSelect.disabled = rule.template === NO_NUMBERING_TEMPLATE;
+	modeSelect.addEventListener("change", () => {
+		const after = cloneRules(rules);
+		after[index].mode = modeSelect.value === "virtual" ? "virtual" : "write";
+		void commitRules(tab, after);
 	});
 
 	// 批量重编号入口（M12，testplan K16）：确认对话框后对该规则命中的全部文件生效；
@@ -213,10 +245,14 @@ function renderPathRuleRow(
 	const batchCell = row.createDiv({ cls: "ah-path-cell" });
 	const batch = batchCell.createEl("span", { cls: "ah-path-batch" });
 	setIcon(batch, "list-ordered");
-	if (rule.template === NO_NUMBERING_TEMPLATE) {
+	if (rule.template === NO_NUMBERING_TEMPLATE || ruleMode(rule) === "virtual") {
+		const tip =
+			rule.template === NO_NUMBERING_TEMPLATE
+				? t.batchRenumberNoneTooltip
+				: t.batchRenumberVirtualTooltip;
 		batch.addClass("ah-path-batch-disabled");
-		batch.setAttr("aria-label", t.batchRenumberNoneTooltip);
-		batch.title = t.batchRenumberNoneTooltip;
+		batch.setAttr("aria-label", tip);
+		batch.title = tip;
 	} else {
 		batch.setAttr("aria-label", t.batchRenumberTooltip);
 		batch.title = t.batchRenumberTooltip;
@@ -238,11 +274,9 @@ function renderPathRuleRow(
 	del.setAttr("aria-label", t.deleteRuleTooltip);
 	del.title = t.deleteRuleTooltip;
 	del.addEventListener("click", () => {
-		rules.splice(index, 1);
-		void plugin.saveSettings().then(() => {
-			plugin.renumberActiveFile();
-			tab.display();
-		});
+		const after = cloneRules(rules);
+		after.splice(index, 1);
+		void commitRules(tab, after);
 	});
 
 	// —— 拖拽排序 ——
@@ -264,12 +298,10 @@ function renderPathRuleRow(
 		if (!Number.isInteger(from) || from === index) {
 			return;
 		}
-		const [moved] = rules.splice(from, 1);
-		rules.splice(index, 0, moved);
-		void plugin.saveSettings().then(() => {
-			plugin.renumberActiveFile();
-			tab.display();
-		});
+		const after = cloneRules(rules);
+		const [moved] = after.splice(from, 1);
+		after.splice(index, 0, moved);
+		void commitRules(tab, after);
 	});
 }
 
@@ -284,6 +316,99 @@ function renderPathRuleRow(
  * 转而只剩「路径字面含 `/`」的深层嵌套项，观感诡异（testplan K14）。根规则改由分层浏览模式的
  * 顶部 header（可点击选中当前层，根层即「/」）承接，不再经过扁平模糊匹配这条路径。
  */
+/**
+ * 提交一次路径规则变动（M14，spec §3.22「切换模式」）：先算出哪些文件会换模式，需要时弹切换确认框，
+ * 确认后才替换设置、落盘，再按用户勾选清除 / 写入编号；取消则规则原样不动（重绘把界面还原）。
+ * 没有文件受影响时直接生效，不打扰用户。
+ */
+async function commitRules(tab: AutoHeadingsSettingTab, after: PathRule[]): Promise<void> {
+	const plugin = tab.plugin;
+	const before = cloneRules(plugin.settings.pathRules);
+	const plan = await plugin.planModeTransition(before, after);
+	const apply = async (opts: { clear: boolean; write: boolean } | null): Promise<void> => {
+		plugin.settings.pathRules = after;
+		await plugin.saveSettings();
+		if (opts) {
+			await plugin.applyModeTransition(plan, opts);
+		}
+		plugin.renumberActiveFile();
+		tab.display();
+	};
+	if (isQuietTransition(plan)) {
+		await apply(null);
+		return;
+	}
+	new ModeTransitionModal(
+		plugin.app,
+		tab.t,
+		plan,
+		(opts) => void apply(opts),
+		() => tab.display(),
+	).open();
+}
+
+/**
+ * 模式切换确认框（M14）：说明有多少文件离开写入 / 进入写入，各给一个开关。
+ * - 「清除本插件写入的编号」：只有改为仅显示的文件时默认勾选；涉及「不编号」时默认不勾（沿用
+ *   §3.10 的老语义：不编号 = 冻结现状）。
+ * - 「立即写入编号」：默认不勾，等下次编辑再写。
+ * 点取消或按 Esc 关闭 = 规则不变。
+ */
+class ModeTransitionModal extends Modal {
+	private confirmed = false;
+
+	constructor(
+		app: App,
+		private readonly t: Messages,
+		private readonly plan: ModeTransition,
+		private readonly onConfirm: (opts: { clear: boolean; write: boolean }) => void,
+		private readonly onCancel: () => void,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl, plan, t } = this;
+		contentEl.empty();
+		contentEl.createEl("h3", { text: t.modeModalTitle });
+		const opts = { clear: plan.toNone.length === 0, write: false };
+		const leaving = plan.toVirtual.length + plan.toNone.length;
+		if (leaving > 0) {
+			contentEl.createEl("p", {
+				text: t.modeModalLeaving(leaving, plan.toVirtual.length, plan.toNone.length),
+			});
+			new Setting(contentEl)
+				.setDesc(t.modeModalClearLabel)
+				.addToggle((tg) => tg.setValue(opts.clear).onChange((v) => (opts.clear = v)));
+		}
+		if (plan.toWrite.length > 0) {
+			contentEl.createEl("p", { text: t.modeModalEntering(plan.toWrite.length) });
+			new Setting(contentEl)
+				.setDesc(t.modeModalWriteLabel)
+				.addToggle((tg) => tg.setValue(opts.write).onChange((v) => (opts.write = v)));
+		}
+		new Setting(contentEl)
+			.addButton((btn) => btn.setButtonText(t.batchModalCancel).onClick(() => this.close()))
+			.addButton((btn) =>
+				btn
+					.setButtonText(t.modeModalConfirm)
+					.setCta()
+					.onClick(() => {
+						this.confirmed = true;
+						this.close();
+						this.onConfirm(opts);
+					}),
+			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+		if (!this.confirmed) {
+			this.onCancel();
+		}
+	}
+}
+
 /**
  * 批量重编号确认对话框（M12，testplan K16）：展示规则路径与命中文件数，确认后才执行
  * （`batchRenumberRule` 见 main.ts——跳过 frontmatter `false`/外来编号守卫/「不编号」，

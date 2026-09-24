@@ -5,6 +5,52 @@
 
 ---
 
+## 2026-09-25 M14 虚拟编号模式 周期 0：计划审计 + 文档先行（1.1.4，纯文档不 bump）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **审计远端交来的计划** `doc/plan-m14-virtual-mode.md`：派 repo-scout 逐条核对源码引用（13 处全部属实），
+  对照竞品商店数据与 README 复核（2026-09-25：Heading Decorator 5,388 纯显示、计划原先漏了它；gurjar1 2,406
+  虚拟非默认、只在编辑器里显示；Number Suite 355；Heading Keeper 54 默认虚拟，作者即 PR #8 贡献者）。
+  修订了 7 处设计，先单独提交（`c8fe091`），要点：
+  - 模式切换清除**不复用**清除命令路径（会剥手写编号、会写 `fm:false` 关掉虚拟渲染、走 `vault.modify`
+    有 H8 同类竞态），改为新纯函数 `clearPluginNumberingContent`（只剥 WJ）+ 批量通道（已带 backlink 同步）；
+  - 删规则 / 改路径 / 改「不编号」也会让文件落到仅显示模式，同样弹确认框；残留前缀不许悄悄盖掉，
+    要有 stale 样式提示 + 单文件清除命令；
+  - 新装判据补多设备同步竞态对策（新装不立即落盘 + `onExternalSettingsChange`）；核实 `loadSettings`
+    （main.ts:169）先于 `templateStore.init()`（190），判据可用，要加顺序锁测试；
+  - frontmatter `true` 碰上「不编号」规则时跟随根规则模式；
+  - 输入法组合期间暂停重算；阅读视图缓存改字符串比较、补 `getSectionInfo` 为 null 的兜底；
+  - README 原定的「从不在后台扫描全库」**不成立**（`buildInitialHeadingIndex` 启动时读全库），改如实口径；
+  - 大纲面板从「做不到」改为「一期不做」；周期 1 即 bump 到 1.2.0。
+- **周期 0 文档先行**：
+  - `spec.md`：§2.2 非目标翻案；新增 §3.22「虚拟编号模式（M14）」（设计定案全文）；目录补 3.20–3.22；
+    §5 Roadmap 重排（M14 → M11 → M12 → M8a → M8b → M10 → M13），新增 Milestone 14 节（5 个周期清单 + 二期候选）；
+    M9 的「虚拟编号模式」「只读装饰预览」两条并入 M14 只留指针，新增候选「把虚拟编号一次性烧录成纯文本」；
+    M12 新增「内置三套预设模板」「README 资源与隐私承诺」；附录 A.8.5 / A.9 同步。
+  - `testplan.md`：新增 V 组 V1–V32，全部 🔲。
+  - 按单一事实源纪律**删除** `doc/plan-m14-virtual-mode.md`（内容已全部落进 spec §3.22 与 Roadmap M14）。
+- 本周期派发 2 次（repo-scout × 1：计划源码引用核对；quality-gate × 1：收尾 preflight）。
+
+### 没做什么
+
+- 没写任何代码，没 bump（纯文档）。
+- 竞品只读了 README 与商店统计，没深读源码（Heading Keeper / Number Suite 的实现细节留待周期 2 渲染时按需参考）。
+
+### 下一步
+
+- **周期 1**（见 spec Roadmap M14）：`PathRule.mode`、新装判据与延迟落盘、`onExternalSettingsChange`、
+  `resolveNumberingMode`、`src/virtual/compute.ts`、`shouldAutoTrigger` 对虚拟文件返回 false、
+  `clearPluginNumberingContent`；配套单测与 UVM oracle；`npm run bump minor` → 1.2.0；跑 `test:fuzz`。
+
+### 验证方式
+
+- `npm run preflight` 全绿（纯文档改动）。
+
+---
+
 ## 2026-09-24 README 瘦身为商店门面 + 新增双语使用指南（1.1.4，纯文档不 bump）
 
 ### 做了什么
