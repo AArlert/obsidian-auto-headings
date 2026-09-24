@@ -112,6 +112,9 @@ export class Notice {
 	}
 }
 
+/** CM6 状态字段 `editorInfoField` 的替身：单测只测纯函数 buildVirtualDecorations，不会真的读它。 */
+export const editorInfoField = {};
+
 /** Plugin 基类替身：提供 app / manifest 与 data 持久化、以及 onload 里调用的注册型空方法。 */
 export class Plugin {
 	app: unknown;
@@ -128,6 +131,8 @@ export class Plugin {
 	registerEvent(): void {}
 	registerDomEvent(): void {}
 	registerEditorSuggest(): void {}
+	registerEditorExtension(): void {}
+	registerMarkdownPostProcessor(): void {}
 	async loadData(): Promise<unknown> {
 		return this._data;
 	}

@@ -316,6 +316,13 @@ export interface Messages {
 	cmdRenumber: string;
 	cmdClear: string;
 	cmdClearForeign: string;
+	/** 「清除本文件残留编号」命令名（M14，只在仅显示文件里出现）。 */
+	cmdClearStale: string;
+	/** 清除残留编号成功 / 没有残留时的提示（M14）。 */
+	noticeStaleCleared: string;
+	noticeNoStaleNumbering: string;
+	/** 残留样式编号的悬停提示（M14）。 */
+	virtualStaleTooltip: string;
 
 	// —— Notice（main.ts）——
 	noticeEnabled: string;
@@ -618,6 +625,11 @@ const zh: Messages = {
 	cmdRenumber: "立即重新编号（当前文件）",
 	cmdClear: "清除当前文件编号",
 	cmdClearForeign: "清理非本插件的标题编号（当前文件）",
+	cmdClearStale: "清除本文件残留的插件编号（仅显示模式）",
+	noticeStaleCleared: "已清除本插件写入的旧编号，手写编号保持不动",
+	noticeNoStaleNumbering: "本文件没有本插件写入的旧编号",
+	virtualStaleTooltip:
+		"文件里还留着本插件以前写入的编号（导出、Publish、外部编辑器会看到它）。可用命令「清除本文件残留的插件编号」清掉",
 
 	noticeEnabled: "已启用全局自动编号",
 	noticeDisabled: "已禁用全局自动编号",
@@ -934,6 +946,12 @@ const en: Messages = {
 	cmdRenumber: "Renumber now (current file)",
 	cmdClear: "Clear numbering in current file",
 	cmdClearForeign: "Clear non-plugin heading numbering (current file)",
+	cmdClearStale: "Clear leftover plugin numbering in this file (display-only mode)",
+	noticeStaleCleared:
+		"Removed the old numbers this plugin had written; hand-written numbers were left alone",
+	noticeNoStaleNumbering: "This file has no numbers written by this plugin",
+	virtualStaleTooltip:
+		"This file still contains numbers the plugin wrote earlier (exports, Publish and external editors will show them). Run “Clear leftover plugin numbering in this file” to remove them",
 
 	noticeEnabled: "Global auto-numbering enabled",
 	noticeDisabled: "Global auto-numbering disabled",

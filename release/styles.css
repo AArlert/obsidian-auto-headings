@@ -935,3 +935,20 @@ button.ah-tab.ah-tab-active:hover {
 	white-space: nowrap;
 	max-width: 40em;
 }
+
+/* M14 虚拟编号（仅显示模式，spec §3.22）：编号只在界面上显示，不进文件。
+   颜色与字体跟随标题；不可选中，复制标题时不会带上编号。 */
+.ah-virtual-number {
+	color: inherit;
+	font: inherit;
+	-webkit-user-select: none;
+	user-select: none;
+	white-space: pre;
+}
+
+/* 文件里还留着本插件以前写入的旧编号：虚线下划线提示，悬停有说明。 */
+.ah-virtual-number--stale {
+	text-decoration: underline dotted var(--text-muted);
+	text-underline-offset: 0.2em;
+	cursor: help;
+}

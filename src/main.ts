@@ -32,6 +32,7 @@ import { ClipboardOriginalCache, stripWordJoiners, stripWordJoinersFromHtml } fr
 import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
+	clearPluginNumberingContent,
 	hasUnclaimedForeignNumbering,
 	previewForeignNumberingCleanup,
 	type ForeignNumberingPreviewItem,
@@ -59,6 +60,8 @@ import {
 	resolveNumberingAction,
 	type VirtualHeadingLabel,
 } from "./virtual/compute";
+import { virtualNumberingExtension, virtualRefreshEffect } from "./virtual/editorExtension";
+import { createVirtualPostProcessor } from "./virtual/readingView";
 import { TemplateStore } from "./templates/TemplateStore";
 import { HeadingIndex } from "./headingindex";
 import { HeadingLinkSuggest } from "./headingsuggest";
@@ -248,6 +251,26 @@ export default class AutoHeadingsPlugin extends Plugin {
 				this.runClearForeignNumbering(editor, ctx);
 			},
 		});
+
+		// 清除本文件残留编号（M14，spec §3.22「残留前缀」）：只在仅显示文件里出现——写入文件清了
+		// 下一次按键又会被编回去，这条命令对它没有意义。
+		this.addCommand({
+			id: "clear-stale-numbering",
+			name: t.cmdClearStale,
+			editorCheckCallback: (checking, editor, ctx) => {
+				if (!this.isVirtualFile(ctx.file?.path)) {
+					return false;
+				}
+				if (!checking) {
+					this.runClearStaleNumbering(editor, ctx);
+				}
+				return true;
+			},
+		});
+
+		// 虚拟编号渲染（M14，spec §3.22）：编辑视图用 CM6 装饰，阅读视图用 post-processor，永不写文件。
+		this.registerEditorExtension(virtualNumberingExtension(this));
+		this.registerMarkdownPostProcessor(createVirtualPostProcessor(this));
 
 		// 实时编辑监听：editor onChange → 重置该文件的防抖计时器（编号 + M13 标题索引各一套）。
 		this.registerEvent(
@@ -899,6 +922,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * （{@link shouldAutoTrigger} + 按路径解析模板），全局开关关 / frontmatter `false` / 无可用模板时静默跳过。
 	 */
 	renumberActiveFile(): void {
+		// 模板 / 规则变了：仅显示文件的编号也要跟着刷新（M14）。
+		this.refreshVirtualViews();
 		const leaves = this.app.workspace.getLeavesOfType("markdown");
 		for (const leaf of leaves) {
 			// getLeavesOfType("markdown") 的叶子视图即 MarkdownView（含 editor / file），鸭子类型取用。
@@ -1215,6 +1240,31 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
+	 * 「清除本文件残留编号」命令（M14，spec §3.22「残留前缀」）：只剥本插件写入的前缀
+	 * （{@link clearPluginNumberingContent}），手写编号不动、不写 `fm:false`；以单一事务写回，
+	 * 并像其他清除一样同步别处指向这些标题的链接。
+	 */
+	private runClearStaleNumbering(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
+		const { prefixes, suffixes } = this.strippableAffixes();
+		const oldContent = editor.getValue();
+		let newContent = clearPluginNumberingContent(oldContent, {
+			strippablePrefixes: prefixes,
+			strippableSuffixes: suffixes,
+		});
+		const m = this.messages();
+		if (newContent === oldContent) {
+			new Notice(m.noticeNoStaleNumbering);
+			return;
+		}
+		const fold = this.foldSelfBacklinks(ctx.file, oldContent, newContent);
+		newContent = fold.content;
+		if (this.writeLineDiff(editor, oldContent, newContent)) {
+			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
+		}
+		new Notice(m.noticeStaleCleared);
+	}
+
+	/**
 	 * 「清理非本插件的标题编号」命令（**手动路径**，0.6.6，见 spec.md §3.10）：只剥**不含 WJ** 的
 	 * 手写 / 外来编号（{@link clearForeignNumberingContent}），保留插件自己写的（带 WJ）编号；以单一
 	 * 事务写回。绕过防抖与开关（与「清除当前文件编号」对称）。
@@ -1340,6 +1390,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			new Notice(this.messages().noticeClearedVault(count));
 		} finally {
 			this.vaultClearInProgress = false;
+			this.refreshVirtualViews(); // 清库期间暂停了虚拟显示（M14），结束后补一次。
 		}
 	}
 
@@ -1389,6 +1440,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			new Notice(this.messages().noticeFrozenVault(count));
 		} finally {
 			this.vaultClearInProgress = false;
+			this.refreshVirtualViews(); // 已离场：让仅显示文件的编号随之消失（M14）。
 		}
 	}
 
@@ -1645,6 +1697,47 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+		this.refreshVirtualViews(); // 开关 / 规则 / retired 都可能改变仅显示文件该不该显示（M14）。
+	}
+
+	/**
+	 * 让所有已打开的编辑器与阅读视图重算虚拟编号（M14，spec §3.22「渲染」）：编辑器 dispatch
+	 * {@link virtualRefreshEffect}，阅读视图整篇重渲染。取不到 CM6 实例或预览视图时静默跳过。
+	 */
+	refreshVirtualViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view as unknown as {
+				editor?: { cm?: { dispatch(spec: unknown): void } };
+				getMode?: () => string;
+				previewMode?: { rerender?: (full?: boolean) => void };
+			};
+			try {
+				view.editor?.cm?.dispatch({ effects: virtualRefreshEffect.of(null) });
+				if (view.getMode?.() === "preview") {
+					view.previewMode?.rerender?.(true);
+				}
+			} catch {
+				/* 视图正在销毁等：跳过，不影响其他视图 */
+			}
+		}
+	}
+
+	/** 残留样式编号的悬停提示（M14，供渲染器调用）。 */
+	staleTooltip(): string {
+		return this.messages().virtualStaleTooltip;
+	}
+
+	/** 阅读视图拿不到段落信息时读文件全文（M14 兜底）；不是 Markdown 文件或读失败返回 `null`。 */
+	async readFileContent(path: string): Promise<string | null> {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) {
+			return null;
+		}
+		try {
+			return await this.app.vault.cachedRead(file);
+		} catch {
+			return null;
+		}
 	}
 
 	/**
@@ -1655,6 +1748,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	async onExternalSettingsChange(): Promise<void> {
 		await this.loadSettings();
 		this.settingTab?.display();
+		this.refreshVirtualViews();
 	}
 
 	/** 插件目录（`.obsidian/plugins/auto-headings`），templates/ 与 VC 词典都放在这里。 */
@@ -1805,7 +1899,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		if (this.isVirtualFile(path)) {
-			// 仅显示文件（M14，spec §3.22）：手动命令也不写文件，只说明原因（显示刷新由渲染器负责）。
+			// 仅显示文件（M14，spec §3.22）：手动命令也不写文件，只刷新显示并说明原因。
+			this.refreshVirtualViews();
 			new Notice(this.messages().noticeVirtualModeFile);
 			return;
 		}

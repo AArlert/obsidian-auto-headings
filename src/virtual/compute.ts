@@ -20,6 +20,10 @@ import type { NumberingMode } from "../pathrules";
 export interface VirtualHeadingLabel {
 	/** 标题所在行下标（0 起）。 */
 	lineIndex: number;
+	/** 标题级别 1–6（阅读视图用它核对 DOM 元素，防止分屏编辑时段落信息滞后错位）。 */
+	level: number;
+	/** 去掉编号前缀后的纯标题文本（阅读视图拿不到行号时，按文本兜底匹配）。 */
+	text: string;
 	/** 标题文本在行内的起始列（`#` 与其后空白之后）——编号 widget 放在这里。 */
 	textStart: number;
 	/**
@@ -56,6 +60,8 @@ export function computeVirtualNumbers(
 		const textStart = heading.raw.length - heading.rawText.length;
 		const result: VirtualHeadingLabel = {
 			lineIndex: n.lineIndex,
+			level: n.level,
+			text: n.text,
 			textStart,
 			label: n.prefix === null ? null : stripWordJoiners(n.prefix),
 		};

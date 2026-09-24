@@ -60,7 +60,10 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		const exists = vi.fn(
 			async (p: string) => hasTemplatesDir && p === "plugins/auto-headings/templates",
 		);
-		const app = { vault: { configDir: ".obsidian", adapter: { exists } } };
+		const app = {
+			vault: { configDir: ".obsidian", adapter: { exists } },
+			workspace: { getLeavesOfType: () => [] },
+		};
 		const plugin = new PluginCtor(app, { id: "auto-headings", dir: "plugins/auto-headings" });
 		const saveData = vi.fn(async () => {});
 		const host = plugin as unknown as {

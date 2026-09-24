@@ -1804,7 +1804,7 @@ i18n.ts                     // 中英双语文案（Messages 接口 + zh/en 两�
       load 先于 templateStore.init）、`pathrules`（mode 解析与具体度）、新建 `virtual.test.ts`、`cleanup`
       （只剥 WJ）、`main`（虚拟文件不写入、只走 backlink 独立分支）、UVM 新 oracle「虚拟文件任意操作序列下
       字节不变」。显式把 `@codemirror/state` / `view` 加进 devDependencies（锁到 lock 里的版本）
-- [ ] **周期 2｜渲染**：`editorExtension.ts`（含输入法暂停）、`readingView.ts`（字符串比较缓存 +
+- [x] **周期 2｜渲染**（2026-09-25，代码与单测完成；视觉 / 光标 / 输入法 / PDF 待真机）：`editorExtension.ts`（含输入法暂停）、`readingView.ts`（字符串比较缓存 +
       `getSectionInfo` 为 null 的兜底）、`.ah-virtual-number` / `--stale` 样式、「清除本文件残留编号」命令、
       设置 / 模板 / 规则变化广播刷新；obsidian-mock 补 `registerEditorExtension` /
       `registerMarkdownPostProcessor`；node 环境直接测「状态 → DecorationSet」与 map 后位置，不引入 jsdom

@@ -41,6 +41,49 @@
 
 ---
 
+## 2026-09-25 M14 虚拟编号模式 周期 2：渲染（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **编辑视图**（新建 `src/virtual/editorExtension.ts`）：CM6 ViewPlugin。标题正文起点放编号 widget（`side: 1`，
+  参照 Heading Decorator 在实时预览里的放法）；残留前缀用同一 widget `Decoration.replace` 替换并标残留样式，
+  且登记为原子区（光标整体跨过）；不编号标题上的残留**不藏**。文档变化先 `map`，100ms 去抖后自发
+  `virtualRefreshEffect` 重算；`view.composing` 期间顺延；编辑器换了文件立即重算，不映射上一篇的编号。
+  「编号 → DecorationSet」是纯函数 `buildVirtualDecorations`。
+- **阅读视图**（新建 `src/virtual/readingView.ts`）：post-processor 按 `getSectionInfo` 行号取编号并核对元素级别；
+  按路径缓存上次原文、字符串比较命中；拿不到段落信息时读文件、按文本唯一命中兜底；残留前缀从第一个文本
+  节点去掉（尾哨兵被毁则不画）。`NodeFilter.SHOW_TEXT` 写成常量，node 可测。
+- **接线**（`main.ts`）：注册两个扩展；`refreshVirtualViews()` 向所有编辑器 dispatch 重算信号、阅读视图
+  `rerender(true)`，挂在 `saveSettings`、`renumberActiveFile`（改模板 / 规则）、`onExternalSettingsChange`、
+  清库与固化结束、仅显示文件的「立即重新编号」；新命令「清除本文件残留的插件编号」（`editorCheckCallback`，
+  只在仅显示文件里出现，走 `clearPluginNumberingContent` + backlink 同步，不暂停）。
+- `compute.ts` 的输出补 `level` / `text` 字段；`styles.css` 加 `.ah-virtual-number`（跟随标题、不可选中）与
+  `--stale`（虚线下划线 + 悬停说明）；i18n 四个新 key；obsidian-mock 补 `registerEditorExtension` /
+  `registerMarkdownPostProcessor` / `editorInfoField`。
+- **测试**：新建 `virtual-render.test.ts`（13 条：装饰位置、残留替换、白名单残留不藏、map 后不漂移、越界、
+  按行 / 按文本匹配、假 DOM 上的插入与残留剥离、缓存只算一次、兜底、门控不放行）；`main.test` +3（清除残留
+  命令两条、刷新广播）。
+- 已部署到用户测试库。本周期派发 1 次（quality-gate × 1：收尾 preflight）。
+
+### 没做什么
+
+- 没有 UI：规则的模式下拉框、切换确认框都在周期 3。真机测试要先手动在 data.json 里给规则加 `"mode": "virtual"`。
+- 视觉、光标、输入法、PDF 导出、移动端、大文件性能都还没真机验证。
+
+### 下一步
+
+- 用户真机验 V27–V31（实时预览 / 源码 / 阅读视图、输入法、复制、PDF、嵌入与悬浮预览）；根据结果调整
+  widget 位置或样式。
+- **周期 3**：路径规则行的模式下拉框、切换确认 Modal（含删规则 / 改路径 / 改不编号入口）、固化按钮说明。
+
+### 验证方式
+
+- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机按下一步清单。
+
+---
+
 ## 2026-09-25 M14 虚拟编号模式 周期 1：模型 + 纯逻辑 + 门控（1.2.0）
 
 交接人：`claude/m14-virtual-mode`
@@ -140,48 +183,6 @@
 
 ---
 
-## 2026-09-24 README 瘦身为商店门面 + 新增双语使用指南（1.1.4，纯文档不 bump）
-
-### 做了什么
-
-用户诉求：README 是商店展示页，要「简洁易懂、看了想装、技术细节隐藏」；GIF 由用户自录，
-**README 里不得留图片占位**（断图过不了 Obsidian 自动审查）。
-
-- **README.md / README.zh.md 重写**（各 ~210 行 → ~95 行）：一句话定位 → 6 条卖点 → 三步上手 →
-  6 个功能小节（每节 1–3 句）→ 命令表 → FAQ（5 问）→ 安装 → 了解更多。参考主流插件门面写法
-  （卖点先行、每节一句话、细节外链）。全部链接改 GitHub 绝对地址（商店页相对链接不可靠）。
-  顺手订正三处与现状不符的旧文案：「人工审核仍在进行中」（已通过）、英文命令名
-  「Clean foreign numbering」（实为 `Clear non-plugin heading numbering`）、命令表漏了
-  「切换全局自动编号」。
-- **技术细节下沉到新文件 `doc/user-guide.md` / `doc/user-guide.zh.md`**：由旧 README「开箱即用」
-  起的全部内容平移（删去营销开场与安装节，修相对链接、命令名），信息零丢失。附录 A 定下的
-  信任类承诺（WJ 披露、导出与外发、干净离开、Number Headings 迁移）在 README 各保留 FAQ 一问 + 链接，
-  不再展开；`<!-- skip -->` 手写标记按 spec 纪律「不得当卖点」，README 不提，只留在指南。
-- 登记新文件：根 `CLAUDE.md` §3.1 表（并写明 README 写作纪律）、本文件「目录结构约定」块、
-  `spec.md` A.9 落点索引行。
-- 本周期派发 2 次（quality-gate × 2：接手基线门槛 + 收尾 preflight）。
-
-### 没做什么
-
-- 未录 / 未引用任何 GIF / 截图（用户自录，建议清单已在会话中给出；录好后放 `assets/` 并用
-  GitHub raw 绝对地址引用）。
-- 未改 `manifest.json` 的 description（M12「manifest description 卖点重排」仍待做，改它需发版）。
-- 未动 i18n / 关于页里的文案。
-
-### 下一步
-
-- 用户录好 GIF 后插回 README（首图放一句话定位下方，其余各配一个功能小节）。
-- 开发侧建议：先做一个整理周期（刷新 status 首行、拆 `main.ts` 2170 行、压缩 spec Roadmap 已完成项），
-  再开 M11「H8 修复 + 清库撤销」→「Backlink 审阅模式」。
-
-### 验证方式
-
-- `npm run preflight` 全绿（纯文档改动，release 重建无差异）。
-- 人工核对：README 内无 `![` 图片语法、无相对链接；user-guide 内相对链接（`marker-contract.md`、
-  `../assets/pandoc/…`、`../README*.md`）均指向存在的文件。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -207,7 +208,9 @@ obsidian-auto-headings/
 │   ├── frontmatter.ts      单文件开关（obsidian-auto-headings: true/false）读取
 │   ├── i18n.ts             中英双语文案（Messages 接口 + zh/en 两套）
 │   ├── virtual/            虚拟编号模式（M14，只显示不写文件，spec §3.22）
-│   │   └── compute.ts      纯逻辑：每个标题的显示编号 + 残留前缀区间 + 自动路径门控 resolveNumberingAction
+│   │   ├── compute.ts      纯逻辑：每个标题的显示编号 + 残留前缀区间 + 自动路径门控 resolveNumberingAction
+│   │   ├── editorExtension.ts 编辑视图：CM6 ViewPlugin + 编号 widget + 重算信号（纯函数 buildVirtualDecorations）
+│   │   └── readingView.ts  阅读视图：markdown post-processor + 缓存 + 兜底匹配
 │   ├── settings/
 │   │   ├── model.ts        设置数据模型（全局开关、防抖延迟、路径规则持久化）
 │   │   ├── SettingsTab.ts  设置 GUI 壳：TAB 栏 + 分发（内容在 tabs/，M7 多 TAB 已拆完）

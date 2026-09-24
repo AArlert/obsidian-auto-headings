@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-09-24 README 瘦身为商店门面 + 新增双语使用指南（1.1.4，纯文档不 bump）
+
+### 做了什么
+
+用户诉求：README 是商店展示页，要「简洁易懂、看了想装、技术细节隐藏」；GIF 由用户自录，
+**README 里不得留图片占位**（断图过不了 Obsidian 自动审查）。
+
+- **README.md / README.zh.md 重写**（各 ~210 行 → ~95 行）：一句话定位 → 6 条卖点 → 三步上手 →
+  6 个功能小节（每节 1–3 句）→ 命令表 → FAQ（5 问）→ 安装 → 了解更多。参考主流插件门面写法
+  （卖点先行、每节一句话、细节外链）。全部链接改 GitHub 绝对地址（商店页相对链接不可靠）。
+  顺手订正三处与现状不符的旧文案：「人工审核仍在进行中」（已通过）、英文命令名
+  「Clean foreign numbering」（实为 `Clear non-plugin heading numbering`）、命令表漏了
+  「切换全局自动编号」。
+- **技术细节下沉到新文件 `doc/user-guide.md` / `doc/user-guide.zh.md`**：由旧 README「开箱即用」
+  起的全部内容平移（删去营销开场与安装节，修相对链接、命令名），信息零丢失。附录 A 定下的
+  信任类承诺（WJ 披露、导出与外发、干净离开、Number Headings 迁移）在 README 各保留 FAQ 一问 + 链接，
+  不再展开；`<!-- skip -->` 手写标记按 spec 纪律「不得当卖点」，README 不提，只留在指南。
+- 登记新文件：根 `CLAUDE.md` §3.1 表（并写明 README 写作纪律）、本文件「目录结构约定」块、
+  `spec.md` A.9 落点索引行。
+- 本周期派发 2 次（quality-gate × 2：接手基线门槛 + 收尾 preflight）。
+
+### 没做什么
+
+- 未录 / 未引用任何 GIF / 截图（用户自录，建议清单已在会话中给出；录好后放 `assets/` 并用
+  GitHub raw 绝对地址引用）。
+- 未改 `manifest.json` 的 description（M12「manifest description 卖点重排」仍待做，改它需发版）。
+- 未动 i18n / 关于页里的文案。
+
+### 下一步
+
+- 用户录好 GIF 后插回 README（首图放一句话定位下方，其余各配一个功能小节）。
+- 开发侧建议：先做一个整理周期（刷新 status 首行、拆 `main.ts` 2170 行、压缩 spec Roadmap 已完成项），
+  再开 M11「H8 修复 + 清库撤销」→「Backlink 审阅模式」。
+
+### 验证方式
+
+- `npm run preflight` 全绿（纯文档改动，release 重建无差异）。
+- 人工核对：README 内无 `![` 图片语法、无相对链接；user-guide 内相对链接（`marker-contract.md`、
+  `../assets/pandoc/…`、`../README*.md`）均指向存在的文件。
+
+---
+
 ## 2026-09-13 修复嵌套围栏数量不匹配致编号重置（1.1.4，issue #9）
 
 ### 做了什么

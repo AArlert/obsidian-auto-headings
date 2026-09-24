@@ -2410,3 +2410,39 @@ describe("M14：仅显示文件永不写编号（spec §3.22，testplan V8 / V10
 		expect(v.virtualNumberingFor("v/x.md", "## 1. 引言\n## 2. 方法")).toBeNull();
 	});
 });
+
+describe("M14 周期 2：清除残留命令与刷新广播（testplan V14 / V25）", () => {
+	const virtualRules = (): PathRule[] => [{ pattern: "/", template: "默认", mode: "virtual" }];
+
+	it("V14：「清除本文件残留编号」只剥插件前缀，手写编号保留、不写 fm:false", () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		const ed = new FakeEditor(
+			[`## ${WORD_JOINER}1 ${WORD_JOINER}概述`, "## 1.1 手写"].join("\n"),
+		);
+		(
+			p as unknown as { runClearStaleNumbering(e: unknown, c: unknown): void }
+		).runClearStaleNumbering(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toBe(["## 概述", "## 1.1 手写"].join("\n"));
+		expect(Notice.messages).toContain("已清除本插件写入的旧编号，手写编号保持不动");
+	});
+
+	it("V14：没有残留时只提示，不发起事务", () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		const ed = new FakeEditor("## 1.1 手写");
+		(
+			p as unknown as { runClearStaleNumbering(e: unknown, c: unknown): void }
+		).runClearStaleNumbering(ed, fileInfo("a.md"));
+		expect(ed.txnCount).toBe(0);
+		expect(Notice.messages).toContain("本文件没有本插件写入的旧编号");
+	});
+
+	it("V25：改模板 / 规则（renumberActiveFile）时向每个编辑器广播重算信号", () => {
+		const { p, setLeaves } = makePlugin({ pathRules: virtualRules() });
+		const dispatch = vi.fn();
+		const ed = Object.assign(new FakeEditor("## 甲"), { cm: { dispatch } });
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+		p.renumberActiveFile();
+		expect(dispatch).toHaveBeenCalledTimes(1);
+		expect(ed.getValue()).toBe("## 甲"); // 仅显示文件：只刷新显示，不写。
+	});
+});
