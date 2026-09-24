@@ -368,6 +368,8 @@ export interface Messages {
 	noticeBacklinksIntro: string;
 	noticeNoActiveFile: string;
 	noticeForeignNumberingGuard: string;
+	/** 仅显示文件过半标题带手写编号、不显示虚拟编号时的提示（M14）。 */
+	noticeForeignNumberingGuardVirtual: string;
 	/** 迁移守卫 Notice 里的可点击文案（点击打开清理预览确认框，J14）。 */
 	noticeForeignNumberingGuardAction: string;
 	/** 点击迁移守卫 Notice 时，该文件已不在任何已打开的标签页中。 */
@@ -694,6 +696,8 @@ const zh: Messages = {
 	noticeForeignNumberingGuard:
 		"这些标题看起来带编号，但插件不确定是不是你自己写的，已跳过本次自动编号。",
 	noticeForeignNumberingGuardAction: "点击查看并清理",
+	noticeForeignNumberingGuardVirtual:
+		"这篇笔记的标题大多已经带着编号，插件不确定是不是你自己写的，为免出现两套数字，暂不显示编号。",
 	noticeForeignGuardFileNotOpen: "该文件已不在任何标签页中，请重新打开后再清理",
 };
 
@@ -1037,6 +1041,8 @@ const en: Messages = {
 	noticeForeignNumberingGuard:
 		"These headings look numbered, but the plugin isn't sure you wrote that yourself — skipped auto-numbering this time.",
 	noticeForeignNumberingGuardAction: "Click to review and clean up",
+	noticeForeignNumberingGuardVirtual:
+		"Most headings in this note already carry numbers the plugin can't confirm you wrote — numbers are hidden here to avoid showing two sets.",
 	noticeForeignGuardFileNotOpen: "This file is no longer open in any tab; reopen it to clean up",
 };
 

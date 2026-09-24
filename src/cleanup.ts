@@ -179,7 +179,36 @@ export function hasUnclaimedForeignNumbering(content: string): boolean {
 		return false;
 	}
 	const headings = parseHeadings(content);
-	return headings.some((h) => stripForeignNumbering(h.rawText) !== h.rawText.replace(/\s+$/, ""));
+	return headings.some((h) => looksForeignNumbered(h.rawText));
+}
+
+/**
+ * 某个标题的原始文本看起来是否带手写 / 外来编号（{@link stripForeignNumbering} 真的剥掉了东西；
+ * 比较前去掉行尾空白，见 {@link hasUnclaimedForeignNumbering} 的 1.0.15 修复说明）。
+ */
+export function looksForeignNumbered(rawText: string): boolean {
+	return stripForeignNumbering(rawText) !== rawText.replace(/\s+$/, "");
+}
+
+/**
+ * 仅显示模式的外来编号判定（M14，spec §3.22）：**超过一半**的标题像手写编号，才算整篇带外来编号、
+ * 不显示虚拟编号（否则会叠出两套数字）。
+ *
+ * 为什么不沿用写入模式「一个就算」的 {@link hasUnclaimedForeignNumbering}：写入模式下用户在清理框里
+ * 确认一次，插件写入编号后文件含 WJ，守卫就永久解除；仅显示模式永不写文件，没有这个出口——一个
+ * `## 2024 总结` 就会让整篇永远没有编号。按多数判定后：从别的编号插件迁来、每个标题都带编号的
+ * 笔记照样被拦下；偶尔一个以数字开头的标题照常编号，与写入模式对它的处理（方案 A）一致。
+ * 以 WJ 打头的标题是本插件写过的残留，不算外来编号。
+ */
+export function isMostlyForeignNumbered(content: string): boolean {
+	const headings = parseHeadings(content);
+	if (headings.length === 0) {
+		return false;
+	}
+	const foreign = headings.filter(
+		(h) => !h.rawText.startsWith(WORD_JOINER) && looksForeignNumbered(h.rawText),
+	).length;
+	return foreign * 2 > headings.length;
 }
 
 /** {@link previewForeignNumberingCleanup} 单条对照项：某标题清理前后的完整行文本。 */

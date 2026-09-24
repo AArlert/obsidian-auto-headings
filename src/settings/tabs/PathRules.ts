@@ -371,8 +371,8 @@ class ModeTransitionModal extends Modal {
 		const { contentEl, plan, t } = this;
 		contentEl.empty();
 		contentEl.createEl("h3", { text: t.modeModalTitle });
-		const opts = { clear: plan.toNone.length === 0, write: false };
 		const leaving = plan.toVirtual.length + plan.toNone.length;
+		const opts = { clear: leaving > 0 && plan.toNone.length === 0, write: false };
 		if (leaving > 0) {
 			contentEl.createEl("p", {
 				text: t.modeModalLeaving(leaving, plan.toVirtual.length, plan.toNone.length),

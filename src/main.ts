@@ -35,6 +35,7 @@ import {
 	clearPluginNumberingContent,
 	hasPluginNumbering,
 	hasUnclaimedForeignNumbering,
+	isMostlyForeignNumbered,
 	previewForeignNumberingCleanup,
 	type ForeignNumberingPreviewItem,
 } from "./cleanup";
@@ -62,7 +63,7 @@ import {
 	type VirtualHeadingLabel,
 } from "./virtual/compute";
 import { virtualNumberingExtension, virtualRefreshEffect } from "./virtual/editorExtension";
-import { createVirtualPostProcessor } from "./virtual/readingView";
+import { VirtualReadingRenderer } from "./virtual/readingView";
 import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
 import { HeadingIndex } from "./headingindex";
@@ -188,6 +189,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private readonly clipboardCache = new ClipboardOriginalCache();
 
 	/**
+	 * 阅读视图的虚拟编号渲染器（M14，见 `virtual/readingView.ts`）：onload 里创建；单测不跑 onload，
+	 * 故调用处一律用可选链。
+	 */
+	private readingRenderer?: VirtualReadingRenderer;
+
+	/**
 	 * 当前界面语言的文案表（按 `settings.language` 解析，见 {@link resolveLang} / {@link getMessages}）。
 	 * 命令名在 onload 注册时取一次（改语言需重载插件才更新）；Notice 在调用时取，即时生效。
 	 */
@@ -283,7 +290,15 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 		// 虚拟编号渲染（M14，spec §3.22）：编辑视图用 CM6 装饰，阅读视图用 post-processor，永不写文件。
 		this.registerEditorExtension(virtualNumberingExtension(this));
-		this.registerMarkdownPostProcessor(createVirtualPostProcessor(this));
+		this.readingRenderer = new VirtualReadingRenderer(this);
+		this.registerMarkdownPostProcessor(this.readingRenderer.postProcessor);
+		// 阅读视图只重渲染改过的段落：文件内容一变，就让该文件已渲染的段落按最新行号重新核对编号
+		// （兜住「删掉一个标题、没有段落重渲染」这类情形，见 readingView.ts 顶部说明）。
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (file) => {
+				this.readingRenderer?.scheduleSweep(file.path);
+			}),
+		);
 
 		// 实时编辑监听：editor onChange → 重置该文件的防抖计时器（编号 + M13 标题索引各一套）。
 		this.registerEvent(
@@ -415,6 +430,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			window.clearTimeout(timer);
 		}
 		this.debounceTimers.clear();
+		this.readingRenderer?.dispose();
 		this.headingSnapshots.clear();
 		this.activeGuardNotice?.notice.hide();
 		this.activeGuardNotice = null;
@@ -577,7 +593,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/**
 	 * 某文件此刻应显示的虚拟编号（M14，spec §3.22）；不该显示时返回 `null`。
 	 * 供编辑视图与阅读视图的渲染器调用（周期 2）。门控与写入模式完全一致（{@link resolveNumberingAction}），
-	 * 另外有外来编号（{@link hasUnclaimedForeignNumbering}）的文件不渲染，避免屏幕上出现两套数字。
+	 * 另外过半标题带手写编号（{@link isMostlyForeignNumbered}）的文件不渲染，避免屏幕上出现两套数字。
 	 */
 	virtualNumberingFor(filePath: string, content: string): VirtualHeadingLabel[] | null {
 		const template = this.getTemplateForFile(filePath);
@@ -589,7 +605,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			mode: this.numberingModeFor(filePath),
 			hasTemplate: template !== null,
 		});
-		if (action !== "virtual" || !template || hasUnclaimedForeignNumbering(content)) {
+		if (action !== "virtual" || !template || isMostlyForeignNumbered(content)) {
 			return null;
 		}
 		const { prefixes, suffixes } = this.strippableAffixes();
@@ -1015,6 +1031,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		if (!this.shouldAutoWrite(content, file.path)) {
+			this.guardVirtualForeignNumbering(file.path, content);
 			return;
 		}
 		const template = this.getTemplateForFile(file.path);
@@ -1112,7 +1129,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const t = this.messages();
 		let link!: HTMLAnchorElement;
 		const frag = createFragment((el) => {
-			el.appendText(`${t.noticeForeignNumberingGuard} `);
+			el.appendText(
+				`${this.isVirtualFile(path) ? t.noticeForeignNumberingGuardVirtual : t.noticeForeignNumberingGuard} `,
+			);
 			link = el.createEl("a", {
 				text: t.noticeForeignNumberingGuardAction,
 				href: "#",
@@ -1184,10 +1203,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		const stripped = clearForeignNumberingContent(content, { keepLines });
 		const { prefixes, suffixes } = this.strippableAffixes();
-		const finalContent = renumberContent(stripped, template, {
-			strippablePrefixes: prefixes,
-			strippableSuffixes: suffixes,
-		});
+		// 仅显示文件（M14）：只剥手写编号，不写插件编号——编号由渲染器显示。
+		const finalContent = this.isVirtualFile(path)
+			? stripped
+			: renumberContent(stripped, template, {
+					strippablePrefixes: prefixes,
+					strippableSuffixes: suffixes,
+				});
 		const finalLines = finalContent.split("\n");
 		const items = previewForeignNumberingCleanup(content).map((c) => ({
 			lineIndex: c.lineIndex,
@@ -1545,11 +1567,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 		};
 		const m = this.messages();
 		let links = 0;
-		if (opts.clear) {
-			const r = await this.clearPluginNumberingInFiles(
-				pick([...plan.toVirtual, ...plan.toNone]),
-			);
-			new Notice(m.noticeModeCleared(r.changed));
+		const leaving = [...plan.toVirtual, ...plan.toNone];
+		if (opts.clear && leaving.length > 0) {
+			const r = await this.clearPluginNumberingInFiles(pick(leaving));
+			if (r.changed > 0) {
+				new Notice(m.noticeModeCleared(r.changed));
+			}
 			links += r.links;
 		}
 		if (opts.write && plan.toWrite.length > 0) {
@@ -1804,23 +1827,40 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	/**
 	 * 让所有已打开的编辑器与阅读视图重算虚拟编号（M14，spec §3.22「渲染」）：编辑器 dispatch
-	 * {@link virtualRefreshEffect}，阅读视图整篇重渲染。取不到 CM6 实例或预览视图时静默跳过。
+	 * {@link virtualRefreshEffect}；阅读视图由 {@link VirtualReadingRenderer.refreshAll} 原地重新核对
+	 * 每个已渲染的段落（隐藏着的阅读视图也照改，切过去时不会是旧编号）。取不到 CM6 实例时静默跳过。
 	 */
 	refreshVirtualViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
 			const view = leaf.view as unknown as {
 				editor?: { cm?: { dispatch(spec: unknown): void } };
-				getMode?: () => string;
-				previewMode?: { rerender?: (full?: boolean) => void };
 			};
 			try {
 				view.editor?.cm?.dispatch({ effects: virtualRefreshEffect.of(null) });
-				if (view.getMode?.() === "preview") {
-					view.previewMode?.rerender?.(true);
-				}
 			} catch {
 				/* 视图正在销毁等：跳过，不影响其他视图 */
 			}
+		}
+		this.readingRenderer?.refreshAll();
+	}
+
+	/**
+	 * 仅显示文件的外来编号提示（M14）：打开时若过半标题带手写编号（{@link isMostlyForeignNumbered}），
+	 * 虚拟编号不会显示，弹与写入模式同一条可点击提示（文案换成仅显示版），点开可预览并清理——清理只剥
+	 * 手写编号、不写插件编号（{@link computeForeignCleanupPreview}）。不满足时收起该文件的提示。
+	 */
+	private guardVirtualForeignNumbering(path: string, content: string): void {
+		if (
+			!this.isVirtualFile(path) ||
+			!this.shouldAutoTrigger(content) ||
+			!this.getTemplateForFile(path)
+		) {
+			return;
+		}
+		if (isMostlyForeignNumbered(content)) {
+			this.showForeignNumberingGuardNotice(path);
+		} else {
+			this.dismissGuardNotice(path);
 		}
 	}
 

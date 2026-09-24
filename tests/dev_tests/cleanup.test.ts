@@ -4,6 +4,7 @@ import {
 	clearNumberingContent,
 	clearPluginNumberingContent,
 	hasUnclaimedForeignNumbering,
+	isMostlyForeignNumbered,
 	previewForeignNumberingCleanup,
 } from "../../src/cleanup";
 import { renumberContent, DEFAULT_TEMPLATE, WORD_JOINER } from "../../src/numbering";
@@ -390,5 +391,26 @@ describe("clearPluginNumberingContent：只剥插件写入的编号（M14，test
 		const numbered = renumberContent(bare, DEFAULT_TEMPLATE);
 		expect(numbered).not.toBe(bare);
 		expect(clearPluginNumberingContent(numbered)).toBe(bare);
+	});
+});
+
+describe("isMostlyForeignNumbered：仅显示模式的外来编号判定（M14，testplan V12）", () => {
+	it("每个标题都带手写编号（从别的编号插件迁来）→ 算外来编号", () => {
+		expect(isMostlyForeignNumbered("## 1. 引言\n## 2. 方法\n### 2.1 细节")).toBe(true);
+	});
+
+	it("偶尔一个以数字开头的标题（如 2024 总结）→ 不算，照常显示编号", () => {
+		expect(isMostlyForeignNumbered("## 概述\n## 2024 总结\n## 展望")).toBe(false);
+	});
+
+	it("恰好一半不算过半；本插件写过的残留（WJ 打头）不算外来编号", () => {
+		expect(isMostlyForeignNumbered("## 1. 引言\n## 方法")).toBe(false);
+		expect(isMostlyForeignNumbered(`## ${WORD_JOINER}1 ${WORD_JOINER}概述\n## 2. 方法`)).toBe(
+			false,
+		);
+	});
+
+	it("没有标题 → 不算", () => {
+		expect(isMostlyForeignNumbered("正文")).toBe(false);
 	});
 });

@@ -114,6 +114,24 @@ export class Notice {
 
 /** CM6 状态字段 `editorInfoField` 的替身：单测只测纯函数 buildVirtualDecorations，不会真的读它。 */
 export const editorInfoField = {};
+/** CM6 状态字段 `editorLivePreviewField` 的替身（同上）。 */
+export const editorLivePreviewField = {};
+
+/** 阅读视图段落子组件的替身：只保留 load / unload 生命周期（M14 阅读视图登记段落用）。 */
+export class MarkdownRenderChild {
+	containerEl: unknown;
+	constructor(containerEl: unknown) {
+		this.containerEl = containerEl;
+	}
+	onload(): void {}
+	onunload(): void {}
+	load(): void {
+		this.onload();
+	}
+	unload(): void {
+		this.onunload();
+	}
+}
 
 /** Plugin 基类替身：提供 app / manifest 与 data 持久化、以及 onload 里调用的注册型空方法。 */
 export class Plugin {

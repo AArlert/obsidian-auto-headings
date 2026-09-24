@@ -5,6 +5,59 @@
 
 ---
 
+## 2026-09-25 M14 虚拟编号模式 周期 1：模型 + 纯逻辑 + 门控（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **数据模型**（`src/pathrules.ts`）：`PathRule.mode?: "write" | "virtual"`（缺省即写入，零迁移）；`ruleMode`、
+  `resolveNumberingMode`（与 `resolvePathRule` 同一套具体度，「不编号」/ 无规则返回 null）、`normalizeRuleModes`
+  （非法值删字段）。
+- **新装判据**（`main.ts` `loadSettings` / `isFreshInstall`）：data.json 为空且没有 `templates/` 才算新装，根规则设
+  `virtual`（`settings/model.ts` 的 `freshInstallPathRules`）；只改内存不落盘；探测失败按升级处理。新增
+  `onExternalSettingsChange`（同步改写 data.json 时重新载入）。`pluginDir()` 抽成方法，onload 注释写明
+  loadSettings 必须先于 `templateStore.init()`，并有源码顺序锁测试。
+- **写入隔离**：新增 `shouldAutoWrite(content, path)` = `shouldAutoTrigger` 且非仅显示文件，替换全部 6 处自动路径
+  判断（防抖、到期复核、打开即编号、改模板即时重排、粘贴还原、清除命令的暂停判定）。仅显示文件于是自动落到
+  backlink 独立同步分支，**没新写同步路径**。「立即重新编号」对仅显示文件只弹说明；批量重编号跳过被仅显示
+  规则覆盖的文件。
+- **纯逻辑**（新建 `src/virtual/compute.ts`）：`computeVirtualNumbers`（显示编号 + widget 位置 + 残留前缀区间，只认
+  WJ 打头的前缀）、`resolveNumberingAction`（自动路径门控，渲染器与 UVM 共用）；`main.ts` 的
+  `virtualNumberingFor(path, content)` 供周期 2 渲染器调用（含外来编号拦截）。
+- **新清除函数** `clearPluginNumberingContent`（`cleanup.ts`）：只剥 WJ 打头的插件前缀，手写编号、标题中间的 WJ
+  （链接）、围栏里的残留都不动，不碰 frontmatter。
+- i18n：`noticeVirtualModeFile` 中英各一。devDependencies 显式锁 `@codemirror/state` 6.5.0 / `view` 6.38.6。
+- **规格订正两处**（spec §3.22、testplan V11 / V24，核对代码后发现周期 0 写错了）：
+  - frontmatter `true` 压不过「不编号」规则（K15 既有行为），不是「跟随根规则模式」；
+  - 「固化编号」照常处理仅显示文件（它们里面指向写入文件的链接也带 WJ，跳过会断链），代价是仅显示的编号随
+    插件离场消失，按钮说明要写清楚。
+- **测试**：`virtual.test.ts`（新，13 条）、`settings`（+8：判据 / 不落盘 / 同步重载 / 顺序锁）、`pathrules`（+4）、
+  `cleanup`（+7）、`main`（+9：不写 / 链接跟随 / Notice / 批量跳过 / 清除不暂停 / 门控 / 外来编号）、
+  `clipboard`（+1 粘贴不还原）。UVM 加 `setRuleMode` 激励与**虚拟记分板**（显示编号 = 写入模式会写的前缀、
+  文件不被改写、门控同源），覆盖率新增 3 个 bin。两处反向验证：去掉仅显示判断 → 5 条红；故意让显示编号出错 →
+  UVM 两条序列红。
+- **顺带发现一个已上线的数据丢失 bug**（与 M14 无关）：标题中间带 WJ 链接时，`stripPrefix` 把 WJ 之前的正文当旧
+  单哨兵前缀截掉（`## 参见 [[a#…1 …概述]]` → `## 1 1 概述]]`）。已开独立任务处理，本分支的新代码已绕开。
+- 已部署到用户测试库（Oblivion）。本周期派发 1 次（quality-gate × 1：收尾 preflight + fuzz）。
+
+### 没做什么
+
+- 没有任何渲染（周期 2），所以装上 1.2.0 的新库暂时**看不到编号**；老库（有 templates/）行为不变。
+- 没有 UI（mode 下拉框、切换确认框，周期 3）。
+
+### 下一步
+
+- **周期 2**：`src/virtual/editorExtension.ts`（CM6 widget + 残留 replace + 输入法暂停 + 广播刷新）、
+  `readingView.ts`（post-processor + 字符串比较缓存 + `getSectionInfo` 兜底）、样式、「清除本文件残留编号」命令。
+
+### 验证方式
+
+- `npm run preflight` + `npm run test:fuzz`（结果见本周期提交前的 quality-gate 报告）。
+- 真机：老库升级到 1.2.0 行为应与 1.1.4 完全一致（写入模式照常编号）。
+
+---
+
 ## 2026-09-25 M14 虚拟编号模式 周期 0：计划审计 + 文档先行（1.1.4，纯文档不 bump）
 
 交接人：`claude/m14-virtual-mode`

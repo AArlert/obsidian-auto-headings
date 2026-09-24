@@ -41,6 +41,54 @@
 
 ---
 
+## 2026-09-25 M14 虚拟编号模式：真机实测修复（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+用户反馈「渲染问题很多，切换和显示有种半掺杂的感觉」，授权我用电脑操作直接在 Oblivion 库里实测。只在新建的
+`Claude测试/` 文件夹里操作（规则第 4 行 `Claude测试/` → 仅显示），测了实时预览 / 源码 / 阅读视图、模式来回切换、
+确认框、残留、手写编号、复制、PDF 导出、整篇与小节嵌入、2000 标题大文件。发现并修复：
+
+- **阅读视图新旧编号混杂**（「半掺杂」的主因）：Obsidian 只重渲染改过的段落，前面插一个标题后，后面没改的
+  段落还挂着旧编号。`readingView.ts` 改为 `VirtualReadingRenderer`：每个含标题的段落登记为 `MarkdownRenderChild`，
+  段落重渲染看到新原文、元数据更新、设置变化时，把同一篇的登记段落按各自当前的段落信息原地重新核对；编号 span
+  可反复加 / 去，残留前缀去编号时还回文本。设置变化不再整页 `rerender`。参考了 Heading Decorator 的段落登记机制
+  （MIT，只借鉴思路）。
+- **源码模式显示虚拟编号**：会让人以为编号写进了文件。改为只在实时预览显示（`editorLivePreviewField`）。
+- **手写编号**：原先只要一个标题像手写编号，整篇就不显示，而仅显示模式永远没有解除的出口（`## 2024 总结`
+  就能卡死）。改为过半判定 `isMostlyForeignNumbered`；被拦下时打开文件弹仅显示版提示，清理框只剥不写。
+- **「已清除 0 个文件」**：只有「仅显示 → 写入」时也跑了清除并提示。没有离开写入的文件就不清除、不提示；
+  确认框的清除开关也只在有文件离开写入时才默认打开。
+- **小节嵌入从「一」重数**：段落信息只含片段。新增 `locateSection`：与文件全文比对，是其中一段就按全文算并加
+  行号偏移，对不上按文本兜底。
+- 真机确认正常的：新增 / 删除标题后编辑视图即时更新、确认框计数、切换写入 / 仅显示时已打开文件只显示一层编号、
+  清除只剥插件编号、残留虚线提示、复制不带编号、PDF 带编号、大文件流畅。
+- 测试：`virtual-render.test` 重写阅读视图部分（段落登记、插入标题回归、删除标题回归、设置刷新、卸载、小节
+  嵌入、`locateSection`），`cleanup.test` +4（过半判定），`main.test` +3。反向验证：去掉「看到新原文就重新核对」，
+  插入标题回归用例变红。
+- 本周期派发 1 次（quality-gate × 1：收尾 preflight + fuzz）；实测与修复由主模型完成。
+
+### 没做什么
+
+- 中文输入法组合：本机输入法被系统切到 ENG，电脑操作切不回来，留给用户手测。
+- 悬浮预览、移动端没测。
+- 确认框在用户主题下半透明（背后文字透出），原有批量重编号确认框也一样，判断为主题问题，未改。
+- 发现用户库里 `templates/` 有 `default.json` 与 `default(1).json` 两个同名「默认」模板（疑似 iCloud 冲突副本），
+  未处理，已告知用户。
+
+### 下一步
+
+- 用户手测输入法、悬浮预览、移动端；没问题就进周期 4（README / 使用指南 / release notes / 合并 / tag）。
+- 用户测试完可以删掉 `Claude测试/` 文件夹和第 4 条规则。
+
+### 验证方式
+
+- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机见上。
+
+---
+
 ## 2026-09-25 M14 虚拟编号模式 周期 3：设置界面与模式切换（1.2.0）
 
 交接人：`claude/m14-virtual-mode`
@@ -119,59 +167,6 @@
 ### 验证方式
 
 - `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机按下一步清单。
-
----
-
-## 2026-09-25 M14 虚拟编号模式 周期 1：模型 + 纯逻辑 + 门控（1.2.0）
-
-交接人：`claude/m14-virtual-mode`
-
-### 做了什么
-
-- **数据模型**（`src/pathrules.ts`）：`PathRule.mode?: "write" | "virtual"`（缺省即写入，零迁移）；`ruleMode`、
-  `resolveNumberingMode`（与 `resolvePathRule` 同一套具体度，「不编号」/ 无规则返回 null）、`normalizeRuleModes`
-  （非法值删字段）。
-- **新装判据**（`main.ts` `loadSettings` / `isFreshInstall`）：data.json 为空且没有 `templates/` 才算新装，根规则设
-  `virtual`（`settings/model.ts` 的 `freshInstallPathRules`）；只改内存不落盘；探测失败按升级处理。新增
-  `onExternalSettingsChange`（同步改写 data.json 时重新载入）。`pluginDir()` 抽成方法，onload 注释写明
-  loadSettings 必须先于 `templateStore.init()`，并有源码顺序锁测试。
-- **写入隔离**：新增 `shouldAutoWrite(content, path)` = `shouldAutoTrigger` 且非仅显示文件，替换全部 6 处自动路径
-  判断（防抖、到期复核、打开即编号、改模板即时重排、粘贴还原、清除命令的暂停判定）。仅显示文件于是自动落到
-  backlink 独立同步分支，**没新写同步路径**。「立即重新编号」对仅显示文件只弹说明；批量重编号跳过被仅显示
-  规则覆盖的文件。
-- **纯逻辑**（新建 `src/virtual/compute.ts`）：`computeVirtualNumbers`（显示编号 + widget 位置 + 残留前缀区间，只认
-  WJ 打头的前缀）、`resolveNumberingAction`（自动路径门控，渲染器与 UVM 共用）；`main.ts` 的
-  `virtualNumberingFor(path, content)` 供周期 2 渲染器调用（含外来编号拦截）。
-- **新清除函数** `clearPluginNumberingContent`（`cleanup.ts`）：只剥 WJ 打头的插件前缀，手写编号、标题中间的 WJ
-  （链接）、围栏里的残留都不动，不碰 frontmatter。
-- i18n：`noticeVirtualModeFile` 中英各一。devDependencies 显式锁 `@codemirror/state` 6.5.0 / `view` 6.38.6。
-- **规格订正两处**（spec §3.22、testplan V11 / V24，核对代码后发现周期 0 写错了）：
-  - frontmatter `true` 压不过「不编号」规则（K15 既有行为），不是「跟随根规则模式」；
-  - 「固化编号」照常处理仅显示文件（它们里面指向写入文件的链接也带 WJ，跳过会断链），代价是仅显示的编号随
-    插件离场消失，按钮说明要写清楚。
-- **测试**：`virtual.test.ts`（新，13 条）、`settings`（+8：判据 / 不落盘 / 同步重载 / 顺序锁）、`pathrules`（+4）、
-  `cleanup`（+7）、`main`（+9：不写 / 链接跟随 / Notice / 批量跳过 / 清除不暂停 / 门控 / 外来编号）、
-  `clipboard`（+1 粘贴不还原）。UVM 加 `setRuleMode` 激励与**虚拟记分板**（显示编号 = 写入模式会写的前缀、
-  文件不被改写、门控同源），覆盖率新增 3 个 bin。两处反向验证：去掉仅显示判断 → 5 条红；故意让显示编号出错 →
-  UVM 两条序列红。
-- **顺带发现一个已上线的数据丢失 bug**（与 M14 无关）：标题中间带 WJ 链接时，`stripPrefix` 把 WJ 之前的正文当旧
-  单哨兵前缀截掉（`## 参见 [[a#…1 …概述]]` → `## 1 1 概述]]`）。已开独立任务处理，本分支的新代码已绕开。
-- 已部署到用户测试库（Oblivion）。本周期派发 1 次（quality-gate × 1：收尾 preflight + fuzz）。
-
-### 没做什么
-
-- 没有任何渲染（周期 2），所以装上 1.2.0 的新库暂时**看不到编号**；老库（有 templates/）行为不变。
-- 没有 UI（mode 下拉框、切换确认框，周期 3）。
-
-### 下一步
-
-- **周期 2**：`src/virtual/editorExtension.ts`（CM6 widget + 残留 replace + 输入法暂停 + 广播刷新）、
-  `readingView.ts`（post-processor + 字符串比较缓存 + `getSectionInfo` 兜底）、样式、「清除本文件残留编号」命令。
-
-### 验证方式
-
-- `npm run preflight` + `npm run test:fuzz`（结果见本周期提交前的 quality-gate 报告）。
-- 真机：老库升级到 1.2.0 行为应与 1.1.4 完全一致（写入模式照常编号）。
 
 ---
 

@@ -2542,3 +2542,50 @@ describe("M14 周期 3：模式切换的规划与执行（testplan V15 / V16 / V
 		expect(vaultFiles.get("a.md")).toBe("## 根"); // 不在切换范围内的文件不动
 	});
 });
+
+describe("M14 真机回归：手写编号、清理与空清除（testplan V12 / V37 / V38）", () => {
+	const virtualRules = (): PathRule[] => [{ pattern: "/", template: "默认", mode: "virtual" }];
+	type Internals = {
+		virtualNumberingFor(path: string, content: string): Array<{ label: string | null }> | null;
+		applyForeignCleanupSelection(
+			editor: unknown,
+			ctx: unknown,
+			path: string,
+			keepLines: ReadonlySet<number>,
+		): void;
+		applyModeTransition(
+			plan: { toVirtual: string[]; toNone: string[]; toWrite: string[] },
+			opts: { clear: boolean; write: boolean },
+		): Promise<void>;
+	};
+
+	it("V12：个别以数字开头的标题不再让整篇失去编号", () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		const v = p as unknown as Internals;
+		expect(
+			v.virtualNumberingFor("a.md", "## 概述\n## 2024 总结\n## 展望")?.map((l) => l.label),
+		).toEqual(["1 ", "2 ", "3 "]);
+	});
+
+	it("V37：仅显示文件里清理手写编号，只剥手写编号、不写入插件编号", () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		const ed = new FakeEditor("## 1. 引言\n## 2. 方法");
+		(p as unknown as Internals).applyForeignCleanupSelection(
+			ed,
+			fileInfo("a.md"),
+			"a.md",
+			new Set(),
+		);
+		expect(ed.getValue()).toBe("## 引言\n## 方法");
+		expect(ed.getValue()).not.toContain(WORD_JOINER);
+	});
+
+	it("V38：只有「仅显示 → 写入」时不跑清除，也不弹「已清除 0 个文件」", async () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		await (p as unknown as Internals).applyModeTransition(
+			{ toVirtual: [], toNone: [], toWrite: [] },
+			{ clear: true, write: false },
+		);
+		expect(Notice.messages.some((m) => m.startsWith("已清除"))).toBe(false);
+	});
+});

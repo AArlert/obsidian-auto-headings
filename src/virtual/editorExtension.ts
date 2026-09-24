@@ -5,7 +5,9 @@
  * - 文档变化时先把旧装饰 `map` 到新位置（不漂移），完整重算放进约 100ms 的去抖；
  * - 输入法组合期间（`view.composing`）不重算、不 dispatch，组合结束后再补——组合区旁的 widget 被
  *   替换会打断中文输入；
- * - 模板 / 设置 / 规则变化时，main.ts 向所有编辑器 dispatch {@link virtualRefreshEffect} 触发重算。
+ * - 模板 / 设置 / 规则变化时，main.ts 向所有编辑器 dispatch {@link virtualRefreshEffect} 触发重算；
+ * - **只在实时预览里显示**：源码模式是给人看原文的，显示虚拟编号会让人以为编号已经写进了文件
+ *   （真机实测的困惑点）；残留前缀在源码模式里也照原样露出。与 Number Suite 的取舍一致。
  *
  * 「状态 → DecorationSet」拆成纯函数 {@link buildVirtualDecorations}，node 环境可直接单测。
  */
@@ -19,7 +21,7 @@ import {
 	type DecorationSet,
 	type ViewUpdate,
 } from "@codemirror/view";
-import { editorInfoField } from "obsidian";
+import { editorInfoField, editorLivePreviewField } from "obsidian";
 import type { VirtualHeadingLabel } from "./compute";
 
 /** 让编辑器立即重算虚拟编号的广播信号（设置 / 模板 / 规则变化，以及去抖到期时自发）。 */
@@ -120,18 +122,23 @@ export function virtualNumberingExtension(host: VirtualRenderHost): Extension {
 		class {
 			decorations: DecorationSet;
 			private path: string | null;
+			private livePreview: boolean;
 			private timer: number | null = null;
 
 			constructor(private readonly view: EditorView) {
 				this.path = this.currentPath();
+				this.livePreview = this.isLivePreview();
 				this.decorations = this.compute();
 			}
 
 			update(update: ViewUpdate): void {
 				const path = this.currentPath();
-				// Obsidian 会复用同一个编辑器显示别的文件：换了文件就立刻重算，不把上一篇的编号映射过来。
-				if (hasRefresh(update) || path !== this.path) {
+				const livePreview = this.isLivePreview();
+				// Obsidian 会复用同一个编辑器显示别的文件：换了文件就立刻重算，不把上一篇的编号映射过来；
+				// 实时预览 ↔ 源码模式切换同理。
+				if (hasRefresh(update) || path !== this.path || livePreview !== this.livePreview) {
 					this.path = path;
+					this.livePreview = livePreview;
 					this.cancel();
 					this.decorations = this.compute();
 					return;
@@ -150,8 +157,13 @@ export function virtualNumberingExtension(host: VirtualRenderHost): Extension {
 				return this.view.state.field(editorInfoField, false)?.file?.path ?? null;
 			}
 
+			/** 是否实时预览（字段不存在的编辑器按实时预览处理，只有明确的源码模式才不显示）。 */
+			private isLivePreview(): boolean {
+				return this.view.state.field(editorLivePreviewField, false) !== false;
+			}
+
 			private compute(): DecorationSet {
-				if (!this.path) {
+				if (!this.path || !this.livePreview) {
 					return Decoration.none;
 				}
 				const doc = this.view.state.doc;
