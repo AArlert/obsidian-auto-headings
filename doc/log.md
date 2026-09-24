@@ -41,6 +41,48 @@
 
 ---
 
+## 2026-09-24 README 瘦身为商店门面 + 新增双语使用指南（1.1.4，纯文档不 bump）
+
+### 做了什么
+
+用户诉求：README 是商店展示页，要「简洁易懂、看了想装、技术细节隐藏」；GIF 由用户自录，
+**README 里不得留图片占位**（断图过不了 Obsidian 自动审查）。
+
+- **README.md / README.zh.md 重写**（各 ~210 行 → ~95 行）：一句话定位 → 6 条卖点 → 三步上手 →
+  6 个功能小节（每节 1–3 句）→ 命令表 → FAQ（5 问）→ 安装 → 了解更多。参考主流插件门面写法
+  （卖点先行、每节一句话、细节外链）。全部链接改 GitHub 绝对地址（商店页相对链接不可靠）。
+  顺手订正三处与现状不符的旧文案：「人工审核仍在进行中」（已通过）、英文命令名
+  「Clean foreign numbering」（实为 `Clear non-plugin heading numbering`）、命令表漏了
+  「切换全局自动编号」。
+- **技术细节下沉到新文件 `doc/user-guide.md` / `doc/user-guide.zh.md`**：由旧 README「开箱即用」
+  起的全部内容平移（删去营销开场与安装节，修相对链接、命令名），信息零丢失。附录 A 定下的
+  信任类承诺（WJ 披露、导出与外发、干净离开、Number Headings 迁移）在 README 各保留 FAQ 一问 + 链接，
+  不再展开；`<!-- skip -->` 手写标记按 spec 纪律「不得当卖点」，README 不提，只留在指南。
+- 登记新文件：根 `CLAUDE.md` §3.1 表（并写明 README 写作纪律）、本文件「目录结构约定」块、
+  `spec.md` A.9 落点索引行。
+- 本周期派发 2 次（quality-gate × 2：接手基线门槛 + 收尾 preflight）。
+
+### 没做什么
+
+- 未录 / 未引用任何 GIF / 截图（用户自录，建议清单已在会话中给出；录好后放 `assets/` 并用
+  GitHub raw 绝对地址引用）。
+- 未改 `manifest.json` 的 description（M12「manifest description 卖点重排」仍待做，改它需发版）。
+- 未动 i18n / 关于页里的文案。
+
+### 下一步
+
+- 用户录好 GIF 后插回 README（首图放一句话定位下方，其余各配一个功能小节）。
+- 开发侧建议：先做一个整理周期（刷新 status 首行、拆 `main.ts` 2170 行、压缩 spec Roadmap 已完成项），
+  再开 M11「H8 修复 + 清库撤销」→「Backlink 审阅模式」。
+
+### 验证方式
+
+- `npm run preflight` 全绿（纯文档改动，release 重建无差异）。
+- 人工核对：README 内无 `![` 图片语法、无相对链接；user-guide 内相对链接（`marker-contract.md`、
+  `../assets/pandoc/…`、`../README*.md`）均指向存在的文件。
+
+---
+
 ## 2026-09-13 修复嵌套围栏数量不匹配致编号重置（1.1.4，issue #9）
 
 ### 做了什么
@@ -192,71 +234,6 @@ WhitelistEditor.ts 的多处 `prefer-create-el` 位置当前代码早已用 `cre
 
 ---
 
-## 2026-08-19 M27：PR #8 审核与合入前修复（1.1.2）
-
-### 做了什么
-
-外部 PR #8「feat: 支持 Markdown 标题链接同步」（@nestealin，单 commit `d29c8eb`，21 文件 +718/−134）
-完成两轮独立审核（quality-gate 实测门槛 + 独立深度审查逐函数验证），结论「功能扎实、可合入」，
-但发现 1 个已实测的性能必改项与 3 个低危语义偏差，按用户指示修复后合入 master：
-
-- **O(L²) 性能修复（必改）**：`rewriteMarkdownBacklinks` 对「单行大量未闭合 `[` / `[x](`」的病理输入
-  逐候选重扫到行尾（实测单行 10 万 `[` → 8.2s，2 万 `[x](` → 1.8s，该函数跑在 `vault.process` 写回路径上）。
-  改为**行级配对表**（`buildBracketPairs` / `buildParenPairs`，`src/backlinks.ts`）：一次线性扫描为整行
-  所有 `[`→`]`、`(`→`)` 算好配对（转义 / 嵌套 / `<...>` / 引号 title 语义与原逐候选扫描逐字符一致），
-  主循环查表 O(1)；修复后 2 万未闭合 `[` 毫秒级。
-- **`[[wikilink]](text)` 双改写（低危）**：主循环遇 `[[…]]` 整段跳过（wikilink 已由 `WIKILINK_RE` 先行
-  处理），括号段按字面文本保留，计数不再重复（此前 `[[Target#旧]](Target.md#旧)` 双通道各改一次）。
-- **`%%…%%` / `<!--…-->` 注释区（低危）**：新增 `commentRanges` 并入排除区（与 scan.ts 注释状态机
-  同语义：`%%` 优先、未闭合延伸到文件尾、围栏内状态冻结）；注释内链接不改，注释同行结束后链接照常改。
-- **未闭合反引号（低危，保持现状）**：偏差方向（改了渲染为代码的文本）写进 `inlineCodeRanges` 注释明示。
-- testplan 先加 M27 场景行；`backlinks.test.ts` 补 4 个回归用例（注释区 / wikilink 括号段 / 嵌套未闭合
-  label 内层仍改 / 2 万未闭合 `[` 性能），42/42 通过；`M26` 的 9 例 + 既有用例全部保持。
-
-### 没做什么
-
-- 未改 `main.ts` 的触发 / 反查 / `vault.process` 写回路径，也未改 Wikilink 语义与计数口径。
-- 未处理 whitelist locale 排序脆弱性（`whitelist.test.ts:406`，本机 zh-CN 下 `localeCompare` 排序与断言
-  不符）——master 基线同样失败，属既有环境相关用例，非本次引入；CI（Linux en-US locale）不受影响。
-- 未对 PR 做线上操作：未批准 CI（GitHub 上 `action_required`，需维护者手动批准）、未在 PR 留言。
-
-### 下一步
-
-- ~~已打并推送 `1.1.2` tag；GitHub Release 待维护者创建~~——**订正**：`release.yml` 在 tag push 后
-  自动创建，无需手动步骤；此前误判「需网页手动创建」并写错下一步，导致用户一度看到 Obsidian
-  端「manifest 版本无匹配 release」的过期提示。已用 GitHub API 核实 Release 1.1.2：`draft=false`
-  `prerelease=false`、tag 精确匹配（无 `v` 前缀）、`main.js`/`manifest.json`/`styles.css` 三个资产均
-  `state=uploaded`，资产内 manifest.json 版本号也是 `1.1.2`，发布于 `2026-08-19T05:33:37Z`——现状正常。
-- **新发现（用户实报「没人能下载插件」触发排查）**：真正卡住的不是 GitHub，是 **Community Hub**
-  （`community.obsidian.md/plugins/auto-headings`，2026-05 起取代 `obsidian-releases` PR 机制，见
-  `spec.md` M7 一行）——公开页面用浏览器 `read_page` 核实：插件确实「已上架且可搜索安装」，但
-  `Current version` 卡在 `1.1.0`、`Updates` 计数 16（=1.1.0 为止的历史发布数），未拉到 1.1.1/1.1.2
-  （二者 GitHub Release 均已核实 `draft=false`/`prerelease=false`/资产齐全，1.1.1 发布于
-  `2026-08-19T00:44:07Z`、1.1.2 于 `05:33:37Z`）。用户贴出的「manifest 版本无匹配 release / 修复」
-  卡片应是 Community Hub **登录后的维护者面板**（公开页无此横幅，登录态我无法代登）——GitHub 侧
-  现已全部满足匹配条件，**下一步需用户本人登录 community.obsidian.md 打开该插件的维护者面板，
-  点击「修复」触发重新校验**，预期会通过并拉到 1.1.2。若点击后仍失败，需要用户描述面板具体
-  报错以便继续排查（可能是索引节流 / webhook 未触发之类的新问题）。
-  另：网页摘要曾误报「Obsidian's manual/editorial review is still pending」——用真实浏览器
-  `read_page` 复核后，DOM 中并无此文本（页面上是 `Review: Satisfactory` 评分项），已判定为
-  fetch 摘要幻觉，未采信；`community-plugins.json`（legacy）已确认对本插件不再是准源，排查同类
-  问题时直接查 Community Hub 页面，不要查这个旧文件（6760 条大文件用一次性摘要 fetch 会截断，
-  需 `curl` 落盘 + 本地 grep/node 解析才可信）。
-- 推送 master 后批准 PR #8 的 GitHub Actions 首次运行，确认 CI 全绿（本机 format:check 的 CRLF 检出
-  伪影在 Linux/LF 检出下不存在；test 的 locale 用例同样只在 zh-CN locale 失败）。
-- 建议在 PR 上留审核评论（性能修复已随合入落地，@nestealin 可对照）。
-- 用户可在 NesDev 继续验证 1.1.2 候选产物；若后续补 Obsidian 冒烟（含 `( ) ! ' * ~` 的标题 fragment
-  编码），可顺手验证 M26/M27 运行态。
-
-### 验证方式
-
-- `backlinks.test.ts` 42/42（含 M26 9 例 + M27 4 例）；全量 `npm test` 636/637（唯一失败为 whitelist
-  locale 环境伪影，基线同样失败）；`npm run lint` 0 错误；`npm run format:check` 全绿（工作区统一 LF 检出）。
-- `npm run test:fuzz`：默认、explore、M13 标题索引三块记分板各 5000 条 × 80 步，3/3 通过。
-- 修复代码与 master 基线 wikilink 路径逐字对照无行为回归；`release/` 重建产物与源码一致。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -301,8 +278,8 @@ obsidian-auto-headings/
 ├── tests/                ← 测试
 │   ├── dev_tests/          自动化单元测试（Vitest，无需 Obsidian 运行时，npm test 跑它）+ uvm/ 压测框架
 │   └── user_tests/         可复制粘贴进 Obsidian 实测的 .md 样例（每个对应 testplan 某场景）
-├── README.md             ← 面向读者的简介（核心功能 + Milestone 概览，入口文档）
-├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + marker-contract 下游契约 + release-notes/ 各版本发布说明（Release 工作流按 tag 取用），见 CLAUDE.md §3.1；grill 方向审查已收编为 spec 附录 A；research/ 本地调研留档、.gitignore 排除不入库，见该目录 README.md）
+├── README.md / README.zh.md ← 商店门面（卖点 + 上手 + 命令 + FAQ，技术细节下沉 doc/user-guide*.md）
+├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + user-guide(.zh).md 面向用户的完整使用指南 + marker-contract 下游契约 + release-notes/ 各版本发布说明（Release 工作流按 tag 取用），见 CLAUDE.md §3.1；grill 方向审查已收编为 spec 附录 A；research/ 本地调研留档、.gitignore 排除不入库，见该目录 README.md）
 ├── release/              ← 可分发插件文件（main.js/manifest/styles/README；zip 本地生成不入库）★每周期必更新
 ├── scripts/
 │   ├── sync-release.mjs    把构建产物同步到 release/（被 npm run release 调用）

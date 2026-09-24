@@ -2323,7 +2323,7 @@ Obsidian 桌面与移动端均为 CodeMirror 6，插件可经 `registerEditorExt
 | Roadmap 重排：M11 信任包 / M12 独立价值包插队 M8a 前 | 本文 §5 执行顺序总览 + 两个新 Milestone |
 | CR-18 升格 | 本文 §3.12 注记 + M12 首项 |
 | 生态与外部写入测试场景（O 组） | `testplan.md` §2 新场景组 |
-| 导出与外发 / 干净离开 / 从 Number Headings 迁移 | `README.md` / `README.zh.md` 三个新节 |
+| 导出与外发 / 干净离开 / 从 Number Headings 迁移 | `doc/user-guide.md` / `.zh.md` 三节（2026-09-24 README 瘦身后下沉；README 仅留 FAQ 一句 + 链接） |
 | 文档结构登记 | 根 `CLAUDE.md` §3.1 表 + `log.md` 目录结构约定块 |
 | 竞品格局源码级核验（WJ 必要性实证 / 移动端独占 / Header Enhancer 无 rename 联动） | [A.11](#a11-竞品格局核验2026-07-18源码级实测) + M12 候选（两条可借鉴命令 + 迁移向导自动配置） |
 
