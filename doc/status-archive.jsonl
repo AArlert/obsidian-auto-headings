@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-08-19","version":"1.0.29","summary":"M13 第四轮（接手 DS 的 1.0.28）：Q22 改在触发词边界层修——推翻交接方案，后者不收窄替换区间会吃掉用户已打的字；Q23 与 VC 共存默认让路 + 开关 + 死角警告；UI icon/面板分区；UVM 补 Q22 对拍。fuzz 5000×80 全绿。"}
 {"type":"log","date":"2026-08-11","version":"1.0.28","summary":"M13 第三轮：UVM 压测拓展（uvm/heading-index.ts 参考模型对拍）当场抓出并修复 U5–U7 三个索引 bug；启动词典同步（升级场景自动重写+reload 重试）；建议框补 icon。Q22「一笔事务」尾部词触发登记待实现。test:fuzz 5000×80 三块记分板全绿，门槛绿（whitelist ICU 假红除外）。"}
 {"type":"log","date":"2026-08-10","version":"1.0.25","summary":"bug 修复：快捷键转空标题时编号写入光标错位 + 行尾多一个空格，同源于 preserveCursorLineTrailingSpace 被 WORD_JOINER 哨兵挡住误判。新增 cursorSelectionForEmptyHeading 钉光标到行尾。main.test.ts 补 J21 三例，门槛全绿。"}
 {"type":"log","date":"2026-08-10","version":"1.0.24","summary":"UX 小改：清理外来编号确认框窄屏原本把 checkbox 与 diff 从横排切成纵排，用户截图要求对齐 PC。checkbox 改绝对定位悬浮对齐 diff 首行顶部，diff 恒定占满宽度，桌面/移动端共用同一套布局。纯 CSS，本机多宽度截图核验，门槛全绿。"}

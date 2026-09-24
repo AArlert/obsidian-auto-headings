@@ -73,7 +73,7 @@ import {
 } from "../../../src/numbering";
 import { parseHeadings } from "../../../src/parser";
 import { readFileSwitch } from "../../../src/frontmatter";
-import { resolvePathRule, type PathRule } from "../../../src/pathrules";
+import { resolveNumberingMode, resolvePathRule, type PathRule } from "../../../src/pathrules";
 import { Rng } from "./rng";
 import {
 	serialize,
@@ -102,6 +102,7 @@ import {
 	runCheckBacklinkRoundTrip,
 	runCheckGate,
 	runCheckIdempotent,
+	runCheckVirtual,
 	runCheckResolution,
 	runDetectLevelJump,
 	runDetectWhitelistCoverage,
@@ -414,6 +415,11 @@ export class World {
 		if (this.templates.length >= 2) this.cov.multiTemplate = true;
 
 		if (manual) this.cov.manualTriggered = true;
+		// M14：仅显示文件——手动 / 自动都不写，改跑虚拟记分板（显示的编号 = 写入模式会写的编号）。
+		if (resolveNumberingMode(this.pathRules, this.file.path) === "virtual") {
+			this.checkVirtual(template, sw, manual);
+			return;
+		}
 		if (template.levels.h2.prefix !== "" || template.levels.h2.suffix !== "") {
 			this.cov.affixNonEmptyTrigger = true;
 		}
@@ -457,6 +463,11 @@ export class World {
 	/** 幂等性记分板（explore 模式，实现见 oracles.ts）。 */
 	private checkIdempotent(template: Template): void {
 		runCheckIdempotent(this, template);
+	}
+
+	/** 虚拟编号记分板（M14，实现见 oracles.ts）。 */
+	private checkVirtual(template: Template, sw: boolean | null, manual: boolean): void {
+		runCheckVirtual(this, template, sw, manual);
 	}
 
 	/** 参考模型记分板（默认模式，实现见 oracles.ts）。 */

@@ -94,6 +94,7 @@ export type OpKind =
 	| "editRulePattern"
 	| "setRuleTemplate"
 	| "reorderRule"
+	| "setRuleMode"
 	| "switchFile"
 	| "manualTrigger"
 	| "trigger";

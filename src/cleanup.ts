@@ -67,6 +67,47 @@ export function clearNumberingContent(content: string, options: CleanupOptions =
 }
 
 /**
+ * 只剥离**本插件写入**（带 Word Joiner 标记）的编号前缀，手写 / 外来编号原样保留（M14，spec.md §3.22）。
+ *
+ * 用于「写入 → 仅显示」的模式切换与「清除本文件残留编号」命令。与 {@link clearNumberingContent} 的区别：
+ * - 只动**以 WJ 开头**的标题：按标记契约，插件前缀以首哨兵打头；这些行用全样式剥离器剥净（含尾哨兵
+ *   被毁的残缺前缀）。其余标题一个字节都不动——批量切换模式时不能顺手吃掉用户手写的 `1.1`，也不能
+ *   把标题中间的 WJ（如指向写入文件标题的链接 `[[#⁠1 ⁠概述]]`）误当前缀截断。0.7.20 以前的单哨兵
+ *   旧格式（WJ 在前缀之后）不认：1.0 上架时已是双哨兵，公开用户没有这种数据。
+ * - 降级残留只清正文与注释块，**不进围栏**：与自动路径同一口径（spec §3.17），围栏里的 WJ 可能是用户
+ *   有意写的代码示例，批量操作不该碰。
+ * - 不碰 frontmatter（不写 `fm:false`）：写了反而会关掉虚拟渲染。
+ *
+ * @param content 待清除的 Markdown 文件全文。
+ * @param options 可选的前后缀候选（传入全模板前后缀并集可提高残缺前缀的识别率）。
+ * @returns 剥除插件前缀后的全文；无插件前缀时原样返回（字节不变）。
+ */
+export function clearPluginNumberingContent(content: string, options: CleanupOptions = {}): string {
+	if (!content.includes(WORD_JOINER)) {
+		return content;
+	}
+	const prefixes = options.strippablePrefixes ?? [];
+	const suffixes = options.strippableSuffixes ?? [];
+	const lines = content.split("\n");
+	const headingLines = new Set<number>();
+	for (const h of parseHeadings(content)) {
+		headingLines.add(h.lineIndex);
+		if (!h.rawText.startsWith(WORD_JOINER)) {
+			continue;
+		}
+		const text = stripPrefixBroad(h.rawText, prefixes, suffixes);
+		lines[h.lineIndex] = `${"#".repeat(h.level)} ${text}`;
+	}
+	cleanDemotedResidue(
+		lines,
+		headingLines,
+		(paragraph) => stripPrefixBroad(paragraph, prefixes, suffixes),
+		{ comments: true, fences: false },
+	);
+	return lines.join("\n");
+}
+
+/**
  * 剥离内容中**外来 / 手写**（**非本插件写入**）的标题编号前缀，返回清理后的全文（0.6.6，spec §3.10）。
  *
  * 与 {@link clearNumberingContent} 的区别：本函数**只动「不含 Word Joiner」的标题**——含 WJ 的是本插件

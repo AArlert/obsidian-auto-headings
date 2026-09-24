@@ -345,6 +345,17 @@ describe("paste 端守卫矩阵（O9，插件级）", () => {
 		expect(editor.inserted).toBeNull();
 	});
 
+	// M14（spec §3.22）：还原原文会把带 WJ 的编号写进仅显示文件，等于制造残留。
+	it("仅显示文件：放行，只接受净化后的文本（不还原带 WJ 的原文）", () => {
+		const { p, sanitized } = seeded({
+			pathRules: [{ pattern: "/", template: "默认", mode: "virtual" }],
+		});
+		const editor = makePasteEditor(targetContent);
+		const evt = makeClipboardEvent(makeDataTransfer({ "text/plain": sanitized }));
+		expect(p.restoreSanitizedPaste(evt, editor, { file: { path: "笔记.md" } })).toBe(false);
+		expect(editor.inserted).toBeNull();
+	});
+
 	it("多光标：放行（原生多光标粘贴有按行分配语义，不模仿）", () => {
 		const { p, sanitized } = seeded();
 		const editor = makePasteEditor(targetContent, 2);

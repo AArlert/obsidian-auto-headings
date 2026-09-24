@@ -106,6 +106,14 @@ export function defaultPathRules(): PathRule[] {
 	return [{ pattern: "/", template: "默认" }];
 }
 
+/**
+ * 全新安装时的路径规则（M14，见 spec.md §3.22「新装与升级」）：与 {@link defaultPathRules} 相同，
+ * 只是根规则设为「仅显示」。老用户升级不走这里，缺省 mode 仍按写入处理。
+ */
+export function freshInstallPathRules(): PathRule[] {
+	return [{ pattern: "/", template: "默认", mode: "virtual" }];
+}
+
 /** 默认设置：全局自动编号开启、防抖延迟 300 ms、预置 `/`→「默认」根规则、语言自动、
  * Backlink 同步开（全局生效，与编号与否无关）、复制净化开（M11 信任包）。 */
 export const DEFAULT_SETTINGS: AutoHeadingsSettings = {

@@ -41,6 +41,59 @@
 
 ---
 
+## 2026-09-25 M14 虚拟编号模式 周期 1：模型 + 纯逻辑 + 门控（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **数据模型**（`src/pathrules.ts`）：`PathRule.mode?: "write" | "virtual"`（缺省即写入，零迁移）；`ruleMode`、
+  `resolveNumberingMode`（与 `resolvePathRule` 同一套具体度，「不编号」/ 无规则返回 null）、`normalizeRuleModes`
+  （非法值删字段）。
+- **新装判据**（`main.ts` `loadSettings` / `isFreshInstall`）：data.json 为空且没有 `templates/` 才算新装，根规则设
+  `virtual`（`settings/model.ts` 的 `freshInstallPathRules`）；只改内存不落盘；探测失败按升级处理。新增
+  `onExternalSettingsChange`（同步改写 data.json 时重新载入）。`pluginDir()` 抽成方法，onload 注释写明
+  loadSettings 必须先于 `templateStore.init()`，并有源码顺序锁测试。
+- **写入隔离**：新增 `shouldAutoWrite(content, path)` = `shouldAutoTrigger` 且非仅显示文件，替换全部 6 处自动路径
+  判断（防抖、到期复核、打开即编号、改模板即时重排、粘贴还原、清除命令的暂停判定）。仅显示文件于是自动落到
+  backlink 独立同步分支，**没新写同步路径**。「立即重新编号」对仅显示文件只弹说明；批量重编号跳过被仅显示
+  规则覆盖的文件。
+- **纯逻辑**（新建 `src/virtual/compute.ts`）：`computeVirtualNumbers`（显示编号 + widget 位置 + 残留前缀区间，只认
+  WJ 打头的前缀）、`resolveNumberingAction`（自动路径门控，渲染器与 UVM 共用）；`main.ts` 的
+  `virtualNumberingFor(path, content)` 供周期 2 渲染器调用（含外来编号拦截）。
+- **新清除函数** `clearPluginNumberingContent`（`cleanup.ts`）：只剥 WJ 打头的插件前缀，手写编号、标题中间的 WJ
+  （链接）、围栏里的残留都不动，不碰 frontmatter。
+- i18n：`noticeVirtualModeFile` 中英各一。devDependencies 显式锁 `@codemirror/state` 6.5.0 / `view` 6.38.6。
+- **规格订正两处**（spec §3.22、testplan V11 / V24，核对代码后发现周期 0 写错了）：
+  - frontmatter `true` 压不过「不编号」规则（K15 既有行为），不是「跟随根规则模式」；
+  - 「固化编号」照常处理仅显示文件（它们里面指向写入文件的链接也带 WJ，跳过会断链），代价是仅显示的编号随
+    插件离场消失，按钮说明要写清楚。
+- **测试**：`virtual.test.ts`（新，13 条）、`settings`（+8：判据 / 不落盘 / 同步重载 / 顺序锁）、`pathrules`（+4）、
+  `cleanup`（+7）、`main`（+9：不写 / 链接跟随 / Notice / 批量跳过 / 清除不暂停 / 门控 / 外来编号）、
+  `clipboard`（+1 粘贴不还原）。UVM 加 `setRuleMode` 激励与**虚拟记分板**（显示编号 = 写入模式会写的前缀、
+  文件不被改写、门控同源），覆盖率新增 3 个 bin。两处反向验证：去掉仅显示判断 → 5 条红；故意让显示编号出错 →
+  UVM 两条序列红。
+- **顺带发现一个已上线的数据丢失 bug**（与 M14 无关）：标题中间带 WJ 链接时，`stripPrefix` 把 WJ 之前的正文当旧
+  单哨兵前缀截掉（`## 参见 [[a#…1 …概述]]` → `## 1 1 概述]]`）。已开独立任务处理，本分支的新代码已绕开。
+- 已部署到用户测试库（Oblivion）。本周期派发 1 次（quality-gate × 1：收尾 preflight + fuzz）。
+
+### 没做什么
+
+- 没有任何渲染（周期 2），所以装上 1.2.0 的新库暂时**看不到编号**；老库（有 templates/）行为不变。
+- 没有 UI（mode 下拉框、切换确认框，周期 3）。
+
+### 下一步
+
+- **周期 2**：`src/virtual/editorExtension.ts`（CM6 widget + 残留 replace + 输入法暂停 + 广播刷新）、
+  `readingView.ts`（post-processor + 字符串比较缓存 + `getSectionInfo` 兜底）、样式、「清除本文件残留编号」命令。
+
+### 验证方式
+
+- `npm run preflight` + `npm run test:fuzz`（结果见本周期提交前的 quality-gate 报告）。
+- 真机：老库升级到 1.2.0 行为应与 1.1.4 完全一致（写入模式照常编号）。
+
+---
+
 ## 2026-09-25 M14 虚拟编号模式 周期 0：计划审计 + 文档先行（1.1.4，纯文档不 bump）
 
 交接人：`claude/m14-virtual-mode`
@@ -129,70 +182,6 @@
 
 ---
 
-## 2026-09-13 修复嵌套围栏数量不匹配致编号重置（1.1.4，issue #9）
-
-### 做了什么
-
-用户报告（[issue #9](https://github.com/AArlert/obsidian-auto-headings/issues/9)，附截图）：多层
-代码块嵌套、内层围栏用注释符号 `#` 时，其后标题序号会从 1 重新开始。用 GitHub API 取 issue 原文
-+ 下载截图核实（WebFetch 摘要与 API 原文一致，本次未撞上 [[webfetch-verification-blind-spots]]
-记录的截断/编造问题），复现出的具体场景是：外层 4 个反引号围栏包一段示例 Markdown，内嵌一段
-3 个反引号的 yaml 围栏，两层都各有一行 `#` 开头的注释。
-
-- **根因定位**（派 `repo-scout` 定位 + 主模型用 vitest 写 scratch 测试实测复现）：`src/scan.ts`
-  的 `scanSkipRegions` 围栏状态机（`FENCE_RE` 捕获组其实带了完整反引号游程长度，但状态机只取
-  `fence[1][0]` 比较**符号种类**，从未比较**数量**）。按 CommonMark，闭合围栏须同符号**且数量
-  ≥ 开启行**；内层 3 个反引号本不该闭合外层 4 个反引号的围栏，但旧实现见到同符号就直接切换
-  `inFence`，导致内层 3 反引号「关闭」了外层围栏，内层 `# 这是最里层代码块` 被当成真标题
-  （level 1，浅于周围 H2 标题），推进计数器时把更深层的 H2 计数器清零——这就是「序号被清零
-  回 1」的完整链路，用 `renumberContent` 实测复现出与截图完全一致的 `## 2 标题二` → `## 1
-  标题三`（而非线性递增到 4），根因链条到此闭环，无需再猜。
-- **修复**：`scanSkipRegions` 新增 `fenceLen` 状态，闭合判定改为「同符号 **且** 本行游程长度
-  ≥ 开启时的长度」；数量不足（或符号不同）的类围栏行不再切换 `inFence`、也不再标记为
-  `isFenceMarker`，原样落入「围栏内普通内容」分支——语义上更贴合 `SkipState.isFenceMarker`
-  自己的文档定义（「本行**就是**围栏定界行」），不只是打个补丁。`parser.ts`、`scan.ts` 顶部
-  文档注释与 `doc/spec.md` §3.17（新增裁决表 R11）同步更新，避免下次改动时规格与实现再次漂移。
-- **回归测试**：`parser.test.ts` 新增 2 例（数量不足不闭合的嵌套写法；数量更多的闭合行合法，
-  对称验证没有矫枉过正）；`known_bugs.test.ts` 新增 issue #9 端到端 describe 块，直接断言
-  `renumberContent` 在 issue 原始场景下的输出（含幂等性）。`doc/testplan.md` 补 `E3b` 行
-  （✅，链接两个回归测试）。
-- 质量门槛：派 `quality-gate` 跑 `npm test`（639 通过，唯一失败是既有 zh-CN locale 排序环境
-  伪影，与本次无关）、`lint`、`format:check` 全绿；核心逻辑改动按规则额外跑一遍 `test:fuzz`
-  （5000 序列 × 80 步）全绿。本周期派发 2 次（repo-scout × 1 定位根因，quality-gate × 1 验证）。
-
-### 没做什么
-
-- 未改 `isSkipped()` 的对外行为——`isFenceMarker` 语义收紧后 `inFence` 仍覆盖同一行，
-  `isSkipped = inFence || isFenceMarker || inComment` 的外部可见结果（哪些行被跳过）不变，
-  只有「这一行算不算定界行本身」这个内部细节更准了，`cleanDemotedResidue` 因此受益
-  （之前会把这类误判的类围栏行当定界行跳过清理，现在正确按「围栏内普通内容」走
-  `scope.fences` 开关）——顺带验证过 `cleanup.test.ts` 全过，未额外补测试（行为改进但无
-  用户可见入口触发这条路径的已知场景，且现有测试已覆盖足够多样例）。
-- 未处理 `doc/testplan.md` 里 E3（不同符号不闭合）状态标记为 🔲 但实际早被
-  `parser.test.ts`「不同栅栏符号不互相闭合」覆盖的既有偏差——与本次改动无关的历史遗留，
-  不在本 issue 范围内，未顺手修，留给下次涉及该区域时处理。
-
-### 下一步
-
-- 已 `npm run bump` → `1.1.3 → 1.1.4`；已写 `doc/release-notes/1.1.4.md`（双语，如实描述
-  用户可见的编号 bug 修复）。
-- 待 `npm run preflight` 全绿后提交（含 `release/`）、按 §5.1 合并回 `master`，打 `1.1.4` tag
-  并推送，`release.yml` 自动创建 GitHub Release。
-- 可考虑回 issue #9 留评论告知已修复、将在 1.1.4 发布，但本仓库当前无 `gh` CLI
-  （见 [[windows-env-quirks]]），需用户自己评论或后续会话走 API/网页操作。
-
-### 验证方式
-
-- `npx vitest run tests/dev_tests/parser.test.ts tests/dev_tests/known_bugs.test.ts`：新增用例
-  与既有用例全过。
-- `npm test` 639 通过（1 个既有 locale 环境伪影，基线同样失败，非本次引入）；`lint` /
-  `format:check` / `test:fuzz`（5000×80）全绿。
-- 用 issue 原始截图的确切文本（外层 4 反引号 + 内层 3 反引号 yaml，各一行 `#` 注释）跑
-  `renumberContent`，修复前输出 `## 1 标题三`（复现截图），修复后输出 `## 3 标题三`
-  （正确续号），且二次调用幂等。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -214,9 +203,11 @@ obsidian-auto-headings/
 │   ├── headingtrigger.ts   标题链接建议的触发边界/上下文屏蔽/排序/链接构造（纯函数，M13）
 │   ├── headingsuggest.ts   标题链接建议 EditorSuggest 薄适配层（M13，DOM/CM6 交互留真机手验）
 │   ├── vcintegration.ts    Various Complements 联动（探测/词典生成/分层防御写入，M13）
-│   ├── pathrules.ts        路径规则 → 模板解析（纯函数）
+│   ├── pathrules.ts        路径规则 → 模板 / 编号模式解析（纯函数）
 │   ├── frontmatter.ts      单文件开关（obsidian-auto-headings: true/false）读取
 │   ├── i18n.ts             中英双语文案（Messages 接口 + zh/en 两套）
+│   ├── virtual/            虚拟编号模式（M14，只显示不写文件，spec §3.22）
+│   │   └── compute.ts      纯逻辑：每个标题的显示编号 + 残留前缀区间 + 自动路径门控 resolveNumberingAction
 │   ├── settings/
 │   │   ├── model.ts        设置数据模型（全局开关、防抖延迟、路径规则持久化）
 │   │   ├── SettingsTab.ts  设置 GUI 壳：TAB 栏 + 分发（内容在 tabs/，M7 多 TAB 已拆完）

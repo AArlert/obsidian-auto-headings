@@ -2286,3 +2286,127 @@ describe("M13：VC 词典写盘（节流 / 去重 / 截断，Q11/Q20 逻辑面�
 		expect(executeCommandById).toHaveBeenCalledTimes(5);
 	});
 });
+
+describe("M14：仅显示文件永不写编号（spec §3.22，testplan V8 / V10 / V12 / V21 / V22）", () => {
+	/** 根规则写入 + `v/` 文件夹仅显示。 */
+	const mixedRules = (): PathRule[] => [
+		{ pattern: "/", template: "默认" },
+		{ pattern: "v/", template: "默认", mode: "virtual" },
+	];
+	type VirtualInternals = {
+		virtualNumberingFor(path: string, content: string): Array<{ label: string | null }> | null;
+		numberingModeFor(path: string): "write" | "virtual" | null;
+		settings: { retired?: boolean };
+	};
+
+	it("V8：自动路径（防抖）不写仅显示文件；同库的写入文件照常编号", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const edV = new FakeEditor("## 甲\n### 乙");
+		const edW = new FakeEditor("## 甲");
+		p.scheduleRenumber(edV, fileInfo("v/x.md"));
+		p.scheduleRenumber(edW, fileInfo("w.md"));
+		vi.advanceTimersByTime(300);
+		expect(edV.txnCount).toBe(0);
+		expect(edV.getValue()).toBe("## 甲\n### 乙");
+		expect(edW.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}甲`);
+	});
+
+	it("V8：打开即编号、改模板即时重排都跳过仅显示文件", async () => {
+		const { p, setActiveView } = makePlugin({ pathRules: mixedRules() });
+		const ed = new FakeEditor("## 章");
+		setActiveView({ editor: ed, file: { path: "v/x.md" } });
+		p.renumberOnOpen({ path: "v/x.md" });
+		await flushPromises();
+		p.renumberActiveFile();
+		expect(ed.txnCount).toBe(0);
+		expect(ed.getValue()).toBe("## 章");
+	});
+
+	it("V21：仅显示文件里手动改被引用的标题，其他笔记里的链接照样跟随", async () => {
+		const { p, vaultFiles } = makePlugin({
+			pathRules: mixedRules(),
+			updateBacklinks: true,
+			vaultFiles: { "b.md": "见 [[x#甲]]。" },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("v/x.md")); // 播种快照基线。
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+
+		ed.setValue("## 甲改");
+		p.scheduleRenumber(ed, fileInfo("v/x.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe("见 [[x#甲改]]。");
+		expect(ed.getValue()).toBe("## 甲改"); // 一个编号也没写。
+	});
+
+	it("V22：对仅显示文件执行「立即重新编号」只给说明，不写文件", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const ed = new FakeEditor("## 章");
+		p.runImmediateRenumber(ed, fileInfo("v/x.md"));
+		expect(ed.txnCount).toBe(0);
+		expect(Notice.messages).toContain(
+			"当前文件为「仅显示」模式：编号只在 Obsidian 里显示，不写入文件",
+		);
+	});
+
+	it("批量重编号跳过被仅显示规则覆盖的文件", async () => {
+		const rules = mixedRules();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: { "a.md": "## 甲", "v/x.md": "## 乙" },
+		});
+		await p.batchRenumberRule(rules[0]);
+		expect(vaultFiles.get("a.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}甲`);
+		expect(vaultFiles.get("v/x.md")).toBe("## 乙");
+		expect(Notice.messages).toContain("批量重编号完成：改写 1 个，无变化 0 个，跳过 1 个");
+	});
+
+	it("「清除当前文件编号」用在仅显示文件上：清掉残留但不写 fm:false（否则会关掉虚拟显示）", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}简介`);
+		p.runClearNumbering(ed, fileInfo("v/x.md"));
+		expect(ed.getValue()).toBe("## 简介");
+	});
+
+	it("virtualNumberingFor：仅显示文件给出编号，写入文件与不编号路径给 null", () => {
+		const { p } = makePlugin({
+			pathRules: [...mixedRules(), { pattern: "v/off/", template: NO_NUMBERING_TEMPLATE }],
+		});
+		const v = p as unknown as VirtualInternals;
+		expect(v.virtualNumberingFor("v/x.md", "## 甲\n### 乙")?.map((l) => l.label)).toEqual([
+			"1 ",
+			"1.1 ",
+		]);
+		expect(v.virtualNumberingFor("w.md", "## 甲")).toBeNull();
+		expect(v.virtualNumberingFor("v/off/y.md", "## 甲")).toBeNull();
+		expect(v.numberingModeFor("v/off/y.md")).toBeNull();
+	});
+
+	it("V10：frontmatter false、全局关、清库中、retired 都不显示", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const v = p as unknown as VirtualInternals;
+		const fmOff = ["---", "obsidian-auto-headings: false", "---", "## 甲"].join("\n");
+		expect(v.virtualNumberingFor("v/x.md", fmOff)).toBeNull();
+
+		p.settings.autoNumber = false;
+		expect(v.virtualNumberingFor("v/x.md", "## 甲")).toBeNull();
+		const fmOn = ["---", "obsidian-auto-headings: true", "---", "## 甲"].join("\n");
+		expect(v.virtualNumberingFor("v/x.md", fmOn)).not.toBeNull(); // fm:true 压过全局关。
+		p.settings.autoNumber = true;
+
+		p.vaultClearInProgress = true;
+		expect(v.virtualNumberingFor("v/x.md", "## 甲")).toBeNull();
+		p.vaultClearInProgress = false;
+
+		v.settings.retired = true;
+		expect(v.virtualNumberingFor("v/x.md", "## 甲")).toBeNull();
+	});
+
+	it("V12：有外来编号（手写、无 WJ）的文件不显示，避免两套数字", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const v = p as unknown as VirtualInternals;
+		expect(v.virtualNumberingFor("v/x.md", "## 1. 引言\n## 2. 方法")).toBeNull();
+	});
+});

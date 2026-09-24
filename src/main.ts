@@ -15,6 +15,7 @@ import {
 	DEFAULT_SETTINGS,
 	clampDebounceDelay,
 	defaultPathRules,
+	freshInstallPathRules,
 } from "./settings/model";
 import { AutoHeadingsSettingTab } from "./settings/SettingsTab";
 import { ForeignNumberingCleanupModal } from "./settings/ForeignNumberingCleanupModal";
@@ -44,7 +45,20 @@ import {
 	type HeadingSnapshot,
 } from "./backlinks";
 import { parseHeadings, type Heading } from "./parser";
-import { NO_NUMBERING_TEMPLATE, resolvePathRule, ruleMatches, type PathRule } from "./pathrules";
+import {
+	NO_NUMBERING_TEMPLATE,
+	normalizeRuleModes,
+	resolveNumberingMode,
+	resolvePathRule,
+	ruleMatches,
+	type NumberingMode,
+	type PathRule,
+} from "./pathrules";
+import {
+	computeVirtualNumbers,
+	resolveNumberingAction,
+	type VirtualHeadingLabel,
+} from "./virtual/compute";
 import { TemplateStore } from "./templates/TemplateStore";
 import { HeadingIndex } from "./headingindex";
 import { HeadingLinkSuggest } from "./headingsuggest";
@@ -184,9 +198,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 
 		// 初始化模板存储：确保 templates/ 目录与 default.json 存在并载入全部模板。
-		const pluginDir =
-			this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
-		this.templateStore = new TemplateStore(this.app.vault.adapter, pluginDir);
+		// **必须在 loadSettings 之后**：新装判据要看 templates/ 在不在（M14，spec §3.22「顺序约束」），
+		// init 一跑目录就建好了，判据永远失效。有单测锁住这个先后顺序。
+		this.templateStore = new TemplateStore(this.app.vault.adapter, this.pluginDir());
 		await this.templateStore.init();
 
 		this.settingTab = new AutoHeadingsSettingTab(this.app, this);
@@ -504,6 +518,52 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
+	 * 某文件的编号模式（M14，spec §3.22）：`"virtual"` 只显示不写，`"write"` 写入，`null` 无规则 /「不编号」。
+	 */
+	numberingModeFor(filePath: string | undefined | null): NumberingMode | null {
+		return filePath ? resolveNumberingMode(this.settings.pathRules, filePath) : null;
+	}
+
+	/** 某文件是否为「仅显示」模式（M14）：所有编号写入路径据此跳过它。 */
+	private isVirtualFile(filePath: string | undefined | null): boolean {
+		return this.numberingModeFor(filePath) === "virtual";
+	}
+
+	/**
+	 * 自动路径是否应往该文件**写**编号：够格自动触发（{@link shouldAutoTrigger}），且不是仅显示文件
+	 * （M14）。仅显示文件在这里返回 false 后，`scheduleRenumber` 会自动落到 backlink 独立同步分支，
+	 * 手动改标题时链接照样跟随（spec §3.22「写入路径的隔离」）。
+	 */
+	private shouldAutoWrite(content: string, filePath: string | undefined | null): boolean {
+		return this.shouldAutoTrigger(content) && !this.isVirtualFile(filePath);
+	}
+
+	/**
+	 * 某文件此刻应显示的虚拟编号（M14，spec §3.22）；不该显示时返回 `null`。
+	 * 供编辑视图与阅读视图的渲染器调用（周期 2）。门控与写入模式完全一致（{@link resolveNumberingAction}），
+	 * 另外有外来编号（{@link hasUnclaimedForeignNumbering}）的文件不渲染，避免屏幕上出现两套数字。
+	 */
+	virtualNumberingFor(filePath: string, content: string): VirtualHeadingLabel[] | null {
+		const template = this.getTemplateForFile(filePath);
+		const action = resolveNumberingAction({
+			retired: this.settings.retired === true,
+			clearing: this.vaultClearInProgress,
+			fileSwitch: readFileSwitch(content),
+			autoNumber: this.settings.autoNumber,
+			mode: this.numberingModeFor(filePath),
+			hasTemplate: template !== null,
+		});
+		if (action !== "virtual" || !template || hasUnclaimedForeignNumbering(content)) {
+			return null;
+		}
+		const { prefixes, suffixes } = this.strippableAffixes();
+		return computeVirtualNumbers(content, template, {
+			strippablePrefixes: prefixes,
+			strippableSuffixes: suffixes,
+		});
+	}
+
+	/**
 	 * **自动触发**是否应进行（见 spec.md §3.1 自动路径）。判定顺序：
 	 * - frontmatter `false` → 不触发（即便全局开关开）。
 	 * - frontmatter `true` → 触发（文件级强制 opt-in，即便全局开关关）。
@@ -619,7 +679,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 			if (
 				!info.file ||
-				!this.shouldAutoTrigger(editor.getValue()) ||
+				// 仅显示文件（M14）：还原原文会把带 WJ 的编号写进文件，只接受净化后的文本。
+				!this.shouldAutoWrite(editor.getValue(), info.file.path) ||
 				!this.getTemplateForFile(info.file.path)
 			) {
 				return false;
@@ -850,7 +911,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			if (!editor || !file) {
 				continue;
 			}
-			if (!this.shouldAutoTrigger(editor.getValue())) {
+			if (!this.shouldAutoWrite(editor.getValue(), file.path)) {
 				continue;
 			}
 			const template = this.getTemplateForFile(file.path);
@@ -915,7 +976,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (this.app.workspace.getActiveFile?.()?.path !== file.path) {
 			return;
 		}
-		if (!this.shouldAutoTrigger(content)) {
+		if (!this.shouldAutoWrite(content, file.path)) {
 			return;
 		}
 		const template = this.getTemplateForFile(file.path);
@@ -1137,8 +1198,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		newContent = fold.content;
 
 		// 仅当该文件**确实**会被自动重编号时才暂停：门控与自动路径完全一致（够格触发 + 命中模板）。
+		// 仅显示文件（M14）本就不会被写回编号，不暂停——写了 `fm:false` 反而会关掉它的虚拟显示。
 		const pause =
-			this.shouldAutoTrigger(newContent) && this.getTemplateForFile(path)
+			this.shouldAutoWrite(newContent, path) && this.getTemplateForFile(path)
 				? planPauseFileSwitch(newContent)
 				: null;
 		const extra = pause ? [this.switchEditToChange(oldContent, pause)] : [];
@@ -1381,8 +1443,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 		let links = 0;
 		for (const file of files) {
 			const template = this.getTemplateForFile(file.path);
-			if (!template) {
-				skipped++; // 解析为「不编号」伪模板，或无可用模板（如更具体规则引用已失效模板）。
+			if (!template || this.isVirtualFile(file.path)) {
+				// 解析为「不编号」伪模板、无可用模板（如更具体规则引用已失效模板），或被更具体的
+				// 仅显示规则覆盖（M14：仅显示文件永不写编号）。
+				skipped++;
 				continue;
 			}
 			const editor = editors.get(file.path);
@@ -1523,10 +1587,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		const data = ((await this.loadData()) ?? {}) as Record<string, unknown>;
+		const fresh = await this.isFreshInstall(data);
 		const merged = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			{ pathRules: defaultPathRules() },
+			// 全新安装默认「仅显示」（M14，spec §3.22）；升级用户缺省 mode 仍按写入处理。
+			// 只改内存、不在这里落盘：多设备同步时 data.json 可能还没到，等用户第一次改设置才写。
+			{ pathRules: fresh ? freshInstallPathRules() : defaultPathRules() },
 			data,
 		) as Record<string, unknown>;
 		// 迁移：历史字段 `enabled`（M2–M4）→ `autoNumber`（M5）。
@@ -1538,6 +1605,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (!Array.isArray(merged.pathRules)) {
 			merged.pathRules = defaultPathRules();
 		}
+		// M14：规则的 mode 非法值删掉（缺省即写入）。
+		normalizeRuleModes(merged.pathRules as PathRule[]);
 		// language 缺失 / 非法（含旧版本无此字段）时回退到默认 `auto`。
 		if (merged.language !== "zh" && merged.language !== "en" && merged.language !== "auto") {
 			merged.language = "auto";
@@ -1579,6 +1648,37 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
+	 * data.json 被同步服务或外部程序改写（M14，spec §3.22「多设备同步竞态」）：重新载入设置。
+	 * 典型场景：第二台设备在 data.json 同步到位之前加载插件、被当成新装而切到「仅显示」，
+	 * 同步到位后这里把它拉回真实配置。
+	 */
+	async onExternalSettingsChange(): Promise<void> {
+		await this.loadSettings();
+		this.settingTab?.display();
+	}
+
+	/** 插件目录（`.obsidian/plugins/auto-headings`），templates/ 与 VC 词典都放在这里。 */
+	private pluginDir(): string {
+		return this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+	}
+
+	/**
+	 * 是否全新安装（M14，spec §3.22「新装与升级」）：data.json 为空 **且** 插件目录下没有 templates/。
+	 * 老用户可能从没改过设置（没有 data.json），但首次启用时一定建过 templates/default.json。
+	 * 探测失败一律按升级处理——宁可保持老行为，也不把老用户误切到仅显示。
+	 */
+	private async isFreshInstall(data: Record<string, unknown>): Promise<boolean> {
+		if (Object.keys(data).length > 0) {
+			return false;
+		}
+		try {
+			return !(await this.app.vault.adapter.exists(`${this.pluginDir()}/templates`));
+		} catch {
+			return false;
+		}
+	}
+
+	/**
 	 * 实时编辑触发（**自动路径**）：常规编号路径（{@link shouldAutoTrigger} + 模板命中）或
 	 * Backlink 独立触发路径（{@link shouldBacklinkStandaloneTrigger}，CR-18）**至少一条**够格
 	 * 才安排该文件的防抖计时器；到期后再次校验资格，优先走常规编号路径（含其内置的 backlink
@@ -1591,7 +1691,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		const content = editor.getValue();
-		if (!this.shouldAutoTrigger(content) && !this.shouldBacklinkStandaloneTrigger()) {
+		if (!this.shouldAutoWrite(content, file.path) && !this.shouldBacklinkStandaloneTrigger()) {
 			return; // 两条路径都不够格：不安排任何更新。
 		}
 
@@ -1616,7 +1716,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 			// 计时器到期时再次校验（其间用户可能改了开关或 frontmatter）。
 			const value = editor.getValue();
-			if (this.shouldAutoTrigger(value)) {
+			// 仅显示文件（M14）在此不写，落到下方的 backlink 独立同步分支。
+			if (this.shouldAutoWrite(value, path)) {
 				const template = this.getTemplateForFile(path);
 				if (template) {
 					if (!this.guardForeignNumbering(path, value)) {
@@ -1701,6 +1802,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 			new Notice(
 				this.resolvesToNoNumbering(path) ? m0.noticeNoNumberingRule : m0.noticeNoRule,
 			);
+			return;
+		}
+		if (this.isVirtualFile(path)) {
+			// 仅显示文件（M14，spec §3.22）：手动命令也不写文件，只说明原因（显示刷新由渲染器负责）。
+			new Notice(this.messages().noticeVirtualModeFile);
 			return;
 		}
 

@@ -332,6 +332,8 @@ export interface Messages {
 	noticeNoRule: string;
 	/** 「立即重新编号」命中「不编号」伪模板时的专用提示（区别于「未匹配任何规则」，K15）。 */
 	noticeNoNumberingRule: string;
+	/** 对「仅显示」模式的文件执行「立即重新编号」时的说明（M14）。 */
+	noticeVirtualModeFile: string;
 	/** 批量重编号（K16）：命中 0 个文件 / 完成汇总。 */
 	noticeBatchNoMatch: string;
 	noticeBatchDone: (changed: number, unchanged: number, skipped: number) => string;
@@ -630,6 +632,7 @@ const zh: Messages = {
 	noticeResumed: "已恢复接管；若文件里留有固化过的编号，请先跑「清理非本插件的标题编号」",
 	noticeNoRule: "当前文件未匹配任何路径规则，无法编号",
 	noticeNoNumberingRule: "当前文件所在路径已设为「不编号」",
+	noticeVirtualModeFile: "当前文件为「仅显示」模式：编号只在 Obsidian 里显示，不写入文件",
 	noticeBatchNoMatch: "该规则当前未命中任何 Markdown 文件",
 	noticeBatchDone: (changed, unchanged, skipped) =>
 		`批量重编号完成：改写 ${changed} 个，无变化 ${unchanged} 个，跳过 ${skipped} 个`,
@@ -946,6 +949,8 @@ const en: Messages = {
 		"Now managing numbering again; if any frozen numbering is still in your files, run Clean foreign numbering first",
 	noticeNoRule: "The current file matches no path rule; cannot number it",
 	noticeNoNumberingRule: "This file's path is set to “No numbering”",
+	noticeVirtualModeFile:
+		"This file is in display-only mode: numbers are shown in Obsidian but never written to the file",
 	noticeBatchNoMatch: "This rule currently matches no Markdown files",
 	noticeBatchDone: (changed, unchanged, skipped) =>
 		`Batch renumber done: ${changed} updated, ${unchanged} unchanged, ${skipped} skipped`,
