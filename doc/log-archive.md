@@ -5,6 +5,93 @@
 
 ---
 
+## 2026-08-19 Community Hub 审核修复（1.1.3）
+
+### 做了什么
+
+用户贴出 Obsidian Community Hub 自动代码检查报告（1 error + 5 warning），逐条核实现状后修复
+真正仍存在的问题（发现报告本身**部分过期**——ForeignNumberingCleanupModal.ts / PathRules.ts /
+WhitelistEditor.ts 的多处 `prefer-create-el` 位置当前代码早已用 `createEl`，报告引用的是旧快照，
+应与 [[obsidian-community-hub-distribution]] 记录的 Community Hub 索引滞后是同一根因）：
+
+- **`no-static-styles-assignment`（error，阻断项）**：`VcIntegrationSection.ts` 复制回退用的临时
+  textarea 两行 `.style.x=` 改 `setCssStyles`；顺手排查全仓库 `.style.` 赋值，额外发现报告**未提及**
+  的 `PathSuggest.ts`（路径建议弹窗定位，3 行）同类写法一并改掉，避免下次扫描再次因同一条规则挂掉。
+- **`prefer-create-el`（warning）**：核实后仅 3 处仍是真问题——`VcIntegrationSection.ts:28`
+  （随上面一起改，`document.body.createEl` 顺带消掉一次多余的 `appendChild`）、`WhitelistEditor.ts:129`
+  （行内编辑输入框，改用 `row.createEl(...)` 而非 `activeDocument.createElement`——`row` 就是
+  `textEl` 的实际父节点，同文档无歧义，`replaceWith` 同步执行不会闪烁）。`main.ts:2152`
+  （`renderSelectionHtml` 的分离容器）**特意保留不改**：该函数以 `doc: Document` 为形参正是为了
+  单测可注入 mock（`clipboard.test.ts`「阅读模式路径」用例），而单测环境 `vitest.config.ts` 是
+  `environment: "node"`、`obsidian-mock.ts` 不提供全局 `createEl`——换了会让该用例静默退化（异常
+  被 `sanitizeClipboardEvent` 的降级 catch 吞掉，`preventDefault`/`setData` 都不会发生）。已在代码
+  加注释说明，接受这一条 warning 长期挂着。
+- **`editor-paste` 的 `defaultPrevented` 检查 + `preventDefault` 位置（warning ×2）**：根因是检查
+  工具做不了跨函数静态分析——真实逻辑早就正确（`restoreSanitizedPaste` 内部本就先判
+  `defaultPrevented`、只在全部守卫通过时才 `preventDefault`），只是这层判断裹在私有方法里、
+  检查工具看不见注册处那个箭头函数字面量里有没有这两行。改法：注册处内联 `defaultPrevented`
+  前置判断 + 按 `restoreSanitizedPaste` 返回值决定是否 `preventDefault`；方法本身改回返回
+  `boolean`（原为 `void`），**内部仍保留一份 `defaultPrevented` 早退**（防御性冗余，换来该方法被
+  单测直接单独调用时仍安全——见下）。
+- 同步改了 `tests/dev_tests/clipboard.test.ts`：本地 `ClipboardInternals` 接口的
+  `restoreSanitizedPaste` 返回类型 `void → boolean`；「全守卫通过」用例把
+  `expect(evt.defaultPrevented).toBe(true)` 改成断言返回值（该方法自己不再触发
+  `preventDefault`，那是调用方注册处的职责）。其余 9 个 O9 守卫矩阵用例逐条核对过，均不依赖
+  「方法自身调用 preventDefault」这个已变化的细节，未改。
+- `getSettingDefinitions()`（warning，SettingsTab.ts:40，Obsidian 1.13.0 新增声明式设置搜索
+  API）**判断为超出本次范围，未实现**：读了已安装的 `node_modules/obsidian/obsidian.d.ts`
+  确认真实签名——一旦 `getSettingDefinitions()` 返回非空数组，Obsidian 1.13+ 就**不再调用**
+  `display()`，整页改由声明式定义渲染；本插件设置页现状是 4 个手写 TAB（含路径规则表、
+  可行内编辑/带命中角标的白名单编辑器等高度动态 UI），贸然只声明部分设置会让未声明的部分在
+  1.13+ 用户面前直接消失，是真实破坏性风险而非纯新增。API 本身留了退路——
+  `SettingDefinitionPage.page?: () => SettingPage` 允许某个子页保持命令式渲染（`SettingPage`
+  是 `abstract class { containerEl; abstract display(): void }`，形状与现有 `renderXxxTab(tab,
+  containerEl)` 函数很接近，理论上可行），但四个 TAB 该拆成纯声明式 / 保留命令式 page、
+  manifest 最低版本 1.8.7 意味着 `display()` 兜底还得长期共存——这是架构决策，留给用户拍板
+  是否值得开一个新 Milestone，本周期只记录调研结论，不擅自实现。
+- 质量门槛：`npm run build`（tsc + esbuild）、`npm run lint`（eslint）全绿；`npm test`
+  636/637——唯一失败是 [[windows-env-quirks]] 记录的 `whitelist.test.ts:406` zh-CN locale
+  排序环境伪影，与本次改动无关，`clipboard.test.ts` 30/30 全过（含改动最直接触及的「全守卫
+  通过」「他人已 preventDefault」两条）。本周期派发 1 次（quality-gate × 1，验证本次改动）。
+
+### 没做什么
+
+- 未实现 `getSettingDefinitions()`——原因见上，判断为独立 Milestone 量级的架构决策。
+- 未处理 `main.ts:2152` 的 `prefer-create-el` warning——原因见上（单测可注入性 vs lint 合规的
+  取舍，已判断为不值得，代码内联注释说明）。
+- 未改任何用户可见行为——本周期全部改动是 DOM 构造方式 / 内部函数签名的等价重构，不涉及
+  编号、Backlink、剪贴板还原等功能逻辑本身。
+- 未验证 Community Hub 重新扫描后是否真的转绿——这需要 tag/Release 真正发布后由 Community
+  Hub 侧重新抓取，本机看不到。
+
+### 下一步
+
+- 已 `npm run bump` → `1.1.2 → 1.1.3`（纯合规修复，无用户可见行为变化，但 Community Hub 的
+  审核大概率是照已发布 Release 的内容扫描，1.1.2 的 tag 已指向旧提交，不出新版本这批修复它
+  看不见——判断为需要新 tag 才能让审核转绿，而非常规「仅行为改动才 bump」的例外）。已写
+  `doc/release-notes/1.1.3.md`（双语，如实说明「无用户可见行为变化，修复审核发现」）。
+- 待 `npm run preflight` 全绿后提交 + 打 `1.1.3` tag 并推送，`release.yml` 会自动创建 GitHub
+  Release（同 1.1.1/1.1.2 的自动化路径，见上一块记录）。
+- 用户可在打完 tag 后回 Community Hub 维护者面板重新触发检查，确认这批修复真的清掉了对应
+  条目（本机没有手段验证 Community Hub 侧的重新扫描结果）。
+- `getSettingDefinitions()` 迁移：若用户认为值得做，建议开新 Milestone（当前最大到 M13），
+  按上面记的 API 形状（`SettingDefinitionPage.page` 命令式子页 + `display()` 长期共存）评估
+  工作量再排入 Roadmap，不建议下个周期直接动手实现。
+
+### 验证方式
+
+- `npm run build` / `npm run lint` 全绿；`npm test` 636/637（唯一失败为既有 locale 环境伪影，
+  基线同样失败）；`clipboard.test.ts` 30/30（quality-gate 代跑，见本块「做了什么」的门槛记录）。
+- `main.ts` 的 `restoreSanitizedPaste` 契约变化（`void → boolean`，`preventDefault` 调用点从
+  方法内部移到调用方）逐条核对过全部 10 个「paste 端守卫矩阵」用例：仅 1 个直接依赖旧契约
+  （已同步改断言），其余 9 个不受影响。
+- VcIntegrationSection / PathSuggest / WhitelistEditor 三处 DOM 构造改动**无自动化测试覆盖**
+  （这几个渲染函数向来是仓库既定的手验范围，`obsidian-mock.ts` 的 `PluginSettingTab.display()`
+  与 `Modal.open()` 都是空实现，见该文件注释）——只靠人工审代码逻辑确认等价，建议用户在真机
+  过一遍：复制词典路径按钮、白名单词条点击行内改名、路径规则输入框的建议弹窗定位。
+
+---
+
 ## 2026-08-19 M27：PR #8 审核与合入前修复（1.1.2）
 
 ### 做了什么
