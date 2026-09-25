@@ -76,15 +76,28 @@
 - **清全库 / 固化没上真机**（会改动整个库，只有单测）。写入模式下的两条命令、R6 写入模式没上真机；在大纲里拖动
   小节没单独测（与插入标题同一刷新路径）；停用插件后大纲复原只有单测。
 - M11「清库撤销」（自建快照 / 还原）未做。
-- 没合并 master、没打 tag（发版须用户明确同意）。
+
+### 发版（用户同意后，2026-09-25）
+
+- 合并 master（`873c0df`）+ 打 `1.2.0` tag。**Release 首跑失败在 `npm ci`**，master 的 CI 同样挂：M14 分支从没在
+  CI 上跑过（CI 只盯 master），它的锁文件由本机 npm 11 重算，删掉了 `vite-node` 下的可选 peer 条目
+  （`@types/node@26`、`undici-types`），CI 的 Node 20 自带 npm 10，判定锁文件与 package.json 不同步。日志匿名
+  拉不到（403），靠步骤名 + 锁文件 diff 定位。
+- 修法（`87c8f63`）：以 master（`1a84d17`，CI 通过）的锁文件为底，只套 M14 的本意改动（版本号、两个
+  `@codemirror` 显式开发依赖、去掉 peer 标记）——与原锁文件的差别仅是补回那两个条目。master CI #72 通过后，把
+  `1.2.0` tag 挪到修复提交重推（首个 tag 没生成任何 Release），Release #23 通过：非草稿、三个产物齐全、说明取自
+  `doc/release-notes/1.2.0.md`。
 
 ### 下一步
 
-- 用户过目后发 1.2.0：按 §5.1 合并 master + 打 `1.2.0` tag（须用户明确同意）；Community Hub 索引滞后时去维护者
-  面板点「修复」。
+- 看 Community Hub 公开页 `community.obsidian.md/plugins/auto-headings` 的 Current version 是否到 1.2.0；滞后就
+  请用户登录维护者面板点「修复」。
+- 以后改依赖后先用 CI 同版本的 npm（npm 10）生成锁文件，或者先推 master 看 CI 再打 tag；CI 迟早也该升到
+  Node 22/24（Node 20 已停止维护，Actions 已提示弃用）。
 - 1.3.0 候选：M12 内置三套预设模板；`main.ts` 已约 2600 行，改到相关代码时顺手拆。
-- 主工作区 `D:/Documents/Code/obsidian-auto-headings` 里的本地 `claude/m14-virtual-mode` 落后于 origin（本会话在
-  独立 worktree 里开发并推送），在那边接着干前先 `git pull --ff-only`。
+- 1.2.0 已在 master，此后在 master 上开新分支。主工作区 `D:/Documents/Code/obsidian-auto-headings` 还停在旧的
+  `claude/m14-virtual-mode`（`6f8e8ff`），`master` 被 `obsidian-auto-headings-wjfix` 那个 worktree 占着且落后于
+  origin——接着干前先在 wjfix 里 `git pull --ff-only`（或删掉该 worktree），主工作区再切到 master。
 
 ### 验证方式
 
