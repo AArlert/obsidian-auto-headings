@@ -45,6 +45,12 @@ per-Str regex can never match the pair.
 Legacy format: plugin versions 0.6.4–0.7.19 wrote a *single* sentinel at the end of
 the prefix (`## 1.2 <WJ>Module design`). Handled — see pickTarget below.
 
+WJ in the middle of a heading is NOT a prefix: when the plugin renames a numbered
+heading it rewrites wikilinks to it byte-for-byte, so a heading such as
+`## See <wikilink to a#<WJ>1 <WJ>Overview>` legitimately carries WJs mid-text. Only a sentinel at the very start of the heading (or a legacy
+single sentinel preceded by nothing but numbering) marks a prefix; anything else is left
+alone and only the invisible markers are removed.
+
 See doc/marker-contract.md for the full byte-level contract.
 --]]
 
@@ -72,12 +78,89 @@ local function countWordJoiners(inlines)
 	return total
 end
 
---- 该丢弃到第几个 WJ（含）为止：双哨兵取第 2 个，旧单哨兵取第 1 个，无 WJ 返回 0（不动）。
-local function pickTarget(count)
-	if count >= 2 then
-		return 2
-	elseif count == 1 then
-		return 1 -- 0.6.4–0.7.19 旧格式：唯一的 WJ 在前缀末尾，其左侧全是编号。
+--- 取「第 n 个 WJ 之前」的纯文本（Space 记作空格）。途中遇到 Str / Space 以外的内联（链接、强调、
+--- 行内代码……）返回 nil——编号前缀属地里不会有富文本，出现即说明这些 WJ 属于正文。
+local function textBeforeSentinel(inlines, n)
+	local parts = {}
+	local seen = 0
+	for _, el in ipairs(inlines) do
+		if el.t == "Str" then
+			local pos = 1
+			while true do
+				local s, e = el.text:find(WJ, pos, true)
+				if not s then
+					break
+				end
+				seen = seen + 1
+				if seen == n then
+					parts[#parts + 1] = el.text:sub(1, s - 1)
+					return table.concat(parts)
+				end
+				pos = e + 1
+			end
+			parts[#parts + 1] = el.text
+		elseif el.t == "Space" then
+			parts[#parts + 1] = " "
+		else
+			return nil
+		end
+	end
+	return nil
+end
+
+--- 旧单哨兵前缀里可能出现的字符（与插件 strip.ts 的字符类同口径）：序号字符 + 分隔标点 / 空白。
+local function codepointSet(chars)
+	local set = {}
+	for _, c in utf8.codes(chars) do
+		set[c] = true
+	end
+	return set
+end
+local NUMERAL_CHARS = codepointSet(
+	"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ〇零一二三四五六七八九十百千万亿兆"
+)
+local SEPARATOR_CHARS = codepointSet(" 	.,;:、，。．·：；)）】」』>]-")
+
+local function isCircled(c)
+	return (c >= 0x2460 and c <= 0x2473) or (c >= 0x3251 and c <= 0x325F) or (c >= 0x32B1 and c <= 0x32BF)
+end
+
+--- 首个 WJ 之前那段是否整段像编号（旧单哨兵格式）。宁可不剥也不吃正文：`参见 [[a#` 这类含链接 /
+--- 汉字正文的段一律否决，只留下「WJ 被清掉、文字原样」的结果。
+local function isLegacyPrefixText(text)
+	local hasNumeral = false
+	for _, c in utf8.codes(text) do
+		if NUMERAL_CHARS[c] or isCircled(c) then
+			hasNumeral = true
+		elseif not SEPARATOR_CHARS[c] then
+			return false
+		end
+	end
+	return hasNumeral
+end
+
+--- 该丢弃到第几个 WJ（含）为止，0 = 不动：
+--- - 标题以 WJ 起头（双哨兵）：第 2 个 WJ 之前全是纯文本且不含链接语法 → 2；否则（尾哨兵被毁，或第 2 个
+---   WJ 属于正文链接锚点）→ 1，只丢首哨兵、残缺序号作为可见文字留下，不吃正文。
+--- - 首个 WJ 在中间：其前一段整段像编号（0.6.4–0.7.19 旧单哨兵）→ 1；否则 → 0（WJ 属于正文）。
+local function pickTarget(inlines)
+	local count = countWordJoiners(inlines)
+	if count == 0 then
+		return 0
+	end
+	local head = inlines[1]
+	if head and head.t == "Str" and head.text:sub(1, #WJ) == WJ then
+		if count >= 2 then
+			local territory = textBeforeSentinel(inlines, 2)
+			if territory and not territory:find("[[", 1, true) and not territory:find("](", 1, true) then
+				return 2
+			end
+		end
+		return 1
+	end
+	local before = textBeforeSentinel(inlines, 1)
+	if before and isLegacyPrefixText(before) then
+		return 1
 	end
 	return 0
 end
@@ -137,9 +220,9 @@ local stripPrefix = {
 		if mode ~= "strip-prefix" then
 			return nil
 		end
-		local target = pickTarget(countWordJoiners(h.content))
+		local target = pickTarget(h.content)
 		if target == 0 then
-			return nil -- 无 WJ ⇒ 插件从未碰过这个标题，不动。
+			return nil -- 无插件前缀 ⇒ 不动（残余 WJ 由第三趟清掉）。
 		end
 		h.content = dropThroughSentinel(h.content, target)
 		return h

@@ -267,6 +267,36 @@ describe("hasUnclaimedForeignNumbering（迁移守卫探测，testplan J10）", 
 	});
 });
 
+describe("「非本插件」判定不看链接锚点里的 WJ（1.1.5，testplan E40）", () => {
+	const W = WORD_JOINER;
+	const link = `[[a#${W}1 ${W}概述]]`;
+
+	it("清理非本插件编号：手写编号 + 链接的标题照样被清（不因含 WJ 当成插件的）", () => {
+		expect(clearForeignNumberingContent(`## 1. 参见 ${link}`)).toBe(`## 参见 ${link}`);
+		expect(previewForeignNumberingCleanup(`## 1. 参见 ${link}`)).toEqual([
+			{ lineIndex: 0, before: `## 1. 参见 ${link}`, after: `## 参见 ${link}` },
+		]);
+	});
+
+	it("清理非本插件编号：插件自己的编号（含正文带链接的）仍一律不动", () => {
+		const doc = `## ${W}1 ${W}参见 ${link}\n## 1 ${W}旧单哨兵`;
+		expect(clearForeignNumberingContent(doc)).toBe(doc);
+		expect(previewForeignNumberingCleanup(doc)).toEqual([]);
+	});
+
+	it("迁移守卫：正文里一条带 WJ 的链接不算「插件接触过」，守卫照常拦截", () => {
+		expect(hasUnclaimedForeignNumbering(`## 1 红米\n\n见 ${link}`)).toBe(true);
+		expect(hasUnclaimedForeignNumbering(`## 1 红米 ${link}`)).toBe(true);
+	});
+
+	it("迁移守卫：真有插件痕迹（已编号标题 / 旧单哨兵 / 降级残留 / 注释内标题形残留）→ 不拦", () => {
+		expect(hasUnclaimedForeignNumbering(`## ${W}1 ${W}甲\n### 1.1 乙`)).toBe(false);
+		expect(hasUnclaimedForeignNumbering(`## 1 ${W}甲\n### 1.1 乙`)).toBe(false);
+		expect(hasUnclaimedForeignNumbering(`${W}1 ${W}降级\n## 1 乙`)).toBe(false);
+		expect(hasUnclaimedForeignNumbering(`%%\n## ${W}1 ${W}藏\n%%\n## 1 乙`)).toBe(false);
+	});
+});
+
 describe("clearNumberingContent — 跳过区域内的残留（M12，testplan E29）", () => {
 	const p = (n: string): string => `${WORD_JOINER}${n} ${WORD_JOINER}`;
 

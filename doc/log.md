@@ -41,6 +41,104 @@
 
 ---
 
+## 2026-09-25 把 master 的 stripPrefix 修复合进 M14（1.2.0，交接：claude/m14-virtual-mode）
+
+### 做了什么
+
+- 用户决定 1.1.5 **不单独发版**，修复随 1.2.0 一起发。把 master（`1a84d17`，含 `claude/fix-wj-midtext`）合进 M14 分支。
+- 冲突处理：
+  - `src/cleanup.ts` `hasUnclaimedForeignNumbering`：先走修复加的结构性证据（`CLAIMED_LINE_RE` 行首 WJ +
+    `hasPluginPrefix`），末行用 M14 的 `looksForeignNumbered`；M14 的 `isMostlyForeignNumbered` 原样保留，
+    它按 `!startsWith(WJ)` 判归属，与修复同一口径。
+  - 版本号文件取 1.2.0；`versions.json` **保留 `1.1.5` 条目**（仓库惯例：每次 bump 都登记，没发版的
+    1.0.26–1.0.32 也在列）。
+  - `log.md` / `status.jsonl`：修复周期块 / 概括行插在 M14 各块之上；两份 archive 以 M14 为准（已是超集）。
+  - `release/` 重建。
+- 同类排查：M14 新代码里判 WJ 归属的地方都只认行首 WJ。`computeVirtualNumbers` 的残留区间取自编号引擎
+  剥出的纯文本，合入修复后，E39 形态（尾哨兵被毁 + 标题里有带 WJ 的链接）的残留区间从「一直吞到链接锚点」
+  变成只含残缺前缀，自动受益；阅读视图 `decorateHeading` 只在首个文本节点里找尾哨兵（链接是独立元素），
+  不受影响。
+- `doc/release-notes/1.2.0.md` 补修复条目（中英）。
+- testplan 里 `M18` 有两行重名，合并前三方就都是这样，未动。
+- 本周期派发 1 次（quality-gate × 1）。
+
+### 没做什么
+
+- 没合并 master、没打 tag（发版须用户明确同意）。
+
+### 下一步
+
+- 发版前一轮开发（用户已选定）：H8（清全库 / 固化改走 `batchRewrite`）、「复制编号大纲」「复制当前小节链接」
+  两条命令、**内置大纲面板显示虚拟编号**（原登记为 M14 二期，用户要求提前）。模板同名提示**不做**——用户
+  认为 `default.json` 恒生效、冲突副本被忽略可以接受。
+
+### 验证方式
+
+- 分项跑（quality-gate）：`release` 通过；`npm test` 740 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows
+  既有伪影）；`lint`、`format:check`、`docs --check` 通过；`test:fuzz` 三块记分板通过（31.9s）。
+
+---
+
+## 2026-09-25 修复标题中间 WJ 被当旧单哨兵致标题开头被吃（1.1.5，交接：claude/fix-wj-midtext）
+
+### 做了什么
+
+用户实测复现的**数据丢失** bug（1.1.4 已上线即有）：标题**中间**含 WJ 时——典型来源是标题里放了指向
+「已编号标题」的链接，`displayAnchor` 把 WJ 写进锚点 `[[a#⁠1 ⁠概述]]`——编号时标题开头被吃：
+`## 参见 [[a#…]]` → `## ⁠1 ⁠1 ⁠概述]]`；超出编号区间的 H1 更被 `bareHeading` 定点循环蚕食成 `# 概述]]`。
+
+- **根因**：`strip.ts` 的 `stripPrefix` / `stripPrefixBroad` 把「首个 WJ 不在位置 0」一律当旧单哨兵，剥到该 WJ
+  之后。同类第二处：首哨兵在、尾哨兵被毁时，「第二个 WJ」可能是正文链接里的（E14 删后缀操作发生在带链接的
+  标题上），同样整段吃掉。
+- **修法（strip.ts）**：
+  - 新增 `isLegacyPrefixSegment`：首个 WJ 之前那段须**整段匹配**「前缀字面量? + 序号游程（段间必有间隔符）+
+    后缀字面量? + 标题间隔符*」且不含 `[[` / `](` 才当旧单哨兵剥；否则原样返回（宁可不剥）。序号样式恒取
+    全部（旧前缀可能写于另一模板，既有用例 `1.二.1 ⁠` 要求如此），安全性靠整段匹配 + 链接语法排除。
+  - 首哨兵在时，第二个 WJ 之前若有 `[[` / `](` → 视为尾哨兵被毁，走既有有界剥离愈合。
+  - **ReDoS**：初稿 `(?:[类]| )*` 在默认空格间隔符下指数回溯（长空白串实测卡死），改为：序号合成单字符类游程、
+    段间间隔符必选、被字符类覆盖的间隔符字面量不再作分支。加了 5000 字符的回归用例。
+  - 新增导出 `hasPluginPrefix`（只认行首哨兵或旧单哨兵）。
+- **同类排查（cleanup.ts）**：「清理非本插件编号」/ 预览 / 迁移守卫原按 `includes(WJ)` 判归属——手写
+  `## 1. 参见 [[a#…]]` 被当插件的跳过清理；**正文里一条带 WJ 的链接就废掉整份文件的迁移守卫**。改用
+  `hasPluginPrefix` + 「某行以 WJ 哨兵起头」的结构性证据。`cleanDemotedResidue` 只处理 WJ 起头行，靠
+  stripPrefix 修复自动受益；`main.ts` 的 WJ 用法（剪贴板净化、空标题 `endsWith`）无此问题。
+- **Pandoc filter**（`assets/pandoc/strip-autoheadings.lua`）同病：本机 pandoc 实跑，未编号标题
+  `# 参见 [[a#…]]` 导出成 `# 概述]]`。`pickTarget` 改为：行首 WJ 才认双哨兵（前缀属地须纯文本且无链接语法），
+  中间 WJ 仅当前一段全是序号 / 分隔字符才认旧单哨兵；已实跑验证 6 种标题（testplan O5h）。
+- **标记契约 / spec 订正**：契约原称「WJ 不会出现在正文」「未编号标题不含 WJ」与事实不符（链接锚点带 WJ），
+  改为「只有标题首字符的 WJ 才标记前缀」；「剥整前缀」配方从全局 `/…/g` 改为行首锚定（否则会剥掉标题内链接
+  锚点的 WJ 对）。这是事实描述与配方的订正，格式本身未变，不涉主版本迁移。spec §2.5 配套取舍、§A 契约摘要同步。
+- **顺修 fuzz 超时**：`random_sequence.test.ts` 的内联 30s 超时**覆盖** `fuzz.mjs` 的 `--testTimeout`，M13
+  记分板 5000×80 在本机约 25–30s 撞线（与本修复无关，已对照基线同速）。改为内联读 `AAH_FUZZ_TIMEOUT`，
+  `fuzz.mjs` 传 600000。
+- testplan：新增 E37–E41、O5h（先 ❌ 后 ✅），§3.1 已修 bug #15。
+- 本周期派发 2 次（quality-gate × 2）。
+
+### 没做什么
+
+- 基于 master 做（独立 worktree `../obsidian-auto-headings-wjfix`），**未碰 M14 分支**。
+- 未改 M14 的 `clearPluginNumberingContent` / `computeVirtualNumbers`（M14 分支，已刻意只认 WJ 起头）；前者调
+  `stripPrefixBroad`，合并后自动获得「第二个 WJ 属链接」防护。
+- 未打 tag / 未发版。
+
+### 下一步
+
+- 打 1.1.5 tag 发版（Release 工作流需 `doc/release-notes/1.1.5.md`，本周期未写）。
+- **M14 分支合回 master 前先 merge 本修复**：预计冲突 ① `cleanup.ts` `hasUnclaimedForeignNumbering` 末行（M14 改成
+  `looksForeignNumbered`，本修复改了其上方几行）——保留两边：先结构性证据判定，末行用 `looksForeignNumbered`；
+  ② 版本号文件（M14 已 1.2.0，取 1.2.0）；③ log.md / status.jsonl 周期块并存。M14 新增的 `isMostlyForeignNumbered`
+  用 `!startsWith(WJ)` 判归属，与本修复口径一致。
+
+### 验证方式
+
+- `npm test`：657 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows 既有伪影）；`lint`、`format:check` 通过；
+  `npm run test:fuzz` 5000×80 通过（标题索引记分板 ~25.6s）。
+- 回归用例：`numbering.test.ts`「标题中间的 WJ 属于正文」、`known_bugs.test.ts` E37–E41、`cleanup.test.ts`「非本插件
+  判定不看链接锚点里的 WJ」。
+- Pandoc：`pandoc x.md -t markdown -L assets/pandoc/strip-autoheadings.lua`（两种模式）实跑核对 O5h。
+
+---
+
 ## 2026-09-25 M14 虚拟编号模式 周期 4（文档部分）：对外文档与发版准备（1.2.0）
 
 交接人：`claude/m14-virtual-mode`
@@ -101,92 +199,6 @@
 ### 验证方式
 
 - `npm run preflight`（见本周期提交前的 quality-gate 报告）。
-
----
-
-## 2026-09-25 M14 虚拟编号模式：真机实测修复（1.2.0）
-
-交接人：`claude/m14-virtual-mode`
-
-### 做了什么
-
-用户反馈「渲染问题很多，切换和显示有种半掺杂的感觉」，授权我用电脑操作直接在 Oblivion 库里实测。只在新建的
-`Claude测试/` 文件夹里操作（规则第 4 行 `Claude测试/` → 仅显示），测了实时预览 / 源码 / 阅读视图、模式来回切换、
-确认框、残留、手写编号、复制、PDF 导出、整篇与小节嵌入、2000 标题大文件。发现并修复：
-
-- **阅读视图新旧编号混杂**（「半掺杂」的主因）：Obsidian 只重渲染改过的段落，前面插一个标题后，后面没改的
-  段落还挂着旧编号。`readingView.ts` 改为 `VirtualReadingRenderer`：每个含标题的段落登记为 `MarkdownRenderChild`，
-  段落重渲染看到新原文、元数据更新、设置变化时，把同一篇的登记段落按各自当前的段落信息原地重新核对；编号 span
-  可反复加 / 去，残留前缀去编号时还回文本。设置变化不再整页 `rerender`。参考了 Heading Decorator 的段落登记机制
-  （MIT，只借鉴思路）。
-- **源码模式显示虚拟编号**：会让人以为编号写进了文件。改为只在实时预览显示（`editorLivePreviewField`）。
-- **手写编号**：原先只要一个标题像手写编号，整篇就不显示，而仅显示模式永远没有解除的出口（`## 2024 总结`
-  就能卡死）。改为过半判定 `isMostlyForeignNumbered`；被拦下时打开文件弹仅显示版提示，清理框只剥不写。
-- **「已清除 0 个文件」**：只有「仅显示 → 写入」时也跑了清除并提示。没有离开写入的文件就不清除、不提示；
-  确认框的清除开关也只在有文件离开写入时才默认打开。
-- **小节嵌入从「一」重数**：段落信息只含片段。新增 `locateSection`：与文件全文比对，是其中一段就按全文算并加
-  行号偏移，对不上按文本兜底。
-- 真机确认正常的：新增 / 删除标题后编辑视图即时更新、确认框计数、切换写入 / 仅显示时已打开文件只显示一层编号、
-  清除只剥插件编号、残留虚线提示、复制不带编号、PDF 带编号、大文件流畅。
-- 测试：`virtual-render.test` 重写阅读视图部分（段落登记、插入标题回归、删除标题回归、设置刷新、卸载、小节
-  嵌入、`locateSection`），`cleanup.test` +4（过半判定），`main.test` +3。反向验证：去掉「看到新原文就重新核对」，
-  插入标题回归用例变红。
-- 本周期派发 1 次（quality-gate × 1：收尾 preflight + fuzz）；实测与修复由主模型完成。
-
-### 没做什么
-
-- 中文输入法组合：本机输入法被系统切到 ENG，电脑操作切不回来，留给用户手测。
-- 悬浮预览、移动端没测。
-- 确认框在用户主题下半透明（背后文字透出），原有批量重编号确认框也一样，判断为主题问题，未改。
-- 发现用户库里 `templates/` 有 `default.json` 与 `default(1).json` 两个同名「默认」模板（疑似 iCloud 冲突副本），
-  未处理，已告知用户。
-
-### 下一步
-
-- 用户手测输入法、悬浮预览、移动端；没问题就进周期 4（README / 使用指南 / release notes / 合并 / tag）。
-- 用户测试完可以删掉 `Claude测试/` 文件夹和第 4 条规则。
-
-### 验证方式
-
-- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机见上。
-
----
-
-## 2026-09-25 M14 虚拟编号模式 周期 3：设置界面与模式切换（1.2.0）
-
-交接人：`claude/m14-virtual-mode`
-
-### 做了什么
-
-- **模式切换的纯逻辑**（新建 `src/virtual/modeSwitch.ts`）：`diffNumberingModes(before, after, paths)` 比较改动前后
-  每个文件的有效模式，得出 `toVirtual` / `toNone` / `toWrite`；不区分入口（改下拉框、删规则、改路径、改「不编号」、
-  拖拽），天然排除被更具体规则覆盖的文件。`cloneRules`、`isQuietTransition`。
-- **main.ts**：批量通道重构成接收变换函数的 `batchRewrite`（编辑器事务 / `vault.process` 两条通道不变，含 backlink
-  同步），`renumberFiles` 与新的 `clearPluginNumberingInFiles` 共用；`batchRenumberRule` 改用 `renumberFiles`。
-  新增 `planModeTransition`（「离开写入」只计真有插件编号的文件，内容优先取已打开编辑器）与
-  `applyModeTransition`（按勾选清除 / 立即写入，链接 Notice 汇总一次）。`cleanup.ts` 新增 `hasPluginNumbering`。
-- **设置界面**（`settings/tabs/PathRules.ts`）：每行加「模式」下拉框（写入文件 / 仅显示，「不编号」行置灰）；
-  「仅显示」行的批量重编号置灰；所有改规则的操作统一走 `commitRules`：在副本上试改 → 有文件换模式就弹
-  `ModeTransitionModal`（两个开关：清除本插件写入的编号 / 立即写入）→ 确认后才替换设置、落盘、执行；取消或
-  Esc 规则原样。改路径时没改动就不存盘。新规则的模式跟随根规则。表格加一列（CSS 网格与最小宽度）。
-- i18n 新增 13 个 key；固化按钮说明补「仅显示的编号会随之消失」。spec §3.22 补「实现（周期 3 定稿）」。
-- **测试**：新建 `modeswitch.test.ts`（6 条）；`main.test` +4（规划只列真有编号的文件、清除只剥插件编号且不碰更具体
-  规则、链接跟随、不勾清除则不动、立即写入）。
-- 已部署到用户测试库。本周期派发 1 次（quality-gate × 1：收尾 preflight）。
-
-### 没做什么
-
-- 确认框、下拉框的真机交互没验证；周期 2 的渲染也还在等用户实测反馈。
-- 对外文档（README、使用指南、release notes）在周期 4。
-
-### 下一步
-
-- 等用户真机反馈（渲染 V27–V31 + 设置界面切换 V15–V19），按反馈修；然后周期 4：README / 使用指南 / release
-  notes 1.2.0、合并 master（注意与 stripPrefix 修复分支的版本号与 docs 冲突）、打 tag。
-
-### 验证方式
-
-- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机按下一步清单。
 
 ---
 

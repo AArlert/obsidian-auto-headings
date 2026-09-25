@@ -18,21 +18,28 @@ import { runHeadingIndexSequence } from "./uvm/heading-index";
 const RUNS = Number(process.env.AAH_FUZZ_RUNS ?? 500);
 const OPS = Number(process.env.AAH_FUZZ_OPS ?? 60);
 const BASE_SEED = Number(process.env.AAH_FUZZ_SEED ?? 1);
+// 用例内联超时会**覆盖** CLI 的 `--testTimeout`，故重型压测（scripts/fuzz.mjs）须经环境变量放宽，
+// 否则 5000×80 的 M13 记分板在慢机上撞 30s 上限。
+const TIMEOUT = Number(process.env.AAH_FUZZ_TIMEOUT ?? 30000);
 
 describe("约束随机序列（UVM 风格状态转移压测）", () => {
-	it(`${RUNS} 条序列 × ${OPS} 步：参考模型记分板全程一致`, () => {
-		const cov = new Coverage();
-		// 单跑模式（RUNS=1 + 指定 SEED）时只跑那一条，便于复现失败种子。
-		for (let i = 0; i < RUNS; i++) {
-			// 不抛即通过；抛出的 SequenceError 含种子 + 操作轨迹 + 三方文本。
-			runSequence(BASE_SEED + i, OPS, cov, DEFAULT_GEN);
-		}
-		// 仅在跑了足够多序列时才要求覆盖率闭合（单跑复现模式不强求）。
-		if (RUNS >= 100) {
-			expect(cov.gaps(), `功能覆盖率未闭合（缺失 bin）`).toEqual([]);
-			expect(cov.triggers).toBeGreaterThan(RUNS); // 平均每条序列 >1 次触发
-		}
-	}, 30000); // 放宽超时：默认 500×60 通常 <2s，但 CI 机器波动或经 AAH_FUZZ_* 调大时留足余量。
+	it(
+		`${RUNS} 条序列 × ${OPS} 步：参考模型记分板全程一致`,
+		() => {
+			const cov = new Coverage();
+			// 单跑模式（RUNS=1 + 指定 SEED）时只跑那一条，便于复现失败种子。
+			for (let i = 0; i < RUNS; i++) {
+				// 不抛即通过；抛出的 SequenceError 含种子 + 操作轨迹 + 三方文本。
+				runSequence(BASE_SEED + i, OPS, cov, DEFAULT_GEN);
+			}
+			// 仅在跑了足够多序列时才要求覆盖率闭合（单跑复现模式不强求）。
+			if (RUNS >= 100) {
+				expect(cov.gaps(), `功能覆盖率未闭合（缺失 bin）`).toEqual([]);
+				expect(cov.triggers).toBeGreaterThan(RUNS); // 平均每条序列 >1 次触发
+			}
+		},
+		TIMEOUT,
+	); // 放宽超时：默认 500×60 通常 <2s，但 CI 机器波动或经 AAH_FUZZ_* 调大时留足余量。
 
 	/**
 	 * explore 幂等性记分板：放开字母样式 / 脏标题 / 手动破坏前缀，断言
@@ -43,21 +50,29 @@ describe("约束随机序列（UVM 风格状态转移压测）", () => {
 	 * U3（字母样式吞英文起头标题）属设计取舍（见 testplan §3.2），explore 模式通过
 	 * `EXPLORE_GEN` 内部约束规避，不影响本测试。
 	 */
-	it(`[explore] ${RUNS}×${OPS}：幂等性记分板（脏输入全覆盖回归）`, () => {
-		const cov = new Coverage();
-		for (let i = 0; i < RUNS; i++) {
-			runSequence(BASE_SEED + i, OPS, cov, EXPLORE_GEN);
-		}
-	}, 30000);
+	it(
+		`[explore] ${RUNS}×${OPS}：幂等性记分板（脏输入全覆盖回归）`,
+		() => {
+			const cov = new Coverage();
+			for (let i = 0; i < RUNS; i++) {
+				runSequence(BASE_SEED + i, OPS, cov, EXPLORE_GEN);
+			}
+		},
+		TIMEOUT,
+	);
 
 	/**
 	 * M13 标题索引压测（uvm/heading-index.ts）：随机「setFile / removeFile / renameFile /
 	 * loadInitial」序列 + 参考模型（朴素 Map + filter + 排序）记分板对拍，专逮排序 / 二分 /
 	 * 增量更新不同步。内存操作很快，规模沿用 RUNS×OPS。
 	 */
-	it(`[M13] ${RUNS} 条 × ${OPS} 步：标题索引参考模型记分板全程一致`, () => {
-		for (let i = 0; i < RUNS; i++) {
-			runHeadingIndexSequence(BASE_SEED + i, OPS);
-		}
-	}, 30000);
+	it(
+		`[M13] ${RUNS} 条 × ${OPS} 步：标题索引参考模型记分板全程一致`,
+		() => {
+			for (let i = 0; i < RUNS; i++) {
+				runHeadingIndexSequence(BASE_SEED + i, OPS);
+			}
+		},
+		TIMEOUT,
+	);
 });

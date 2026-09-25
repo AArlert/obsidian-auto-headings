@@ -13,6 +13,7 @@
 import { parseHeadings } from "./parser";
 import {
 	cleanDemotedResidue,
+	hasPluginPrefix,
 	stripForeignNumbering,
 	stripPrefixBroad,
 	WORD_JOINER,
@@ -115,8 +116,8 @@ export function hasPluginNumbering(content: string): boolean {
 /**
  * 剥离内容中**外来 / 手写**（**非本插件写入**）的标题编号前缀，返回清理后的全文（0.6.6，spec §3.10）。
  *
- * 与 {@link clearNumberingContent} 的区别：本函数**只动「不含 Word Joiner」的标题**——含 WJ 的是本插件
- * 自己写的编号，**原样保留不动**；不含 WJ 的标题用 {@link stripForeignNumbering}（覆盖括号 / `第` / 章节
+ * 与 {@link clearNumberingContent} 的区别：本函数**只动不带插件前缀的标题**（{@link hasPluginPrefix}）——带的是
+ * 本插件自己写的编号，**原样保留不动**；其余标题（含「中间有链接锚点 WJ」的）用 {@link stripForeignNumbering}（覆盖括号 / `第` / 章节
  * 量词等更多手写惯例）剥一层外来编号。用于「我有一批手写 / 导入的编号，想清掉好让插件接管」的场景
  * （方案 A 下插件不会自动吸收无 WJ 的手写编号，故提供此主动清理命令）。
  *
@@ -136,8 +137,9 @@ export function clearForeignNumberingContent(
 	}
 	const lines = content.split("\n");
 	for (const h of headings) {
-		// 含 WJ = 本插件写的编号 → 不动（「非本插件」语义）。
-		if (h.rawText.includes(WORD_JOINER)) {
+		// 带插件前缀 = 本插件写的编号 → 不动（「非本插件」语义）。不能只看「含不含 WJ」：标题中间
+		// 链接锚点里的 WJ 不是插件前缀，手写 `1. 参见 [[a#⁠1 ⁠概述]]` 照样该清（testplan E40）。
+		if (hasPluginPrefix(h.rawText)) {
 			continue;
 		}
 		// 用户在清理预览确认框里取消勾选的行：保留原文不剥离（testplan J17），插件仍会在下一步
@@ -152,6 +154,9 @@ export function clearForeignNumberingContent(
 	return lines.join("\n");
 }
 
+/** 插件接触过的行：去前导空白（及可选的 `#` 段）后以 WJ 哨兵起头——已编号标题或降级残留。 */
+const CLAIMED_LINE_RE = new RegExp(`^[ \\t]*(?:#{1,6}[ \\t]+)?${WORD_JOINER}`, "m");
+
 /**
  * 只读探测：本文件是否「插件从未接触过」且含疑似外来编号（迁移守卫，testplan J10）。
  *
@@ -162,8 +167,8 @@ export function clearForeignNumberingContent(
  * 语义执行。
  *
  * 判定条件**两者都满足**才为 true：
- * - 全文完全不含 {@link WORD_JOINER}（插件从未给这份内容写过编号，避免把「已被本插件接管、只是新增
- *   了一个以数字起头的标题」误判为迁移场景，见 spec §3.10 相邻讨论）；
+ * - 插件从未给这份内容写过编号：没有任何行以 {@link WORD_JOINER} 哨兵起头、也没有标题带插件前缀（避免把
+ *   「已被本插件接管、只是新增了一个以数字起头的标题」误判为迁移场景，见 spec §3.10 相邻讨论）；
  * - 至少一个标题被 {@link stripForeignNumbering} 判定为「像外来编号」（剥离结果与原文不同）。
  *
  * **已知风险**：与 {@link stripForeignNumbering} 共享同一误伤面（如 `## API 设计`）——但落在这里
@@ -175,10 +180,16 @@ export function clearForeignNumberingContent(
  * 标题编号」的误导提示。守卫只该对**真的剥掉了编号**的情形生效，不该对空白归一化生效。
  */
 export function hasUnclaimedForeignNumbering(content: string): boolean {
-	if (content.includes(WORD_JOINER)) {
+	// 「插件接触过」只认结构性证据：某行（含注释 / 围栏里的标题形残留、降级残留）以 WJ 哨兵起头，或某个
+	// 标题带插件前缀（含旧单哨兵）。**不能**看全文含不含 WJ：`displayAnchor` 会把 WJ 写进任何文件里指向
+	// 已编号标题的链接（`[[a#⁠1 ⁠概述]]`），一条链接就足以废掉整份文件的守卫（1.1.5 修，testplan E40）。
+	if (CLAIMED_LINE_RE.test(content)) {
 		return false;
 	}
 	const headings = parseHeadings(content);
+	if (headings.some((h) => hasPluginPrefix(h.rawText))) {
+		return false;
+	}
 	return headings.some((h) => looksForeignNumbered(h.rawText));
 }
 
@@ -224,7 +235,7 @@ export interface ForeignNumberingPreviewItem {
 /**
  * 预览 {@link clearForeignNumberingContent} 会实际改动哪些标题（迁移守卫 Notice 点击后的清理预览
  * 确认框用，testplan J14）：只收录**真的会被剥掉编号**的标题——
- * - 含 WJ（本插件自己写的编号）跳过，与 {@link clearForeignNumberingContent} 同一「非本插件」语义；
+ * - 带插件前缀（{@link hasPluginPrefix}，本插件自己写的编号）跳过，与 {@link clearForeignNumberingContent} 同一「非本插件」语义；
  * - 剥离结果与原文本无实质差异（仅行尾空白被 {@link stripForeignNumbering} 的归一化步骤吃掉，
  *   同 {@link hasUnclaimedForeignNumbering} J12 修复的比较口径）的也跳过，避免预览列表里出现
  *   「看起来什么都没变」的对照，误导用户以为会有改动。
@@ -241,7 +252,7 @@ export function previewForeignNumberingCleanup(content: string): ForeignNumberin
 	const headings = parseHeadings(content);
 	const items: ForeignNumberingPreviewItem[] = [];
 	for (const h of headings) {
-		if (h.rawText.includes(WORD_JOINER)) {
+		if (hasPluginPrefix(h.rawText)) {
 			continue;
 		}
 		const stripped = stripForeignNumbering(h.rawText);
