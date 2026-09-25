@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-09-24","version":"1.1.4","summary":"README 双语重写为商店门面（卖点+上手+功能+FAQ，~95 行，无图片占位、绝对链接）；原技术细节平移至新建 doc/user-guide.md / .zh.md；订正已过时的审核状态与英文命令名。纯文档不 bump。"}
 {"type":"log","date":"2026-09-13","version":"1.1.4","summary":"修复 issue #9：scan.ts 围栏状态机只比符号不比数量，嵌套围栏（外4内3）误判闭合致标题编号被清零。补数量校验（CommonMark 规则）+ 回归测试，testplan/spec 同步。门槛全绿（639/640，1 既有 locale 伪影），fuzz 全绿。"}
 {"type":"log","date":"2026-08-19","version":"1.1.3","summary":"Community Hub 审核修复：no-static-styles-assignment 与 3 处 prefer-create-el 改用 setCssStyles/createEl；editor-paste 的 defaultPrevented 检查内联到注册处。声明式设置 API 另立 Milestone、未做。"}
 {"type":"log","date":"2026-08-19","version":"1.1.2","summary":"M27：PR #8 审核修复——行级括号配对表消除未闭合括号的 O(L²) 卡死；`[[…]]` 整段跳过防括号段双改写；注释区并入排除。testplan 加 M27，backlinks 42/42，门槛除 locale 伪影全绿。"}
