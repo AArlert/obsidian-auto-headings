@@ -56,6 +56,12 @@ export class Coverage {
 	prefixMutated = false;
 	/** 曾把已编号标题降级为正文（删光 `#`），触发 ③ 残留清理路径（0.7.20）。 */
 	demoted = false;
+	/** 曾翻转路径规则的编号模式（M14，写入 ↔ 仅显示）。 */
+	ruleModeToggled = false;
+	/** 曾在仅显示文件上触发（M14 虚拟记分板真正跑过）。 */
+	virtualTrigger = false;
+	/** 仅显示文件触发时文件里还留着插件写过的前缀（M14 残留区间被真正算过）。 */
+	virtualStale = false;
 	/** 曾在「前后缀非空」状态下翻转 inherit（explore，验证 B8）。 */
 	inheritWithAffix = false;
 	/** 曾发生过标题锚点改名（编号改写标题 → Backlink 改名表非空，M7）。 */
@@ -136,6 +142,7 @@ export class Coverage {
 			"editRulePattern",
 			"setRuleTemplate",
 			"reorderRule",
+			"setRuleMode",
 			"switchFile",
 			"manualTrigger",
 			"trigger",
@@ -172,6 +179,9 @@ export class Coverage {
 		if (!this.levelJump) missing.push("level-jump");
 		if (!this.selfEatingTitle) missing.push("self-eating-title");
 		if (!this.demoted) missing.push("demote-heading");
+		if (!this.ruleModeToggled) missing.push("rule-mode-toggled");
+		if (!this.virtualTrigger) missing.push("virtual-trigger");
+		if (!this.virtualStale) missing.push("virtual-stale");
 		if (!this.inPlaceEdited) missing.push("in-place-edit");
 		if (!this.backlinkRename) missing.push("backlink-rename");
 		// 缺口①②新增 bin。

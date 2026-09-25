@@ -287,8 +287,8 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 
 .ah-path-row {
 	display: grid;
-	/* 拖拽手柄 行号 路径模式 模板 批量重编号 删除 */
-	grid-template-columns: 24px 32px 1fr 1fr 28px 28px;
+	/* 拖拽手柄 行号 路径模式 模板 编号模式（M14） 批量重编号 删除 */
+	grid-template-columns: 24px 32px 1fr 1fr minmax(96px, 0.8fr) 28px 28px;
 	gap: 6px;
 	align-items: center;
 }
@@ -800,7 +800,7 @@ button.ah-tab.ah-tab-active:hover {
 }
 
 .ah-path-table .ah-path-row {
-	min-width: 480px;
+	min-width: 580px;
 }
 
 /* —— 「路径模板」TAB 分区节头视觉强化（0.7.16，testplan L20）——
@@ -934,4 +934,28 @@ button.ah-tab.ah-tab-active:hover {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	max-width: 40em;
+}
+
+/* M14 虚拟编号（仅显示模式，spec §3.22）：编号只在界面上显示，不进文件。
+   颜色与字体跟随标题；不可选中，复制标题时不会带上编号。 */
+.ah-virtual-number {
+	color: inherit;
+	font: inherit;
+	-webkit-user-select: none;
+	user-select: none;
+	white-space: pre;
+}
+
+/* 文件里还留着本插件以前写入的旧编号：虚线下划线提示，悬停有说明。 */
+.ah-virtual-number--stale {
+	text-decoration: underline dotted var(--text-muted);
+	text-underline-offset: 0.2em;
+	cursor: help;
+}
+
+/* 仅显示模式在内置大纲面板里的编号（1.2.0）：大纲每次刷新都会重写条目文字，
+   所以编号只作为属性挂在条目上、由 ::before 画出（见 src/virtual/outlineView.ts）。 */
+.tree-item-inner[data-ah-number]::before {
+	content: attr(data-ah-number);
+	white-space: pre;
 }

@@ -13,11 +13,15 @@ import {
 	findDuplicatePatternIndex,
 	hasRootRule,
 	listImmediateChildren,
+	NO_NUMBERING_TEMPLATE,
+	normalizeRuleModes,
 	parentDir,
 	type PathCandidate,
 	type PathRule,
+	resolveNumberingMode,
 	resolvePathRule,
 	ruleMatches,
+	ruleMode,
 	ruleSpecificity,
 } from "../../src/pathrules";
 
@@ -340,5 +344,44 @@ describe("browseDirForInput（testplan K14：re-click 已配置行仍进分层�
 
 	it("尾斜杠但不是真实文件夹（新建时手输、或已删除）：null → 交给扁平搜索", () => {
 		expect(browseDirForInput("尚不存在/", folderPaths)).toBeNull();
+	});
+});
+
+describe("M14：编号模式解析（testplan V3 / V7）", () => {
+	const rules: PathRule[] = [
+		{ pattern: "/", template: "默认", mode: "virtual" },
+		{ pattern: "Papers/", template: "默认", mode: "write" },
+		{ pattern: "Papers/draft.md", template: "默认", mode: "virtual" },
+		{ pattern: "daily/", template: NO_NUMBERING_TEMPLATE, mode: "virtual" },
+	];
+
+	it("V7：与 resolvePathRule 同一套具体度——文件 ＞ 文件夹 ＞ 根", () => {
+		expect(resolveNumberingMode(rules, "Notes/b.md")).toBe("virtual");
+		expect(resolveNumberingMode(rules, "Papers/a.md")).toBe("write");
+		expect(resolveNumberingMode(rules, "Papers/draft.md")).toBe("virtual");
+	});
+
+	it("V7：「不编号」规则与无规则命中都返回 null（与 mode 字段无关）", () => {
+		expect(resolveNumberingMode(rules, "daily/x.md")).toBeNull();
+		expect(resolveNumberingMode([], "a.md")).toBeNull();
+	});
+
+	it("V3：缺省 mode 即写入——老数据零迁移", () => {
+		expect(resolveNumberingMode([{ pattern: "/", template: "默认" }], "a.md")).toBe("write");
+		expect(ruleMode({ pattern: "/", template: "默认" })).toBe("write");
+	});
+
+	it("V3：归一化删掉非法 mode，合法值原样保留", () => {
+		const raw = [
+			{ pattern: "/", template: "默认", mode: "display" },
+			{ pattern: "a/", template: "默认", mode: "virtual" },
+			{ pattern: "b/", template: "默认", mode: "write" },
+			{ pattern: "c/", template: "默认" },
+		] as unknown as PathRule[];
+		normalizeRuleModes(raw);
+		expect(raw[0]).toEqual({ pattern: "/", template: "默认" });
+		expect(raw[1].mode).toBe("virtual");
+		expect(raw[2].mode).toBe("write");
+		expect("mode" in raw[3]).toBe(false);
 	});
 });

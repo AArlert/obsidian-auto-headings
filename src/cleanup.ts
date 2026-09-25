@@ -68,6 +68,52 @@ export function clearNumberingContent(content: string, options: CleanupOptions =
 }
 
 /**
+ * 只剥离**本插件写入**（带 Word Joiner 标记）的编号前缀，手写 / 外来编号原样保留（M14，spec.md §3.22）。
+ *
+ * 用于「写入 → 仅显示」的模式切换与「清除本文件残留编号」命令。与 {@link clearNumberingContent} 的区别：
+ * - 只动**以 WJ 开头**的标题：按标记契约，插件前缀以首哨兵打头；这些行用全样式剥离器剥净（含尾哨兵
+ *   被毁的残缺前缀）。其余标题一个字节都不动——批量切换模式时不能顺手吃掉用户手写的 `1.1`，也不能
+ *   把标题中间的 WJ（如指向写入文件标题的链接 `[[#⁠1 ⁠概述]]`）误当前缀截断。0.7.20 以前的单哨兵
+ *   旧格式（WJ 在前缀之后）不认：1.0 上架时已是双哨兵，公开用户没有这种数据。
+ * - 降级残留只清正文与注释块，**不进围栏**：与自动路径同一口径（spec §3.17），围栏里的 WJ 可能是用户
+ *   有意写的代码示例，批量操作不该碰。
+ * - 不碰 frontmatter（不写 `fm:false`）：写了反而会关掉虚拟渲染。
+ *
+ * @param content 待清除的 Markdown 文件全文。
+ * @param options 可选的前后缀候选（传入全模板前后缀并集可提高残缺前缀的识别率）。
+ * @returns 剥除插件前缀后的全文；无插件前缀时原样返回（字节不变）。
+ */
+export function clearPluginNumberingContent(content: string, options: CleanupOptions = {}): string {
+	if (!content.includes(WORD_JOINER)) {
+		return content;
+	}
+	const prefixes = options.strippablePrefixes ?? [];
+	const suffixes = options.strippableSuffixes ?? [];
+	const lines = content.split("\n");
+	const headingLines = new Set<number>();
+	for (const h of parseHeadings(content)) {
+		headingLines.add(h.lineIndex);
+		if (!h.rawText.startsWith(WORD_JOINER)) {
+			continue;
+		}
+		const text = stripPrefixBroad(h.rawText, prefixes, suffixes);
+		lines[h.lineIndex] = `${"#".repeat(h.level)} ${text}`;
+	}
+	cleanDemotedResidue(
+		lines,
+		headingLines,
+		(paragraph) => stripPrefixBroad(paragraph, prefixes, suffixes),
+		{ comments: true, fences: false },
+	);
+	return lines.join("\n");
+}
+
+/** 内容里是否有本插件写入的编号（{@link clearPluginNumberingContent} 会不会改动它）。 */
+export function hasPluginNumbering(content: string): boolean {
+	return content.includes(WORD_JOINER) && clearPluginNumberingContent(content) !== content;
+}
+
+/**
  * 剥离内容中**外来 / 手写**（**非本插件写入**）的标题编号前缀，返回清理后的全文（0.6.6，spec §3.10）。
  *
  * 与 {@link clearNumberingContent} 的区别：本函数**只动不带插件前缀的标题**（{@link hasPluginPrefix}）——带的是
@@ -144,7 +190,36 @@ export function hasUnclaimedForeignNumbering(content: string): boolean {
 	if (headings.some((h) => hasPluginPrefix(h.rawText))) {
 		return false;
 	}
-	return headings.some((h) => stripForeignNumbering(h.rawText) !== h.rawText.replace(/\s+$/, ""));
+	return headings.some((h) => looksForeignNumbered(h.rawText));
+}
+
+/**
+ * 某个标题的原始文本看起来是否带手写 / 外来编号（{@link stripForeignNumbering} 真的剥掉了东西；
+ * 比较前去掉行尾空白，见 {@link hasUnclaimedForeignNumbering} 的 1.0.15 修复说明）。
+ */
+export function looksForeignNumbered(rawText: string): boolean {
+	return stripForeignNumbering(rawText) !== rawText.replace(/\s+$/, "");
+}
+
+/**
+ * 仅显示模式的外来编号判定（M14，spec §3.22）：**超过一半**的标题像手写编号，才算整篇带外来编号、
+ * 不显示虚拟编号（否则会叠出两套数字）。
+ *
+ * 为什么不沿用写入模式「一个就算」的 {@link hasUnclaimedForeignNumbering}：写入模式下用户在清理框里
+ * 确认一次，插件写入编号后文件含 WJ，守卫就永久解除；仅显示模式永不写文件，没有这个出口——一个
+ * `## 2024 总结` 就会让整篇永远没有编号。按多数判定后：从别的编号插件迁来、每个标题都带编号的
+ * 笔记照样被拦下；偶尔一个以数字开头的标题照常编号，与写入模式对它的处理（方案 A）一致。
+ * 以 WJ 打头的标题是本插件写过的残留，不算外来编号。
+ */
+export function isMostlyForeignNumbered(content: string): boolean {
+	const headings = parseHeadings(content);
+	if (headings.length === 0) {
+		return false;
+	}
+	const foreign = headings.filter(
+		(h) => !h.rawText.startsWith(WORD_JOINER) && looksForeignNumbered(h.rawText),
+	).length;
+	return foreign * 2 > headings.length;
 }
 
 /** {@link previewForeignNumberingCleanup} 单条对照项：某标题清理前后的完整行文本。 */

@@ -93,6 +93,17 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 				}),
 		);
 
+	// —— 大纲里显示仅显示模式的编号（1.2.0，默认开，见 virtual/outlineView.ts）——
+	new Setting(containerEl)
+		.setName(t.outlineNumbersName)
+		.setDesc(t.outlineNumbersDesc)
+		.addToggle((toggle) =>
+			toggle.setValue(plugin.settings.showOutlineNumbers).onChange(async (value) => {
+				plugin.settings.showOutlineNumbers = value;
+				await plugin.saveSettings(); // saveSettings 会刷新全部视图，大纲编号随即出现 / 消失。
+			}),
+		);
+
 	// ==== 分区：链接维护 ====
 	new Setting(containerEl)
 		.setName(t.sectionLinking)

@@ -29,6 +29,19 @@ export interface PathRule {
 	 * 或伪模板哨兵 {@link NO_NUMBERING_TEMPLATE}（「不编号」）。
 	 */
 	template: string;
+	/**
+	 * 编号模式（M14，见 spec.md §3.22）：`"write"` 把编号写进文件（历史行为），`"virtual"` 只在
+	 * Obsidian 里显示、永不写文件。**缺省即 `"write"`**——老数据没有这个字段，零迁移。
+	 */
+	mode?: NumberingMode;
+}
+
+/** 编号模式：写入文件 / 仅显示（M14）。 */
+export type NumberingMode = "write" | "virtual";
+
+/** 某条规则的实际模式：只认 `"virtual"`，其余（缺省、`"write"`、非法值）一律按写入处理。 */
+export function ruleMode(rule: PathRule): NumberingMode {
+	return rule.mode === "virtual" ? "virtual" : "write";
 }
 
 /**
@@ -138,6 +151,32 @@ export function resolvePathRule(rules: PathRule[], filePath: string): PathRule |
 		}
 	});
 	return best;
+}
+
+/**
+ * 解析某文件的编号模式（M14，见 spec.md §3.22）：取 {@link resolvePathRule} 选中的有效规则的模式。
+ * 无任何规则匹配、或有效规则是「不编号」伪模板时返回 `null`——该文件既不写也不显示。
+ * frontmatter `true` 不改变这个结论（「不编号」规则下本就没有可用模板，与写入模式一致）。
+ */
+export function resolveNumberingMode(rules: PathRule[], filePath: string): NumberingMode | null {
+	const rule = resolvePathRule(rules, filePath);
+	if (!rule || rule.template === NO_NUMBERING_TEMPLATE) {
+		return null;
+	}
+	return ruleMode(rule);
+}
+
+/**
+ * 归一化 `data.json` 里读出的规则模式：`"write"` / `"virtual"` 原样保留，其余非法值删掉字段
+ * （缺省即写入）。原地修改并返回同一数组，供 `loadSettings` 使用。
+ */
+export function normalizeRuleModes(rules: PathRule[]): PathRule[] {
+	for (const rule of rules) {
+		if ("mode" in rule && rule.mode !== "write" && rule.mode !== "virtual") {
+			delete rule.mode;
+		}
+	}
+	return rules;
 }
 
 /** 列表中是否存在根规则（`/`）。用于「兜底缺失提示条」的判定（见 spec.md §3.8）。 */

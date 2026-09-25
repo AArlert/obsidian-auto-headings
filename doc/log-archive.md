@@ -5,6 +5,403 @@
 
 ---
 
+## 2026-09-25 M14 虚拟编号模式 周期 4（文档部分）：对外文档与发版准备（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **真机补测**：用户确认中文输入法组合正常（V28）；我用电脑操作测了悬浮预览（Ctrl + 悬停 `[[基础#概述]]` 与 `[[基础]]`），
+  小节与整篇都按全文编号（V29）。
+- **README 中英**：卖点首条改为「可以完全不改文件」；快速上手改为「显示编号、文件不变」；新增「只显示，或者写进文件」
+  一节；「全自动编号」按两种模式分述；命令表加「清除本文件残留的插件编号」；FAQ「会往笔记里加隐藏的东西吗？」按
+  模式分答、「不想用了」补仅显示直接卸载；**新增 FAQ「占资源吗？」**，只写已核实的事实（`src/` 无网络请求，只有
+  关于页的链接；启动时本地读一遍全库标题用于链接建议、可关；标题索引 5 万条、剪贴板缓存约 2MB）。
+- **使用指南中英**：新增「两种模式：仅显示与写入文件」一节（对照表、默认值、按文件夹混用、切换确认框、残留、
+  手写编号过半、立即重新编号、固化）；订正「无论库多大都没有后台开销 / 从不扫描全库」的旧说法；「工作原理」节
+  注明只适用于写入模式；导出节更新（仅显示下内置 PDF 实测带编号）；命令表、干净离开节补仅显示。
+- **release notes** `doc/release-notes/1.2.0.md`（双语）。
+- **manifest description** 改为「可只显示 / 写入 + 链接跟随」打头（191 字符，M12 该项勾掉），同时勾掉 M12
+  「README 资源与隐私承诺」。
+- 本周期派发 1 次（quality-gate × 1：收尾 preflight）。
+
+### 没做什么
+
+- **没合并 master、没打 tag——用户明确说「先别着急发新版」**，要在 1.2.0 发布前再做一轮开发。打 tag 会触发
+  Release 工作流向所有用户发布，任何时候都须用户明确同意。
+- 另一个会话正在 master 上修 stripPrefix 截断标题的数据丢失 bug（1.1.5，见 `spawn_task` 那条），尚未合并。
+- 移动端（V31）未测；可请用户用手机打开 iCloud 库里的仅显示笔记看一眼。
+
+### 下一步（交接，2026-09-25 会话因上下文将满在此结束）
+
+**接手先跑 `npm run docs -- --handover`。** 分支 `claude/m14-virtual-mode`，相对 master 7 个提交，已推送、未合并；
+用户 Oblivion 库里跑的就是本分支的 1.2.0 构建。
+
+1. **1.2.0 发布前的一轮开发**——已向用户推荐下面三项（都小），**等用户选定再做**（用户倾向先做，但新会话开工前确认一句）：
+   - **H8 修复**：`clearAllVaultNumbering`（`main.ts:1388`，1411 `vault.read` / 1417 `vault.modify`）与
+     `freezeVaultNumbering`（`main.ts:1450`，1466 / 1469）改走周期 3 抽出的 `batchRewrite`（`main.ts:1628`，
+     已打开走编辑器事务、未打开走 `vault.process`），变换函数分别是 `clearNumberingContent` 与 `stripWordJoiners`。
+     **行为变化要先定案**：现在的清全库**不同步其他笔记里的链接**（只刷新快照），指向带编号标题的链接清完会断；
+     走 `batchRewrite` 会顺带同步链接（修掉这个断链，但全库清除会多出链接写入）。固化本来就全文剥 WJ（链接两侧
+     一致），走 `batchRewrite` 时变换函数要保持「全文剥 WJ」而不是只剥标题。保留两者现有的顺序约束：清库先持久关
+     `autoNumber`、全程 `vaultClearInProgress`；固化先落盘 `retired`；结束后 `refreshVirtualViews()`。testplan H8 行改 ✅。
+   - **两条借鉴命令**：「复制编号大纲」「复制当前小节链接」（spec Roadmap M12「迁移向导自动配置 + 两条借鉴命令」，
+     参考见 spec 附录 A.11 对 gurjar1 `commandRegistry.ts` 的记录）。两种模式都要能用：仅显示用
+     `virtualNumberingFor` 的 label，写入模式用标题文本剥 WJ；testplan 先登记新场景。
+   - **模板同名冲突提示**：`TemplateStore.reload`（`src/templates/TemplateStore.ts:63`）对与「默认」同名的其它文件
+     **静默跳过**（`default.json` 恒生效——用户库里的 `default(1).json` 就是 iCloud 冲突副本，被静默忽略），其它
+     同名模板则后读到的覆盖先读到的。改为发现同名时提示一次、说明哪个生效。（本会话曾对用户说「谁生效看加载
+     顺序」，对「默认」而言说错了，已当面更正。）
+   - 之后 1.3.0 的主打：内置大纲面板显示虚拟编号（M14 二期，风险在于改 Obsidian 核心大纲 DOM，要可关、失败静默）、
+     内置三套预设模板（M12）。拆 `main.ts`（约 2400 行）不单独做，改到相关代码时顺手拆。
+2. **stripPrefix 修复合进 master 后**：把 master 合进本分支（版本号保持 1.2.0；`log.md` / `status.jsonl` /
+   `testplan.md` / `release/` 按两边合并、release 重建；`doc/release-notes/1.2.0.md` 补一句该修复），跑 preflight + fuzz。
+3. **发版**（按 §5.1 合并 master + 打 `1.2.0` tag）须用户明确同意；Community Hub 索引滞后时去维护者面板点「修复」。
+4. **用户库里的测试残留**：`Claude测试/` 文件夹（基础 / 残留 / 手写编号 / 嵌入 / 大文件五篇）与路径规则第 4 行
+   `Claude测试/`（仅显示），用户可自行删除；第 3 行 `未命名/`（仅显示）是用户自己的测试规则。
+5. 操作经验已存进记忆：电脑操作实测 Obsidian 的坑（`obsidian-computer-use-testing`）、heredoc 转义坑
+   （`windows-env-quirks` 第 8 条）、部署前先核对库里版本（`deploy-release-to-icloud-vault`）。
+
+### 验证方式
+
+- `npm run preflight`（见本周期提交前的 quality-gate 报告）。
+
+---
+
+## 2026-09-25 M14 虚拟编号模式：真机实测修复（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+用户反馈「渲染问题很多，切换和显示有种半掺杂的感觉」，授权我用电脑操作直接在 Oblivion 库里实测。只在新建的
+`Claude测试/` 文件夹里操作（规则第 4 行 `Claude测试/` → 仅显示），测了实时预览 / 源码 / 阅读视图、模式来回切换、
+确认框、残留、手写编号、复制、PDF 导出、整篇与小节嵌入、2000 标题大文件。发现并修复：
+
+- **阅读视图新旧编号混杂**（「半掺杂」的主因）：Obsidian 只重渲染改过的段落，前面插一个标题后，后面没改的
+  段落还挂着旧编号。`readingView.ts` 改为 `VirtualReadingRenderer`：每个含标题的段落登记为 `MarkdownRenderChild`，
+  段落重渲染看到新原文、元数据更新、设置变化时，把同一篇的登记段落按各自当前的段落信息原地重新核对；编号 span
+  可反复加 / 去，残留前缀去编号时还回文本。设置变化不再整页 `rerender`。参考了 Heading Decorator 的段落登记机制
+  （MIT，只借鉴思路）。
+- **源码模式显示虚拟编号**：会让人以为编号写进了文件。改为只在实时预览显示（`editorLivePreviewField`）。
+- **手写编号**：原先只要一个标题像手写编号，整篇就不显示，而仅显示模式永远没有解除的出口（`## 2024 总结`
+  就能卡死）。改为过半判定 `isMostlyForeignNumbered`；被拦下时打开文件弹仅显示版提示，清理框只剥不写。
+- **「已清除 0 个文件」**：只有「仅显示 → 写入」时也跑了清除并提示。没有离开写入的文件就不清除、不提示；
+  确认框的清除开关也只在有文件离开写入时才默认打开。
+- **小节嵌入从「一」重数**：段落信息只含片段。新增 `locateSection`：与文件全文比对，是其中一段就按全文算并加
+  行号偏移，对不上按文本兜底。
+- 真机确认正常的：新增 / 删除标题后编辑视图即时更新、确认框计数、切换写入 / 仅显示时已打开文件只显示一层编号、
+  清除只剥插件编号、残留虚线提示、复制不带编号、PDF 带编号、大文件流畅。
+- 测试：`virtual-render.test` 重写阅读视图部分（段落登记、插入标题回归、删除标题回归、设置刷新、卸载、小节
+  嵌入、`locateSection`），`cleanup.test` +4（过半判定），`main.test` +3。反向验证：去掉「看到新原文就重新核对」，
+  插入标题回归用例变红。
+- 本周期派发 1 次（quality-gate × 1：收尾 preflight + fuzz）；实测与修复由主模型完成。
+
+### 没做什么
+
+- 中文输入法组合：本机输入法被系统切到 ENG，电脑操作切不回来，留给用户手测。
+- 悬浮预览、移动端没测。
+- 确认框在用户主题下半透明（背后文字透出），原有批量重编号确认框也一样，判断为主题问题，未改。
+- 发现用户库里 `templates/` 有 `default.json` 与 `default(1).json` 两个同名「默认」模板（疑似 iCloud 冲突副本），
+  未处理，已告知用户。
+
+### 下一步
+
+- 用户手测输入法、悬浮预览、移动端；没问题就进周期 4（README / 使用指南 / release notes / 合并 / tag）。
+- 用户测试完可以删掉 `Claude测试/` 文件夹和第 4 条规则。
+
+### 验证方式
+
+- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机见上。
+
+---
+
+## 2026-09-25 M14 虚拟编号模式 周期 3：设置界面与模式切换（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **模式切换的纯逻辑**（新建 `src/virtual/modeSwitch.ts`）：`diffNumberingModes(before, after, paths)` 比较改动前后
+  每个文件的有效模式，得出 `toVirtual` / `toNone` / `toWrite`；不区分入口（改下拉框、删规则、改路径、改「不编号」、
+  拖拽），天然排除被更具体规则覆盖的文件。`cloneRules`、`isQuietTransition`。
+- **main.ts**：批量通道重构成接收变换函数的 `batchRewrite`（编辑器事务 / `vault.process` 两条通道不变，含 backlink
+  同步），`renumberFiles` 与新的 `clearPluginNumberingInFiles` 共用；`batchRenumberRule` 改用 `renumberFiles`。
+  新增 `planModeTransition`（「离开写入」只计真有插件编号的文件，内容优先取已打开编辑器）与
+  `applyModeTransition`（按勾选清除 / 立即写入，链接 Notice 汇总一次）。`cleanup.ts` 新增 `hasPluginNumbering`。
+- **设置界面**（`settings/tabs/PathRules.ts`）：每行加「模式」下拉框（写入文件 / 仅显示，「不编号」行置灰）；
+  「仅显示」行的批量重编号置灰；所有改规则的操作统一走 `commitRules`：在副本上试改 → 有文件换模式就弹
+  `ModeTransitionModal`（两个开关：清除本插件写入的编号 / 立即写入）→ 确认后才替换设置、落盘、执行；取消或
+  Esc 规则原样。改路径时没改动就不存盘。新规则的模式跟随根规则。表格加一列（CSS 网格与最小宽度）。
+- i18n 新增 13 个 key；固化按钮说明补「仅显示的编号会随之消失」。spec §3.22 补「实现（周期 3 定稿）」。
+- **测试**：新建 `modeswitch.test.ts`（6 条）；`main.test` +4（规划只列真有编号的文件、清除只剥插件编号且不碰更具体
+  规则、链接跟随、不勾清除则不动、立即写入）。
+- 已部署到用户测试库。本周期派发 1 次（quality-gate × 1：收尾 preflight）。
+
+### 没做什么
+
+- 确认框、下拉框的真机交互没验证；周期 2 的渲染也还在等用户实测反馈。
+- 对外文档（README、使用指南、release notes）在周期 4。
+
+### 下一步
+
+- 等用户真机反馈（渲染 V27–V31 + 设置界面切换 V15–V19），按反馈修；然后周期 4：README / 使用指南 / release
+  notes 1.2.0、合并 master（注意与 stripPrefix 修复分支的版本号与 docs 冲突）、打 tag。
+
+### 验证方式
+
+- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机按下一步清单。
+
+---
+
+## 2026-09-25 M14 虚拟编号模式 周期 2：渲染（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **编辑视图**（新建 `src/virtual/editorExtension.ts`）：CM6 ViewPlugin。标题正文起点放编号 widget（`side: 1`，
+  参照 Heading Decorator 在实时预览里的放法）；残留前缀用同一 widget `Decoration.replace` 替换并标残留样式，
+  且登记为原子区（光标整体跨过）；不编号标题上的残留**不藏**。文档变化先 `map`，100ms 去抖后自发
+  `virtualRefreshEffect` 重算；`view.composing` 期间顺延；编辑器换了文件立即重算，不映射上一篇的编号。
+  「编号 → DecorationSet」是纯函数 `buildVirtualDecorations`。
+- **阅读视图**（新建 `src/virtual/readingView.ts`）：post-processor 按 `getSectionInfo` 行号取编号并核对元素级别；
+  按路径缓存上次原文、字符串比较命中；拿不到段落信息时读文件、按文本唯一命中兜底；残留前缀从第一个文本
+  节点去掉（尾哨兵被毁则不画）。`NodeFilter.SHOW_TEXT` 写成常量，node 可测。
+- **接线**（`main.ts`）：注册两个扩展；`refreshVirtualViews()` 向所有编辑器 dispatch 重算信号、阅读视图
+  `rerender(true)`，挂在 `saveSettings`、`renumberActiveFile`（改模板 / 规则）、`onExternalSettingsChange`、
+  清库与固化结束、仅显示文件的「立即重新编号」；新命令「清除本文件残留的插件编号」（`editorCheckCallback`，
+  只在仅显示文件里出现，走 `clearPluginNumberingContent` + backlink 同步，不暂停）。
+- `compute.ts` 的输出补 `level` / `text` 字段；`styles.css` 加 `.ah-virtual-number`（跟随标题、不可选中）与
+  `--stale`（虚线下划线 + 悬停说明）；i18n 四个新 key；obsidian-mock 补 `registerEditorExtension` /
+  `registerMarkdownPostProcessor` / `editorInfoField`。
+- **测试**：新建 `virtual-render.test.ts`（13 条：装饰位置、残留替换、白名单残留不藏、map 后不漂移、越界、
+  按行 / 按文本匹配、假 DOM 上的插入与残留剥离、缓存只算一次、兜底、门控不放行）；`main.test` +3（清除残留
+  命令两条、刷新广播）。
+- 已部署到用户测试库。本周期派发 1 次（quality-gate × 1：收尾 preflight）。
+
+### 没做什么
+
+- 没有 UI：规则的模式下拉框、切换确认框都在周期 3。真机测试要先手动在 data.json 里给规则加 `"mode": "virtual"`。
+- 视觉、光标、输入法、PDF 导出、移动端、大文件性能都还没真机验证。
+
+### 下一步
+
+- 用户真机验 V27–V31（实时预览 / 源码 / 阅读视图、输入法、复制、PDF、嵌入与悬浮预览）；根据结果调整
+  widget 位置或样式。
+- **周期 3**：路径规则行的模式下拉框、切换确认 Modal（含删规则 / 改路径 / 改不编号入口）、固化按钮说明。
+
+### 验证方式
+
+- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机按下一步清单。
+
+---
+
+## 2026-09-25 M14 虚拟编号模式 周期 1：模型 + 纯逻辑 + 门控（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **数据模型**（`src/pathrules.ts`）：`PathRule.mode?: "write" | "virtual"`（缺省即写入，零迁移）；`ruleMode`、
+  `resolveNumberingMode`（与 `resolvePathRule` 同一套具体度，「不编号」/ 无规则返回 null）、`normalizeRuleModes`
+  （非法值删字段）。
+- **新装判据**（`main.ts` `loadSettings` / `isFreshInstall`）：data.json 为空且没有 `templates/` 才算新装，根规则设
+  `virtual`（`settings/model.ts` 的 `freshInstallPathRules`）；只改内存不落盘；探测失败按升级处理。新增
+  `onExternalSettingsChange`（同步改写 data.json 时重新载入）。`pluginDir()` 抽成方法，onload 注释写明
+  loadSettings 必须先于 `templateStore.init()`，并有源码顺序锁测试。
+- **写入隔离**：新增 `shouldAutoWrite(content, path)` = `shouldAutoTrigger` 且非仅显示文件，替换全部 6 处自动路径
+  判断（防抖、到期复核、打开即编号、改模板即时重排、粘贴还原、清除命令的暂停判定）。仅显示文件于是自动落到
+  backlink 独立同步分支，**没新写同步路径**。「立即重新编号」对仅显示文件只弹说明；批量重编号跳过被仅显示
+  规则覆盖的文件。
+- **纯逻辑**（新建 `src/virtual/compute.ts`）：`computeVirtualNumbers`（显示编号 + widget 位置 + 残留前缀区间，只认
+  WJ 打头的前缀）、`resolveNumberingAction`（自动路径门控，渲染器与 UVM 共用）；`main.ts` 的
+  `virtualNumberingFor(path, content)` 供周期 2 渲染器调用（含外来编号拦截）。
+- **新清除函数** `clearPluginNumberingContent`（`cleanup.ts`）：只剥 WJ 打头的插件前缀，手写编号、标题中间的 WJ
+  （链接）、围栏里的残留都不动，不碰 frontmatter。
+- i18n：`noticeVirtualModeFile` 中英各一。devDependencies 显式锁 `@codemirror/state` 6.5.0 / `view` 6.38.6。
+- **规格订正两处**（spec §3.22、testplan V11 / V24，核对代码后发现周期 0 写错了）：
+  - frontmatter `true` 压不过「不编号」规则（K15 既有行为），不是「跟随根规则模式」；
+  - 「固化编号」照常处理仅显示文件（它们里面指向写入文件的链接也带 WJ，跳过会断链），代价是仅显示的编号随
+    插件离场消失，按钮说明要写清楚。
+- **测试**：`virtual.test.ts`（新，13 条）、`settings`（+8：判据 / 不落盘 / 同步重载 / 顺序锁）、`pathrules`（+4）、
+  `cleanup`（+7）、`main`（+9：不写 / 链接跟随 / Notice / 批量跳过 / 清除不暂停 / 门控 / 外来编号）、
+  `clipboard`（+1 粘贴不还原）。UVM 加 `setRuleMode` 激励与**虚拟记分板**（显示编号 = 写入模式会写的前缀、
+  文件不被改写、门控同源），覆盖率新增 3 个 bin。两处反向验证：去掉仅显示判断 → 5 条红；故意让显示编号出错 →
+  UVM 两条序列红。
+- **顺带发现一个已上线的数据丢失 bug**（与 M14 无关）：标题中间带 WJ 链接时，`stripPrefix` 把 WJ 之前的正文当旧
+  单哨兵前缀截掉（`## 参见 [[a#…1 …概述]]` → `## 1 1 概述]]`）。已开独立任务处理，本分支的新代码已绕开。
+- 已部署到用户测试库（Oblivion）。本周期派发 1 次（quality-gate × 1：收尾 preflight + fuzz）。
+
+### 没做什么
+
+- 没有任何渲染（周期 2），所以装上 1.2.0 的新库暂时**看不到编号**；老库（有 templates/）行为不变。
+- 没有 UI（mode 下拉框、切换确认框，周期 3）。
+
+### 下一步
+
+- **周期 2**：`src/virtual/editorExtension.ts`（CM6 widget + 残留 replace + 输入法暂停 + 广播刷新）、
+  `readingView.ts`（post-processor + 字符串比较缓存 + `getSectionInfo` 兜底）、样式、「清除本文件残留编号」命令。
+
+### 验证方式
+
+- `npm run preflight` + `npm run test:fuzz`（结果见本周期提交前的 quality-gate 报告）。
+- 真机：老库升级到 1.2.0 行为应与 1.1.4 完全一致（写入模式照常编号）。
+
+---
+
+## 2026-09-25 M14 虚拟编号模式 周期 0：计划审计 + 文档先行（1.1.4，纯文档不 bump）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **审计远端交来的计划** `doc/plan-m14-virtual-mode.md`：派 repo-scout 逐条核对源码引用（13 处全部属实），
+  对照竞品商店数据与 README 复核（2026-09-25：Heading Decorator 5,388 纯显示、计划原先漏了它；gurjar1 2,406
+  虚拟非默认、只在编辑器里显示；Number Suite 355；Heading Keeper 54 默认虚拟，作者即 PR #8 贡献者）。
+  修订了 7 处设计，先单独提交（`c8fe091`），要点：
+  - 模式切换清除**不复用**清除命令路径（会剥手写编号、会写 `fm:false` 关掉虚拟渲染、走 `vault.modify`
+    有 H8 同类竞态），改为新纯函数 `clearPluginNumberingContent`（只剥 WJ）+ 批量通道（已带 backlink 同步）；
+  - 删规则 / 改路径 / 改「不编号」也会让文件落到仅显示模式，同样弹确认框；残留前缀不许悄悄盖掉，
+    要有 stale 样式提示 + 单文件清除命令；
+  - 新装判据补多设备同步竞态对策（新装不立即落盘 + `onExternalSettingsChange`）；核实 `loadSettings`
+    （main.ts:169）先于 `templateStore.init()`（190），判据可用，要加顺序锁测试；
+  - frontmatter `true` 碰上「不编号」规则时跟随根规则模式；
+  - 输入法组合期间暂停重算；阅读视图缓存改字符串比较、补 `getSectionInfo` 为 null 的兜底；
+  - README 原定的「从不在后台扫描全库」**不成立**（`buildInitialHeadingIndex` 启动时读全库），改如实口径；
+  - 大纲面板从「做不到」改为「一期不做」；周期 1 即 bump 到 1.2.0。
+- **周期 0 文档先行**：
+  - `spec.md`：§2.2 非目标翻案；新增 §3.22「虚拟编号模式（M14）」（设计定案全文）；目录补 3.20–3.22；
+    §5 Roadmap 重排（M14 → M11 → M12 → M8a → M8b → M10 → M13），新增 Milestone 14 节（5 个周期清单 + 二期候选）；
+    M9 的「虚拟编号模式」「只读装饰预览」两条并入 M14 只留指针，新增候选「把虚拟编号一次性烧录成纯文本」；
+    M12 新增「内置三套预设模板」「README 资源与隐私承诺」；附录 A.8.5 / A.9 同步。
+  - `testplan.md`：新增 V 组 V1–V32，全部 🔲。
+  - 按单一事实源纪律**删除** `doc/plan-m14-virtual-mode.md`（内容已全部落进 spec §3.22 与 Roadmap M14）。
+- 本周期派发 2 次（repo-scout × 1：计划源码引用核对；quality-gate × 1：收尾 preflight）。
+
+### 没做什么
+
+- 没写任何代码，没 bump（纯文档）。
+- 竞品只读了 README 与商店统计，没深读源码（Heading Keeper / Number Suite 的实现细节留待周期 2 渲染时按需参考）。
+
+### 下一步
+
+- **周期 1**（见 spec Roadmap M14）：`PathRule.mode`、新装判据与延迟落盘、`onExternalSettingsChange`、
+  `resolveNumberingMode`、`src/virtual/compute.ts`、`shouldAutoTrigger` 对虚拟文件返回 false、
+  `clearPluginNumberingContent`；配套单测与 UVM oracle；`npm run bump minor` → 1.2.0；跑 `test:fuzz`。
+
+### 验证方式
+
+- `npm run preflight` 全绿（纯文档改动）。
+
+---
+
+## 2026-09-24 README 瘦身为商店门面 + 新增双语使用指南（1.1.4，纯文档不 bump）
+
+### 做了什么
+
+用户诉求：README 是商店展示页，要「简洁易懂、看了想装、技术细节隐藏」；GIF 由用户自录，
+**README 里不得留图片占位**（断图过不了 Obsidian 自动审查）。
+
+- **README.md / README.zh.md 重写**（各 ~210 行 → ~95 行）：一句话定位 → 6 条卖点 → 三步上手 →
+  6 个功能小节（每节 1–3 句）→ 命令表 → FAQ（5 问）→ 安装 → 了解更多。参考主流插件门面写法
+  （卖点先行、每节一句话、细节外链）。全部链接改 GitHub 绝对地址（商店页相对链接不可靠）。
+  顺手订正三处与现状不符的旧文案：「人工审核仍在进行中」（已通过）、英文命令名
+  「Clean foreign numbering」（实为 `Clear non-plugin heading numbering`）、命令表漏了
+  「切换全局自动编号」。
+- **技术细节下沉到新文件 `doc/user-guide.md` / `doc/user-guide.zh.md`**：由旧 README「开箱即用」
+  起的全部内容平移（删去营销开场与安装节，修相对链接、命令名），信息零丢失。附录 A 定下的
+  信任类承诺（WJ 披露、导出与外发、干净离开、Number Headings 迁移）在 README 各保留 FAQ 一问 + 链接，
+  不再展开；`<!-- skip -->` 手写标记按 spec 纪律「不得当卖点」，README 不提，只留在指南。
+- 登记新文件：根 `CLAUDE.md` §3.1 表（并写明 README 写作纪律）、本文件「目录结构约定」块、
+  `spec.md` A.9 落点索引行。
+- 本周期派发 2 次（quality-gate × 2：接手基线门槛 + 收尾 preflight）。
+
+### 没做什么
+
+- 未录 / 未引用任何 GIF / 截图（用户自录，建议清单已在会话中给出；录好后放 `assets/` 并用
+  GitHub raw 绝对地址引用）。
+- 未改 `manifest.json` 的 description（M12「manifest description 卖点重排」仍待做，改它需发版）。
+- 未动 i18n / 关于页里的文案。
+
+### 下一步
+
+- 用户录好 GIF 后插回 README（首图放一句话定位下方，其余各配一个功能小节）。
+- 开发侧建议：先做一个整理周期（刷新 status 首行、拆 `main.ts` 2170 行、压缩 spec Roadmap 已完成项），
+  再开 M11「H8 修复 + 清库撤销」→「Backlink 审阅模式」。
+
+### 验证方式
+
+- `npm run preflight` 全绿（纯文档改动，release 重建无差异）。
+- 人工核对：README 内无 `![` 图片语法、无相对链接；user-guide 内相对链接（`marker-contract.md`、
+  `../assets/pandoc/…`、`../README*.md`）均指向存在的文件。
+
+---
+
+## 2026-09-13 修复嵌套围栏数量不匹配致编号重置（1.1.4，issue #9）
+
+### 做了什么
+
+用户报告（[issue #9](https://github.com/AArlert/obsidian-auto-headings/issues/9)，附截图）：多层
+代码块嵌套、内层围栏用注释符号 `#` 时，其后标题序号会从 1 重新开始。用 GitHub API 取 issue 原文
++ 下载截图核实（WebFetch 摘要与 API 原文一致，本次未撞上 [[webfetch-verification-blind-spots]]
+记录的截断/编造问题），复现出的具体场景是：外层 4 个反引号围栏包一段示例 Markdown，内嵌一段
+3 个反引号的 yaml 围栏，两层都各有一行 `#` 开头的注释。
+
+- **根因定位**（派 `repo-scout` 定位 + 主模型用 vitest 写 scratch 测试实测复现）：`src/scan.ts`
+  的 `scanSkipRegions` 围栏状态机（`FENCE_RE` 捕获组其实带了完整反引号游程长度，但状态机只取
+  `fence[1][0]` 比较**符号种类**，从未比较**数量**）。按 CommonMark，闭合围栏须同符号**且数量
+  ≥ 开启行**；内层 3 个反引号本不该闭合外层 4 个反引号的围栏，但旧实现见到同符号就直接切换
+  `inFence`，导致内层 3 反引号「关闭」了外层围栏，内层 `# 这是最里层代码块` 被当成真标题
+  （level 1，浅于周围 H2 标题），推进计数器时把更深层的 H2 计数器清零——这就是「序号被清零
+  回 1」的完整链路，用 `renumberContent` 实测复现出与截图完全一致的 `## 2 标题二` → `## 1
+  标题三`（而非线性递增到 4），根因链条到此闭环，无需再猜。
+- **修复**：`scanSkipRegions` 新增 `fenceLen` 状态，闭合判定改为「同符号 **且** 本行游程长度
+  ≥ 开启时的长度」；数量不足（或符号不同）的类围栏行不再切换 `inFence`、也不再标记为
+  `isFenceMarker`，原样落入「围栏内普通内容」分支——语义上更贴合 `SkipState.isFenceMarker`
+  自己的文档定义（「本行**就是**围栏定界行」），不只是打个补丁。`parser.ts`、`scan.ts` 顶部
+  文档注释与 `doc/spec.md` §3.17（新增裁决表 R11）同步更新，避免下次改动时规格与实现再次漂移。
+- **回归测试**：`parser.test.ts` 新增 2 例（数量不足不闭合的嵌套写法；数量更多的闭合行合法，
+  对称验证没有矫枉过正）；`known_bugs.test.ts` 新增 issue #9 端到端 describe 块，直接断言
+  `renumberContent` 在 issue 原始场景下的输出（含幂等性）。`doc/testplan.md` 补 `E3b` 行
+  （✅，链接两个回归测试）。
+- 质量门槛：派 `quality-gate` 跑 `npm test`（639 通过，唯一失败是既有 zh-CN locale 排序环境
+  伪影，与本次无关）、`lint`、`format:check` 全绿；核心逻辑改动按规则额外跑一遍 `test:fuzz`
+  （5000 序列 × 80 步）全绿。本周期派发 2 次（repo-scout × 1 定位根因，quality-gate × 1 验证）。
+
+### 没做什么
+
+- 未改 `isSkipped()` 的对外行为——`isFenceMarker` 语义收紧后 `inFence` 仍覆盖同一行，
+  `isSkipped = inFence || isFenceMarker || inComment` 的外部可见结果（哪些行被跳过）不变，
+  只有「这一行算不算定界行本身」这个内部细节更准了，`cleanDemotedResidue` 因此受益
+  （之前会把这类误判的类围栏行当定界行跳过清理，现在正确按「围栏内普通内容」走
+  `scope.fences` 开关）——顺带验证过 `cleanup.test.ts` 全过，未额外补测试（行为改进但无
+  用户可见入口触发这条路径的已知场景，且现有测试已覆盖足够多样例）。
+- 未处理 `doc/testplan.md` 里 E3（不同符号不闭合）状态标记为 🔲 但实际早被
+  `parser.test.ts`「不同栅栏符号不互相闭合」覆盖的既有偏差——与本次改动无关的历史遗留，
+  不在本 issue 范围内，未顺手修，留给下次涉及该区域时处理。
+
+### 下一步
+
+- 已 `npm run bump` → `1.1.3 → 1.1.4`；已写 `doc/release-notes/1.1.4.md`（双语，如实描述
+  用户可见的编号 bug 修复）。
+- 待 `npm run preflight` 全绿后提交（含 `release/`）、按 §5.1 合并回 `master`，打 `1.1.4` tag
+  并推送，`release.yml` 自动创建 GitHub Release。
+- 可考虑回 issue #9 留评论告知已修复、将在 1.1.4 发布，但本仓库当前无 `gh` CLI
+  （见 [[windows-env-quirks]]），需用户自己评论或后续会话走 API/网页操作。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/parser.test.ts tests/dev_tests/known_bugs.test.ts`：新增用例
+  与既有用例全过。
+- `npm test` 639 通过（1 个既有 locale 环境伪影，基线同样失败，非本次引入）；`lint` /
+  `format:check` / `test:fuzz`（5000×80）全绿。
+- 用 issue 原始截图的确切文本（外层 4 反引号 + 内层 3 反引号 yaml，各一行 `#` 注释）跑
+  `renumberContent`，修复前输出 `## 1 标题三`（复现截图），修复后输出 `## 3 标题三`
+  （正确续号），且二次调用幂等。
+
+---
+
 ## 2026-08-19 Community Hub 审核修复（1.1.3）
 
 ### 做了什么

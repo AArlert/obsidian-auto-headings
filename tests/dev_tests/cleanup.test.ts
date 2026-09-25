@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
+	clearPluginNumberingContent,
 	hasUnclaimedForeignNumbering,
+	isMostlyForeignNumbered,
 	previewForeignNumberingCleanup,
 } from "../../src/cleanup";
 import { renumberContent, DEFAULT_TEMPLATE, WORD_JOINER } from "../../src/numbering";
@@ -363,5 +365,82 @@ describe("hasUnclaimedForeignNumbering — 行尾空白不该触发迁移守卫�
 		expect(hasUnclaimedForeignNumbering("## 1 章一\n## 2 章二")).toBe(true);
 		// 行尾空格 + 真外来编号：仍命中。
 		expect(hasUnclaimedForeignNumbering("## 1 章一 ")).toBe(true);
+	});
+});
+
+describe("clearPluginNumberingContent：只剥插件写入的编号（M14，testplan V14 / V15）", () => {
+	const WJ = WORD_JOINER;
+
+	it("剥掉带 WJ 的插件前缀，手写编号原样保留", () => {
+		const input = [`## ${WJ}1 ${WJ}概述`, "## 1.1 手写的", `### ${WJ}1.1 ${WJ}细节`].join("\n");
+		expect(clearPluginNumberingContent(input)).toBe(
+			["## 概述", "## 1.1 手写的", "### 细节"].join("\n"),
+		);
+	});
+
+	it("没有插件前缀时字节不变（包括手写编号与 frontmatter）", () => {
+		const input = ["---", "obsidian-auto-headings: true", "---", "## 1. 引言", "正文"].join(
+			"\n",
+		);
+		expect(clearPluginNumberingContent(input)).toBe(input);
+	});
+
+	it("不写 fm:false：frontmatter 原样保留", () => {
+		const input = ["---", "tags: [a]", "---", `## ${WJ}1 ${WJ}甲`].join("\n");
+		expect(clearPluginNumberingContent(input)).toBe(
+			["---", "tags: [a]", "---", "## 甲"].join("\n"),
+		);
+	});
+
+	it("标题中间的 WJ（指向写入文件标题的链接）不当前缀截断", () => {
+		const input = `## 参见 [[a#${WJ}1 ${WJ}概述]]`;
+		expect(clearPluginNumberingContent(input)).toBe(input);
+	});
+
+	it("尾哨兵被毁的残缺前缀也剥净（WJ 打头即可证明是插件写的）", () => {
+		expect(clearPluginNumberingContent(`## ${WJ}1.2 概述`)).toBe("## 概述");
+	});
+
+	it("降级残留：正文与注释块里清，围栏里不动", () => {
+		const input = [
+			`${WJ}1 ${WJ}降级的正文`,
+			"%%",
+			`${WJ}2 ${WJ}注释里的`,
+			"%%",
+			"```",
+			`${WJ}3 ${WJ}代码示例`,
+			"```",
+		].join("\n");
+		expect(clearPluginNumberingContent(input)).toBe(
+			["降级的正文", "%%", "注释里的", "%%", "```", `${WJ}3 ${WJ}代码示例`, "```"].join("\n"),
+		);
+	});
+
+	it("与写入模式往返：renumber 后再清除 = 原文（手写编号不受影响）", () => {
+		const bare = "## 概述\n## 1.1 手写\n### 细节";
+		const numbered = renumberContent(bare, DEFAULT_TEMPLATE);
+		expect(numbered).not.toBe(bare);
+		expect(clearPluginNumberingContent(numbered)).toBe(bare);
+	});
+});
+
+describe("isMostlyForeignNumbered：仅显示模式的外来编号判定（M14，testplan V12）", () => {
+	it("每个标题都带手写编号（从别的编号插件迁来）→ 算外来编号", () => {
+		expect(isMostlyForeignNumbered("## 1. 引言\n## 2. 方法\n### 2.1 细节")).toBe(true);
+	});
+
+	it("偶尔一个以数字开头的标题（如 2024 总结）→ 不算，照常显示编号", () => {
+		expect(isMostlyForeignNumbered("## 概述\n## 2024 总结\n## 展望")).toBe(false);
+	});
+
+	it("恰好一半不算过半；本插件写过的残留（WJ 打头）不算外来编号", () => {
+		expect(isMostlyForeignNumbered("## 1. 引言\n## 方法")).toBe(false);
+		expect(isMostlyForeignNumbered(`## ${WORD_JOINER}1 ${WORD_JOINER}概述\n## 2. 方法`)).toBe(
+			false,
+		);
+	});
+
+	it("没有标题 → 不算", () => {
+		expect(isMostlyForeignNumbered("正文")).toBe(false);
 	});
 });

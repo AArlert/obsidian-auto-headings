@@ -15,6 +15,7 @@ import {
 	DEFAULT_SETTINGS,
 	clampDebounceDelay,
 	defaultPathRules,
+	freshInstallPathRules,
 } from "./settings/model";
 import { AutoHeadingsSettingTab } from "./settings/SettingsTab";
 import { ForeignNumberingCleanupModal } from "./settings/ForeignNumberingCleanupModal";
@@ -31,7 +32,10 @@ import { ClipboardOriginalCache, stripWordJoiners, stripWordJoinersFromHtml } fr
 import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
+	clearPluginNumberingContent,
+	hasPluginNumbering,
 	hasUnclaimedForeignNumbering,
+	isMostlyForeignNumbered,
 	previewForeignNumberingCleanup,
 	type ForeignNumberingPreviewItem,
 } from "./cleanup";
@@ -44,7 +48,25 @@ import {
 	type HeadingSnapshot,
 } from "./backlinks";
 import { parseHeadings, type Heading } from "./parser";
-import { NO_NUMBERING_TEMPLATE, resolvePathRule, ruleMatches, type PathRule } from "./pathrules";
+import { buildNumberedOutline, sectionHeadingAt, sectionLinkParts } from "./copycommands";
+import {
+	NO_NUMBERING_TEMPLATE,
+	normalizeRuleModes,
+	resolveNumberingMode,
+	resolvePathRule,
+	ruleMatches,
+	type NumberingMode,
+	type PathRule,
+} from "./pathrules";
+import {
+	computeVirtualNumbers,
+	resolveNumberingAction,
+	type VirtualHeadingLabel,
+} from "./virtual/compute";
+import { virtualNumberingExtension, virtualRefreshEffect } from "./virtual/editorExtension";
+import { VirtualOutlineDecorator } from "./virtual/outlineView";
+import { VirtualReadingRenderer } from "./virtual/readingView";
+import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
 import { HeadingIndex } from "./headingindex";
 import { HeadingLinkSuggest } from "./headingsuggest";
@@ -55,6 +77,17 @@ import {
 	VC_DICTIONARY_THROTTLE_MS,
 	vcDictionaryPath,
 } from "./vcintegration";
+
+/** 批量改写单个文件的结果。 */
+type BatchOutcome = "changed" | "unchanged" | "skipped";
+
+/** 批量改写的汇总：各结果的文件数 + 顺带同步的 backlink 处数。 */
+export interface BatchResult {
+	changed: number;
+	unchanged: number;
+	skipped: number;
+	links: number;
+}
 
 /** M13：初始标题索引扫描的批量大小（文件数），每批让出主线程一次（方案 §2.4，可调常量）。 */
 const INITIAL_SCAN_BATCH_SIZE = 200;
@@ -158,6 +191,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private readonly clipboardCache = new ClipboardOriginalCache();
 
 	/**
+	 * 阅读视图的虚拟编号渲染器（M14，见 `virtual/readingView.ts`）：onload 里创建；单测不跑 onload，
+	 * 故调用处一律用可选链。
+	 */
+	private readingRenderer?: VirtualReadingRenderer;
+	private outlineDecorator?: VirtualOutlineDecorator;
+
+	/**
 	 * 当前界面语言的文案表（按 `settings.language` 解析，见 {@link resolveLang} / {@link getMessages}）。
 	 * 命令名在 onload 注册时取一次（改语言需重载插件才更新）；Notice 在调用时取，即时生效。
 	 */
@@ -184,9 +224,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 
 		// 初始化模板存储：确保 templates/ 目录与 default.json 存在并载入全部模板。
-		const pluginDir =
-			this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
-		this.templateStore = new TemplateStore(this.app.vault.adapter, pluginDir);
+		// **必须在 loadSettings 之后**：新装判据要看 templates/ 在不在（M14，spec §3.22「顺序约束」），
+		// init 一跑目录就建好了，判据永远失效。有单测锁住这个先后顺序。
+		this.templateStore = new TemplateStore(this.app.vault.adapter, this.pluginDir());
 		await this.templateStore.init();
 
 		this.settingTab = new AutoHeadingsSettingTab(this.app, this);
@@ -234,6 +274,44 @@ export default class AutoHeadingsPlugin extends Plugin {
 				this.runClearForeignNumbering(editor, ctx);
 			},
 		});
+
+		// 清除本文件残留编号（M14，spec §3.22「残留前缀」）：只在仅显示文件里出现——写入文件清了
+		// 下一次按键又会被编回去，这条命令对它没有意义。
+		this.addCommand({
+			id: "clear-stale-numbering",
+			name: t.cmdClearStale,
+			editorCheckCallback: (checking, editor, ctx) => {
+				if (!this.isVirtualFile(ctx.file?.path)) {
+					return false;
+				}
+				if (!checking) {
+					this.runClearStaleNumbering(editor, ctx);
+				}
+				return true;
+			},
+		});
+
+		// 复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11）：接线在独立方法，纯逻辑在 copycommands.ts。
+		this.registerCopyCommands();
+
+		// 虚拟编号渲染（M14，spec §3.22）：编辑视图用 CM6 装饰，阅读视图用 post-processor，永不写文件。
+		this.registerEditorExtension(virtualNumberingExtension(this));
+		this.readingRenderer = new VirtualReadingRenderer(this);
+		this.registerMarkdownPostProcessor(this.readingRenderer.postProcessor);
+		// 阅读视图只重渲染改过的段落：文件内容一变，就让该文件已渲染的段落按最新行号重新核对编号
+		// （兜住「删掉一个标题、没有段落重渲染」这类情形，见 readingView.ts 顶部说明）。
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (file) => {
+				this.readingRenderer?.scheduleSweep(file.path);
+			}),
+		);
+		// 内置大纲面板也显示虚拟编号（1.2.0，见 virtual/outlineView.ts）：大纲自己刷新时由观察器跟上；
+		// 新开 / 关闭 / 延迟加载完的大纲靠布局事件挂上或摘掉观察器。
+		this.outlineDecorator = new VirtualOutlineDecorator(this, this.app.workspace);
+		const attachOutlines = () => this.outlineDecorator?.attachAll();
+		this.registerEvent(this.app.workspace.on("layout-change", attachOutlines));
+		this.registerEvent(this.app.workspace.on("active-leaf-change", attachOutlines));
+		this.app.workspace.onLayoutReady(attachOutlines);
 
 		// 实时编辑监听：editor onChange → 重置该文件的防抖计时器（编号 + M13 标题索引各一套）。
 		this.registerEvent(
@@ -365,6 +443,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			window.clearTimeout(timer);
 		}
 		this.debounceTimers.clear();
+		this.readingRenderer?.dispose();
+		this.outlineDecorator?.dispose(); // 大纲恢复原样，不留编号属性（testplan V43）。
 		this.headingSnapshots.clear();
 		this.activeGuardNotice?.notice.hide();
 		this.activeGuardNotice = null;
@@ -504,6 +584,52 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
+	 * 某文件的编号模式（M14，spec §3.22）：`"virtual"` 只显示不写，`"write"` 写入，`null` 无规则 /「不编号」。
+	 */
+	numberingModeFor(filePath: string | undefined | null): NumberingMode | null {
+		return filePath ? resolveNumberingMode(this.settings.pathRules, filePath) : null;
+	}
+
+	/** 某文件是否为「仅显示」模式（M14）：所有编号写入路径据此跳过它。 */
+	private isVirtualFile(filePath: string | undefined | null): boolean {
+		return this.numberingModeFor(filePath) === "virtual";
+	}
+
+	/**
+	 * 自动路径是否应往该文件**写**编号：够格自动触发（{@link shouldAutoTrigger}），且不是仅显示文件
+	 * （M14）。仅显示文件在这里返回 false 后，`scheduleRenumber` 会自动落到 backlink 独立同步分支，
+	 * 手动改标题时链接照样跟随（spec §3.22「写入路径的隔离」）。
+	 */
+	private shouldAutoWrite(content: string, filePath: string | undefined | null): boolean {
+		return this.shouldAutoTrigger(content) && !this.isVirtualFile(filePath);
+	}
+
+	/**
+	 * 某文件此刻应显示的虚拟编号（M14，spec §3.22）；不该显示时返回 `null`。
+	 * 供编辑视图与阅读视图的渲染器调用（周期 2）。门控与写入模式完全一致（{@link resolveNumberingAction}），
+	 * 另外过半标题带手写编号（{@link isMostlyForeignNumbered}）的文件不渲染，避免屏幕上出现两套数字。
+	 */
+	virtualNumberingFor(filePath: string, content: string): VirtualHeadingLabel[] | null {
+		const template = this.getTemplateForFile(filePath);
+		const action = resolveNumberingAction({
+			retired: this.settings.retired === true,
+			clearing: this.vaultClearInProgress,
+			fileSwitch: readFileSwitch(content),
+			autoNumber: this.settings.autoNumber,
+			mode: this.numberingModeFor(filePath),
+			hasTemplate: template !== null,
+		});
+		if (action !== "virtual" || !template || isMostlyForeignNumbered(content)) {
+			return null;
+		}
+		const { prefixes, suffixes } = this.strippableAffixes();
+		return computeVirtualNumbers(content, template, {
+			strippablePrefixes: prefixes,
+			strippableSuffixes: suffixes,
+		});
+	}
+
+	/**
 	 * **自动触发**是否应进行（见 spec.md §3.1 自动路径）。判定顺序：
 	 * - frontmatter `false` → 不触发（即便全局开关开）。
 	 * - frontmatter `true` → 触发（文件级强制 opt-in，即便全局开关关）。
@@ -619,7 +745,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 			if (
 				!info.file ||
-				!this.shouldAutoTrigger(editor.getValue()) ||
+				// 仅显示文件（M14）：还原原文会把带 WJ 的编号写进文件，只接受净化后的文本。
+				!this.shouldAutoWrite(editor.getValue(), info.file.path) ||
 				!this.getTemplateForFile(info.file.path)
 			) {
 				return false;
@@ -838,6 +965,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * （{@link shouldAutoTrigger} + 按路径解析模板），全局开关关 / frontmatter `false` / 无可用模板时静默跳过。
 	 */
 	renumberActiveFile(): void {
+		// 模板 / 规则变了：仅显示文件的编号也要跟着刷新（M14）。
+		this.refreshVirtualViews();
 		const leaves = this.app.workspace.getLeavesOfType("markdown");
 		for (const leaf of leaves) {
 			// getLeavesOfType("markdown") 的叶子视图即 MarkdownView（含 editor / file），鸭子类型取用。
@@ -850,7 +979,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			if (!editor || !file) {
 				continue;
 			}
-			if (!this.shouldAutoTrigger(editor.getValue())) {
+			if (!this.shouldAutoWrite(editor.getValue(), file.path)) {
 				continue;
 			}
 			const template = this.getTemplateForFile(file.path);
@@ -915,7 +1044,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (this.app.workspace.getActiveFile?.()?.path !== file.path) {
 			return;
 		}
-		if (!this.shouldAutoTrigger(content)) {
+		if (!this.shouldAutoWrite(content, file.path)) {
+			this.guardVirtualForeignNumbering(file.path, content);
 			return;
 		}
 		const template = this.getTemplateForFile(file.path);
@@ -1013,7 +1143,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const t = this.messages();
 		let link!: HTMLAnchorElement;
 		const frag = createFragment((el) => {
-			el.appendText(`${t.noticeForeignNumberingGuard} `);
+			el.appendText(
+				`${this.isVirtualFile(path) ? t.noticeForeignNumberingGuardVirtual : t.noticeForeignNumberingGuard} `,
+			);
 			link = el.createEl("a", {
 				text: t.noticeForeignNumberingGuardAction,
 				href: "#",
@@ -1085,10 +1217,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		const stripped = clearForeignNumberingContent(content, { keepLines });
 		const { prefixes, suffixes } = this.strippableAffixes();
-		const finalContent = renumberContent(stripped, template, {
-			strippablePrefixes: prefixes,
-			strippableSuffixes: suffixes,
-		});
+		// 仅显示文件（M14）：只剥手写编号，不写插件编号——编号由渲染器显示。
+		const finalContent = this.isVirtualFile(path)
+			? stripped
+			: renumberContent(stripped, template, {
+					strippablePrefixes: prefixes,
+					strippableSuffixes: suffixes,
+				});
 		const finalLines = finalContent.split("\n");
 		const items = previewForeignNumberingCleanup(content).map((c) => ({
 			lineIndex: c.lineIndex,
@@ -1137,8 +1272,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		newContent = fold.content;
 
 		// 仅当该文件**确实**会被自动重编号时才暂停：门控与自动路径完全一致（够格触发 + 命中模板）。
+		// 仅显示文件（M14）本就不会被写回编号，不暂停——写了 `fm:false` 反而会关掉它的虚拟显示。
 		const pause =
-			this.shouldAutoTrigger(newContent) && this.getTemplateForFile(path)
+			this.shouldAutoWrite(newContent, path) && this.getTemplateForFile(path)
 				? planPauseFileSwitch(newContent)
 				: null;
 		const extra = pause ? [this.switchEditToChange(oldContent, pause)] : [];
@@ -1150,6 +1286,31 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		const m = this.messages();
 		new Notice(pause ? m.noticeClearedAndPaused : m.noticeCleared);
+	}
+
+	/**
+	 * 「清除本文件残留编号」命令（M14，spec §3.22「残留前缀」）：只剥本插件写入的前缀
+	 * （{@link clearPluginNumberingContent}），手写编号不动、不写 `fm:false`；以单一事务写回，
+	 * 并像其他清除一样同步别处指向这些标题的链接。
+	 */
+	private runClearStaleNumbering(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
+		const { prefixes, suffixes } = this.strippableAffixes();
+		const oldContent = editor.getValue();
+		let newContent = clearPluginNumberingContent(oldContent, {
+			strippablePrefixes: prefixes,
+			strippableSuffixes: suffixes,
+		});
+		const m = this.messages();
+		if (newContent === oldContent) {
+			new Notice(m.noticeNoStaleNumbering);
+			return;
+		}
+		const fold = this.foldSelfBacklinks(ctx.file, oldContent, newContent);
+		newContent = fold.content;
+		if (this.writeLineDiff(editor, oldContent, newContent)) {
+			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
+		}
+		new Notice(m.noticeStaleCleared);
 	}
 
 	/**
@@ -1235,8 +1396,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 清除全库所有 Markdown 文件的编号前缀（见 spec.md §3.10「清除全库编号」按钮）。
 	 * 由 SettingsTab 的 ClearVaultModal 在二次确认后调用。
 	 *
-	 * **不在 Obsidian 编辑历史内（vault.modify 无撤销），建议用户操作前备份。**
-	 * 逐文件读取 → 清除 → 写回；仅修改实际有变化的文件。
+	 * 改走批量通道 {@link batchRewrite}（1.2.0，testplan H8/H17）：已打开的文件在它的编辑器里以
+	 * 事务改写（可在该编辑器里撤销，不读盘、不会被未落盘的改动覆盖），未打开的走 `vault.process`
+	 * 原子读改写（不在撤销历史内，确认框已提示备份）。顺带同步指向这些标题的内链——同文件自
+	 * 链接随主事务折叠，跨文件反链汇总为一条 Notice（{@link notifyBacklinkTotal}）。
 	 */
 	async clearAllVaultNumbering(): Promise<void> {
 		// 先**持久关闭**「全局自动编号」（0.7.17，testplan H7）：清完全库却留着开关开，
@@ -1259,25 +1422,17 @@ export default class AutoHeadingsPlugin extends Plugin {
 		try {
 			const { prefixes, suffixes } = this.strippableAffixes();
 			const files = this.app.vault.getMarkdownFiles();
-			let count = 0;
-			for (const file of files) {
-				const content = await this.app.vault.read(file);
-				const newContent = clearNumberingContent(content, {
+			const r = await this.batchRewrite(files, (_file, content) =>
+				clearNumberingContent(content, {
 					strippablePrefixes: prefixes,
 					strippableSuffixes: suffixes,
-				});
-				if (newContent !== content) {
-					await this.app.vault.modify(file, newContent);
-					count++;
-					// 若该文件有快照基线，同步刷新（全库清除绕开编辑器路径，基线不能留在清除前的状态）。
-					if (this.headingSnapshots.has(file.path)) {
-						this.headingSnapshots.set(file.path, snapshotHeadings(newContent));
-					}
-				}
-			}
-			new Notice(this.messages().noticeClearedVault(count));
+				}),
+			);
+			new Notice(this.messages().noticeClearedVault(r.changed));
+			await this.notifyBacklinkTotal(r.links);
 		} finally {
 			this.vaultClearInProgress = false;
+			this.refreshVirtualViews(); // 清库期间暂停了虚拟显示（M14），结束后补一次。
 		}
 	}
 
@@ -1298,6 +1453,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * {@link guardForeignNumbering} 兜着，不必新建机制。
 	 *
 	 * **不在 Obsidian 编辑历史内（vault.modify 无撤销），确认框已提示建议备份。**
+	 *
+	 * 改走批量通道 {@link batchRewrite}（1.2.0，testplan H8/H19）：已打开的文件走它的编辑器事务
+	 * （可撤销、不读盘），未打开的走 `vault.process`。变换函数保持 `stripWordJoiners(content)`——
+	 * 仍是**全文**剥离（标题与链接锚点两侧的 WJ 同时归零，见上文「为什么是全文级剥离」）；批量通道
+	 * 顺带触发的 backlink 同步（{@link foldSelfBacklinks}/{@link syncBacklinksCounted}）在这里通常
+	 * 是空操作——`linkAnchor` 判定改名时本就剥 WJ 比较，纯去 WJ 不构成「锚点变化」，链接侧的归零已由
+	 * 逐文件全文剥离本身完成，两者不冲突。
 	 */
 	async freezeVaultNumbering(): Promise<void> {
 		// 先落盘「已离场」再动文件：中途异常也不会留下「标记已剥、插件却还在编号」的坏状态
@@ -1313,20 +1475,14 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.debounceTimers.clear();
 		try {
 			const files = this.app.vault.getMarkdownFiles();
-			let count = 0;
-			for (const file of files) {
-				const content = await this.app.vault.read(file);
-				const frozen = stripWordJoiners(content);
-				if (frozen !== content) {
-					await this.app.vault.modify(file, frozen);
-					count++;
-				}
-			}
+			const r = await this.batchRewrite(files, (_file, content) => stripWordJoiners(content));
 			// 快照直接清空：插件已离场，改名表基线不再有意义（与清库的「刷新」不同）。
 			this.headingSnapshots.clear();
-			new Notice(this.messages().noticeFrozenVault(count));
+			new Notice(this.messages().noticeFrozenVault(r.changed));
+			await this.notifyBacklinkTotal(r.links);
 		} finally {
 			this.vaultClearInProgress = false;
+			this.refreshVirtualViews(); // 已离场：让仅显示文件的编号随之消失（M14）。
 		}
 	}
 
@@ -1364,7 +1520,137 @@ export default class AutoHeadingsPlugin extends Plugin {
 			new Notice(m.noticeBatchNoMatch);
 			return;
 		}
-		// path → editor 映射：已打开的文件走编辑器通道。
+		const r = await this.renumberFiles(files);
+		new Notice(m.noticeBatchDone(r.changed, r.unchanged, r.skipped));
+		await this.notifyBacklinkTotal(r.links);
+	}
+
+	/**
+	 * 规划一次路径规则变动引起的模式切换（M14，spec §3.22「切换模式」）：比较改动前后每个文件的有效
+	 * 模式；「离开写入」的文件只保留**真有本插件编号**的（没有就不必问用户），内容取已打开编辑器里的
+	 * 当前值（可能有未落盘的改动），否则 `cachedRead`。
+	 */
+	async planModeTransition(before: PathRule[], after: PathRule[]): Promise<ModeTransition> {
+		const files = this.app.vault.getMarkdownFiles();
+		const diff = diffNumberingModes(
+			before,
+			after,
+			files.map((f) => f.path),
+		);
+		const editors = this.openEditorsByPath();
+		const byPath = new Map(files.map((f) => [f.path, f]));
+		const withNumbering = async (paths: string[]): Promise<string[]> => {
+			const kept: string[] = [];
+			for (const path of paths) {
+				const file = byPath.get(path);
+				const content =
+					editors.get(path)?.getValue() ??
+					(file ? await this.app.vault.cachedRead(file).catch(() => "") : "");
+				if (hasPluginNumbering(content)) {
+					kept.push(path);
+				}
+			}
+			return kept;
+		};
+		return {
+			toVirtual: await withNumbering(diff.toVirtual),
+			toNone: await withNumbering(diff.toNone),
+			toWrite: diff.toWrite,
+		};
+	}
+
+	/**
+	 * 执行模式切换的文件改写（**在新规则落盘之后**调用）：`clear` 只剥本插件写入的编号，`write` 对
+	 * 「仅显示 → 写入」的文件立即编号。两者都走批量通道（含 backlink 同步），链接 Notice 汇总一次。
+	 */
+	async applyModeTransition(
+		plan: ModeTransition,
+		opts: { clear: boolean; write: boolean },
+	): Promise<void> {
+		const files = this.app.vault.getMarkdownFiles();
+		const pick = (paths: string[]) => {
+			const wanted = new Set(paths);
+			return files.filter((f) => wanted.has(f.path));
+		};
+		const m = this.messages();
+		let links = 0;
+		const leaving = [...plan.toVirtual, ...plan.toNone];
+		if (opts.clear && leaving.length > 0) {
+			const r = await this.clearPluginNumberingInFiles(pick(leaving));
+			if (r.changed > 0) {
+				new Notice(m.noticeModeCleared(r.changed));
+			}
+			links += r.links;
+		}
+		if (opts.write && plan.toWrite.length > 0) {
+			const r = await this.renumberFiles(pick(plan.toWrite));
+			new Notice(m.noticeBatchDone(r.changed, r.unchanged, r.skipped));
+			links += r.links;
+		}
+		await this.notifyBacklinkTotal(links);
+	}
+
+	/**
+	 * 逐文件按各自解析的模板重编号（批量重编号与「仅显示 → 写入」的立即写入共用）。跳过：「不编号」、
+	 * 无可用模板、仅显示文件、frontmatter `false`、未接管的外来编号（J10 守卫同源）。
+	 */
+	async renumberFiles(files: readonly TFile[]): Promise<BatchResult> {
+		const { prefixes, suffixes } = this.strippableAffixes();
+		return this.batchRewrite(files, (file, content) => {
+			const template = this.getTemplateForFile(file.path);
+			if (
+				!template ||
+				this.isVirtualFile(file.path) ||
+				readFileSwitch(content) === false ||
+				hasUnclaimedForeignNumbering(content)
+			) {
+				return null;
+			}
+			return renumberContent(content, template, {
+				strippablePrefixes: prefixes,
+				strippableSuffixes: suffixes,
+			});
+		});
+	}
+
+	/**
+	 * 逐文件只剥本插件写入的编号（M14「写入 → 仅显示」切换，spec §3.22）：手写编号不动、不写 `fm:false`，
+	 * 与重编号走同一对批量通道（含 backlink 同步）。
+	 */
+	async clearPluginNumberingInFiles(files: readonly TFile[]): Promise<BatchResult> {
+		const { prefixes, suffixes } = this.strippableAffixes();
+		return this.batchRewrite(files, (_file, content) =>
+			clearPluginNumberingContent(content, {
+				strippablePrefixes: prefixes,
+				strippableSuffixes: suffixes,
+			}),
+		);
+	}
+
+	/**
+	 * 批量改写的两条通道：已打开的文件走编辑器事务（可撤销，且不会被编辑器里未落盘的内容覆盖——
+	 * 见 {@link foldSelfBacklinks} 的根因说明），未打开的走 `vault.process`（原子读改写）。
+	 * `transform` 返回 `null` 表示跳过该文件。backlink Notice 交调用方汇总，避免一次弹出几十条。
+	 */
+	private async batchRewrite(
+		files: readonly TFile[],
+		transform: (file: TFile, content: string) => string | null,
+	): Promise<BatchResult> {
+		const editors = this.openEditorsByPath();
+		const result: BatchResult = { changed: 0, unchanged: 0, skipped: 0, links: 0 };
+		for (const file of files) {
+			const editor = editors.get(file.path);
+			const r = editor
+				? await this.rewriteViaEditor(editor, file, transform)
+				: await this.rewriteViaVault(file, transform);
+			result[r.outcome]++;
+			result.links += r.links;
+		}
+		return result;
+	}
+
+	/** 已打开的 Markdown 文件 → 其编辑器（批量改写优先走编辑器事务，不覆盖未落盘的改动）。 */
+	private openEditorsByPath(): Map<string, Editor> {
 		const editors = new Map<string, Editor>();
 		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
 			const view = leaf.view as unknown as {
@@ -1375,84 +1661,46 @@ export default class AutoHeadingsPlugin extends Plugin {
 				editors.set(view.file.path, view.editor);
 			}
 		}
-		let changed = 0;
-		let unchanged = 0;
-		let skipped = 0;
-		let links = 0;
-		for (const file of files) {
-			const template = this.getTemplateForFile(file.path);
-			if (!template) {
-				skipped++; // 解析为「不编号」伪模板，或无可用模板（如更具体规则引用已失效模板）。
-				continue;
-			}
-			const editor = editors.get(file.path);
-			const result = editor
-				? await this.batchRenumberViaEditor(editor, file, template)
-				: await this.batchRenumberViaVault(file, template);
-			if (result.outcome === "skipped") {
-				skipped++;
-			} else if (result.outcome === "changed") {
-				changed++;
-			} else {
-				unchanged++;
-			}
-			links += result.links;
-		}
-		new Notice(m.noticeBatchDone(changed, unchanged, skipped));
-		await this.notifyBacklinkTotal(links);
+		return editors;
 	}
 
-	/** 已打开文件的批量重编号通道：与 {@link applyRenumber} 同构，但 backlink Notice 交批量端汇总。 */
-	private async batchRenumberViaEditor(
+	/** 已打开文件的改写通道：与 {@link applyRenumber} 同构，但 backlink Notice 交批量端汇总。 */
+	private async rewriteViaEditor(
 		editor: Editor,
-		file: LinkTarget,
-		template: Template,
-	): Promise<{ outcome: "changed" | "unchanged" | "skipped"; links: number }> {
+		file: TFile,
+		transform: (file: TFile, content: string) => string | null,
+	): Promise<{ outcome: BatchOutcome; links: number }> {
 		const oldContent = editor.getValue();
-		if (readFileSwitch(oldContent) === false || hasUnclaimedForeignNumbering(oldContent)) {
+		const next = transform(file, oldContent);
+		if (next === null) {
 			return { outcome: "skipped", links: 0 };
 		}
-		const { prefixes, suffixes } = this.strippableAffixes();
-		const fold = this.foldSelfBacklinks(
-			file,
-			oldContent,
-			renumberContent(oldContent, template, {
-				strippablePrefixes: prefixes,
-				strippableSuffixes: suffixes,
-			}),
-		);
+		const fold = this.foldSelfBacklinks(file, oldContent, next);
 		const wrote = this.writeLineDiff(editor, oldContent, fold.content);
 		this.headingSnapshots.set(file.path, snapshotHeadings(fold.content));
 		const links = await this.syncBacklinksCounted(file, fold.renames, fold.selfCount);
 		return { outcome: wrote ? "changed" : "unchanged", links };
 	}
 
-	/** 未打开文件的批量重编号通道：`vault.process` 原子读改写（守卫命中时原样返回、不写入）。 */
-	private async batchRenumberViaVault(
+	/** 未打开文件的改写通道：`vault.process` 原子读改写（跳过时原样返回、不写入）。 */
+	private async rewriteViaVault(
 		file: TFile,
-		template: Template,
-	): Promise<{ outcome: "changed" | "unchanged" | "skipped"; links: number }> {
+		transform: (file: TFile, content: string) => string | null,
+	): Promise<{ outcome: BatchOutcome; links: number }> {
 		// 结果经对象属性带出闭包（TS 的流分析不追踪闭包内赋值，直接用局部 let 会误判比较恒假）。
 		const box: {
-			outcome: "changed" | "unchanged" | "skipped";
+			outcome: BatchOutcome;
 			renames: HeadingRename[];
 			selfCount: number;
 			content: string;
 		} = { outcome: "unchanged", renames: [], selfCount: 0, content: "" };
 		await this.app.vault.process(file, (content) => {
-			if (readFileSwitch(content) === false || hasUnclaimedForeignNumbering(content)) {
+			const next = transform(file, content);
+			if (next === null) {
 				box.outcome = "skipped";
 				return content;
 			}
-			const { prefixes, suffixes } = this.strippableAffixes();
-			const fold = this.foldSelfBacklinks(
-				file,
-				content,
-				renumberContent(content, template, {
-					strippablePrefixes: prefixes,
-					strippableSuffixes: suffixes,
-				}),
-			);
+			const fold = this.foldSelfBacklinks(file, content, next);
 			box.renames = fold.renames;
 			box.selfCount = fold.selfCount;
 			box.content = fold.content;
@@ -1521,12 +1769,97 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.runClearForeignNumbering(found.editor, found.ctx);
 	}
 
+	/**
+	 * 注册「复制编号大纲」「复制当前小节链接」两条命令（R 组，spec.md §A.11）。
+	 * 拆成独立方法：纯 addCommand 接线，业务逻辑在 copycommands.ts；也让单测能在不跑完整
+	 * onload() 的前提下单独调用、断言注册结果与回调行为。
+	 */
+	private registerCopyCommands(): void {
+		const t = this.messages();
+		// 阅读视图也要可用，故用 checkCallback 而非要求编辑器焦点的 editorCallback。
+		this.addCommand({
+			id: "copy-numbered-outline",
+			name: t.cmdCopyOutline,
+			checkCallback: (checking) => {
+				const found = this.activeMarkdownContext();
+				const file = found?.ctx.file;
+				if (!found || !file) {
+					return false;
+				}
+				if (!checking) {
+					void this.runCopyNumberedOutline(found.editor, file);
+				}
+				return true;
+			},
+		});
+		// 需要光标位置，用 editorCheckCallback；光标在第一个标题之前（或文件没有标题）时命令
+		// 从命令面板消失（R5）。
+		this.addCommand({
+			id: "copy-section-link",
+			name: t.cmdCopySectionLink,
+			editorCheckCallback: (checking, editor, ctx) => {
+				const file = ctx.file;
+				const heading = file
+					? sectionHeadingAt(editor.getValue(), editor.getCursor().line)
+					: null;
+				if (!file || !heading) {
+					return false;
+				}
+				if (!checking) {
+					void this.runCopySectionLink(file, heading);
+				}
+				return true;
+			},
+		});
+	}
+
+	/**
+	 * 「复制编号大纲」命令的执行体（R1–R3）：写入模式取标题所见文本，仅显示模式取虚拟编号
+	 * （{@link virtualNumberingFor}），拼装逻辑见 {@link buildNumberedOutline}。没有标题时只提示、
+	 * 不碰剪贴板；写剪贴板失败（权限受限等）时提示复制失败，不向上抛错。
+	 */
+	private async runCopyNumberedOutline(editor: Editor, file: TFile): Promise<void> {
+		const content = editor.getValue();
+		const labels = this.virtualNumberingFor(file.path, content);
+		const { text, count } = buildNumberedOutline(content, labels);
+		const m = this.messages();
+		if (count === 0) {
+			new Notice(m.noticeNoHeadings);
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(text);
+			new Notice(m.noticeOutlineCopied(count));
+		} catch {
+			new Notice(m.noticeCopyFailed);
+		}
+	}
+
+	/**
+	 * 「复制当前小节链接」命令的执行体（R4）：链接由 Obsidian 按用户的链接设置生成
+	 * （`generateMarkdownLink`），锚点 / 别名口径见 {@link sectionLinkParts}。
+	 */
+	private async runCopySectionLink(file: TFile, heading: Heading): Promise<void> {
+		const { anchor, alias } = sectionLinkParts(heading);
+		const link = this.app.fileManager.generateMarkdownLink(file, "", "#" + anchor, alias);
+		const m = this.messages();
+		try {
+			await navigator.clipboard.writeText(link);
+			new Notice(m.noticeSectionLinkCopied(alias ?? stripWordJoiners(anchor)));
+		} catch {
+			new Notice(m.noticeCopyFailed);
+		}
+	}
+
 	async loadSettings(): Promise<void> {
 		const data = ((await this.loadData()) ?? {}) as Record<string, unknown>;
+		const fresh = await this.isFreshInstall(data);
 		const merged = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			{ pathRules: defaultPathRules() },
+			// 全新安装默认「仅显示」（M14，spec §3.22）；升级用户缺省 mode 仍按写入处理。
+			// 只改内存、不在这里落盘：多设备同步时 data.json 可能还没到，等用户第一次改设置才写。
+			{ pathRules: fresh ? freshInstallPathRules() : defaultPathRules() },
 			data,
 		) as Record<string, unknown>;
 		// 迁移：历史字段 `enabled`（M2–M4）→ `autoNumber`（M5）。
@@ -1538,6 +1871,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (!Array.isArray(merged.pathRules)) {
 			merged.pathRules = defaultPathRules();
 		}
+		// M14：规则的 mode 非法值删掉（缺省即写入）。
+		normalizeRuleModes(merged.pathRules as PathRule[]);
 		// language 缺失 / 非法（含旧版本无此字段）时回退到默认 `auto`。
 		if (merged.language !== "zh" && merged.language !== "en" && merged.language !== "auto") {
 			merged.language = "auto";
@@ -1563,6 +1898,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (merged.headingSuggestWhenVcActive !== "own") {
 			merged.headingSuggestWhenVcActive = "yield";
 		}
+		// 1.2.0：大纲里显示仅显示模式的编号，缺省 / 非法值回退到默认开。
+		if (typeof merged.showOutlineNumbers !== "boolean") {
+			merged.showOutlineNumbers = true;
+		}
 		// 迁移：历史独立开关 `backlinkStandaloneTrigger`（0.7.8–1.0.8，CR-18）已并入 `updateBacklinks`
 		// （1.0.9 起单开关全局生效，与是否命中编号模板无关）；旧字段不再读取，随迁移一并清理。
 		delete merged.backlinkStandaloneTrigger;
@@ -1576,6 +1915,102 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+		this.refreshVirtualViews(); // 开关 / 规则 / retired 都可能改变仅显示文件该不该显示（M14）。
+	}
+
+	/**
+	 * 让所有已打开的编辑器与阅读视图重算虚拟编号（M14，spec §3.22「渲染」）：编辑器 dispatch
+	 * {@link virtualRefreshEffect}；阅读视图由 {@link VirtualReadingRenderer.refreshAll} 原地重新核对
+	 * 每个已渲染的段落（隐藏着的阅读视图也照改，切过去时不会是旧编号）。取不到 CM6 实例时静默跳过。
+	 */
+	refreshVirtualViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view as unknown as {
+				editor?: { cm?: { dispatch(spec: unknown): void } };
+			};
+			try {
+				view.editor?.cm?.dispatch({ effects: virtualRefreshEffect.of(null) });
+			} catch {
+				/* 视图正在销毁等：跳过，不影响其他视图 */
+			}
+		}
+		this.readingRenderer?.refreshAll();
+		this.outlineDecorator?.refreshAll();
+	}
+
+	/**
+	 * 仅显示文件的外来编号提示（M14）：打开时若过半标题带手写编号（{@link isMostlyForeignNumbered}），
+	 * 虚拟编号不会显示，弹与写入模式同一条可点击提示（文案换成仅显示版），点开可预览并清理——清理只剥
+	 * 手写编号、不写插件编号（{@link computeForeignCleanupPreview}）。不满足时收起该文件的提示。
+	 */
+	private guardVirtualForeignNumbering(path: string, content: string): void {
+		if (
+			!this.isVirtualFile(path) ||
+			!this.shouldAutoTrigger(content) ||
+			!this.getTemplateForFile(path)
+		) {
+			return;
+		}
+		if (isMostlyForeignNumbered(content)) {
+			this.showForeignNumberingGuardNotice(path);
+		} else {
+			this.dismissGuardNotice(path);
+		}
+	}
+
+	/** 残留样式编号的悬停提示（M14，供渲染器调用）。 */
+	staleTooltip(): string {
+		return this.messages().virtualStaleTooltip;
+	}
+
+	/** 设置「在大纲中显示编号」是否开着（1.2.0，供大纲渲染器调用）。 */
+	outlineNumbersEnabled(): boolean {
+		return this.settings.showOutlineNumbers !== false;
+	}
+
+	/** 阅读视图拿不到段落信息时读文件全文（M14 兜底）；不是 Markdown 文件或读失败返回 `null`。 */
+	async readFileContent(path: string): Promise<string | null> {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) {
+			return null;
+		}
+		try {
+			return await this.app.vault.cachedRead(file);
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * data.json 被同步服务或外部程序改写（M14，spec §3.22「多设备同步竞态」）：重新载入设置。
+	 * 典型场景：第二台设备在 data.json 同步到位之前加载插件、被当成新装而切到「仅显示」，
+	 * 同步到位后这里把它拉回真实配置。
+	 */
+	async onExternalSettingsChange(): Promise<void> {
+		await this.loadSettings();
+		this.settingTab?.display();
+		this.refreshVirtualViews();
+	}
+
+	/** 插件目录（`.obsidian/plugins/auto-headings`），templates/ 与 VC 词典都放在这里。 */
+	private pluginDir(): string {
+		return this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+	}
+
+	/**
+	 * 是否全新安装（M14，spec §3.22「新装与升级」）：data.json 为空 **且** 插件目录下没有 templates/。
+	 * 老用户可能从没改过设置（没有 data.json），但首次启用时一定建过 templates/default.json。
+	 * 探测失败一律按升级处理——宁可保持老行为，也不把老用户误切到仅显示。
+	 */
+	private async isFreshInstall(data: Record<string, unknown>): Promise<boolean> {
+		if (Object.keys(data).length > 0) {
+			return false;
+		}
+		try {
+			return !(await this.app.vault.adapter.exists(`${this.pluginDir()}/templates`));
+		} catch {
+			return false;
+		}
 	}
 
 	/**
@@ -1591,7 +2026,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		const content = editor.getValue();
-		if (!this.shouldAutoTrigger(content) && !this.shouldBacklinkStandaloneTrigger()) {
+		if (!this.shouldAutoWrite(content, file.path) && !this.shouldBacklinkStandaloneTrigger()) {
 			return; // 两条路径都不够格：不安排任何更新。
 		}
 
@@ -1616,7 +2051,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 			// 计时器到期时再次校验（其间用户可能改了开关或 frontmatter）。
 			const value = editor.getValue();
-			if (this.shouldAutoTrigger(value)) {
+			// 仅显示文件（M14）在此不写，落到下方的 backlink 独立同步分支。
+			if (this.shouldAutoWrite(value, path)) {
 				const template = this.getTemplateForFile(path);
 				if (template) {
 					if (!this.guardForeignNumbering(path, value)) {
@@ -1701,6 +2137,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 			new Notice(
 				this.resolvesToNoNumbering(path) ? m0.noticeNoNumberingRule : m0.noticeNoRule,
 			);
+			return;
+		}
+		if (this.isVirtualFile(path)) {
+			// 仅显示文件（M14，spec §3.22）：手动命令也不写文件，只刷新显示并说明原因。
+			this.refreshVirtualViews();
+			new Notice(this.messages().noticeVirtualModeFile);
 			return;
 		}
 
@@ -2032,10 +2474,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 内部链接。**仅在 `updateBacklinks` 开启时工作**（默认开）。改名表由调用方（
 	 * {@link foldSelfBacklinks}）算好传入，本方法只负责反查引用方 + 写回，不重算。
 	 *
-	 * 用 `metadataCache.getBacklinksForFile` 反查引用方 → 对每个**别的**引用文件用 `vault.process`
-	 * 原子重写锚点（纯函数 {@link rewriteBacklinksInContent}）——**跳过引用方=本文件自身**的条目：
-	 * 那一支已经在 {@link foldSelfBacklinks} 里随主事务同步处理过，这里重复处理只会重新引入
-	 * 「读盘覆盖未落盘编辑器内容」的竞态（见 {@link foldSelfBacklinks} 的详细说明）。
+	 * 用 `metadataCache.getBacklinksForFile` 反查引用方 → 每个**别的**引用文件按是否已打开分流
+	 * 写回（见 {@link syncBacklinksCounted} 的根因说明，testplan H18）——**跳过引用方=本文件自身**
+	 * 的条目：那一支已经在 {@link foldSelfBacklinks} 里随主事务同步处理过，这里重复处理只会重新
+	 * 引入「读盘覆盖未落盘编辑器内容」的竞态（同一份说明）。
 	 *
 	 * 防御性：`getBacklinksForFile` 为半公开 API（返回 `{data}` 包装），缺失 / 异常时**静默降级**——
 	 * 绝不因链接同步失败而打断编号本身。
@@ -2051,7 +2493,17 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	/**
 	 * {@link syncBacklinks} 的计数核心（不弹 Notice，返回改写的链接总数）：批量重编号（M12，
-	 * testplan K16）逐文件调用本方法并**汇总成一条** Notice，避免一次批量弹出几十条「已更新链接」。
+	 * testplan K16）与批量清除 / 固化（1.2.0，testplan H17–H19）逐文件调用本方法并**汇总成一条**
+	 * Notice，避免一次批量弹出几十条「已更新链接」。
+	 *
+	 * **引用方已打开时走它的编辑器事务**（1.2.0，testplan H18）：与 {@link foldSelfBacklinks} 同源的
+	 * 竞态——批量改写（清除全库 / 固化全库 / 模式切换 / 批量重编号）里 A、B 互相引用且都开着时，
+	 * 若先改写了 A（编辑器事务，尚未落盘）、再因 B 的标题变化去同步 A 里指向 B 的链接，`vault.process`
+	 * 读到的是 A 落盘前的旧内容，写回后把 A 刚完成的改写冲掉。改为对已打开的引用方取 `editor.getValue()`
+	 * 现改现写、经 {@link writeLineDiff} 写回同一个编辑器：`rewriteBacklinksInContent` 只替换链接锚点
+	 * 内的有界文本（wikilink 正则排除 `\n`、Markdown 目的地解析逐行清栈、写入锚点经 `stripIllegal`
+	 * 折叠空白/换行）——不可能增删任何行，故按行对齐比较的 `writeLineDiff` 可以安全复用，不必另起一套
+	 * 改写路径。未打开的引用方仍走 `vault.process` 原子读改写（无撤销，确认框已提示）。
 	 */
 	private async syncBacklinksCounted(
 		target: LinkTarget | null | undefined,
@@ -2073,9 +2525,21 @@ export default class AutoHeadingsPlugin extends Plugin {
 			const data = backlinkMap(raw);
 			if (data) {
 				const basename = target.basename ?? linkBasename(target.path);
+				const editors = this.openEditorsByPath();
 				for (const sourcePath of data.keys()) {
 					if (typeof sourcePath !== "string" || sourcePath === target.path) {
 						continue; // 本文件自身已由 foldSelfBacklinks 随主事务处理，跳过避免竞态重复写。
+					}
+					const editor = editors.get(sourcePath);
+					if (editor) {
+						// 引用方正被打开：走它的编辑器，不读盘（见本方法上方的根因说明）。
+						const old = editor.getValue();
+						const result = rewriteBacklinksInContent(old, basename, false, map);
+						if (result.count > 0) {
+							this.writeLineDiff(editor, old, result.content);
+						}
+						total += result.count;
+						continue;
 					}
 					const file = vault.getAbstractFileByPath(sourcePath);
 					// 仅处理文件（instanceof 收窄，排除文件夹，商店审核要求勿用 as TFile 断言）。

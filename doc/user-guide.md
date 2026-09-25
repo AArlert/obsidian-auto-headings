@@ -8,10 +8,10 @@ The full reference behind the [README](../README.md): every setting, every edge 
 
 Everything below is what you get the moment the plugin is enabled, before you open the settings panel once.
 
--   **Zero configuration.** Install it, open a note, and headings from H2 down get `1` / `1.1` / `1.1.1` numbering the moment you edit — no setup needed.
+-   **Zero configuration.** Install it, open a note, and headings from H2 down show `1` / `1.1` / `1.1.1` numbering the moment you edit — no setup needed. New installs start in display-only mode, so the file itself is never changed (see [Two modes](#two-modes-display-only-and-write-to-file)).
 -   **Your heading levels are sacred.** The plugin only adds or removes number prefixes — it **never** rewrites `#`/`##`/`###`. Multiple top-level `# H1`s in one file are left alone and treated as section boundaries (numbering under each one restarts).
 -   **Doesn't fight you while you type.** Renumbering runs on a debounce (50–2000 ms, adjustable) after you stop typing, and rewrites the whole file in a single editor transaction — one `Ctrl/Cmd+Z` undoes it, and your cursor position is preserved.
--   **No background cost, no matter how big your vault is.** The plugin only ever parses and rewrites the file you're actively editing — triggered by an edit, a manual command, or a settings change reapplied to the active file. It never scans your vault for "every file using template X." Files you haven't opened are only touched by bulk actions **you explicitly confirm** (batch renumber on a path rule, vault-wide clear), and adding more templates or path rules costs nothing while you're idle.
+-   **Numbering has no background cost.** Numbering only ever processes the file you're actively editing — triggered by an edit, a manual command, or a settings change reapplied to the active file. It never scans your vault for "every file using template X." Files you haven't opened are only touched by bulk actions **you explicitly confirm** (batch renumber on a path rule, removing or writing numbers when switching modes, vault-wide clear). The one feature that reads the whole vault is heading link suggestions: on startup it reads your vault's headings once, locally, to build an index (capped at 50,000), then updates it incrementally; you can turn it off under General settings. The plugin makes no network requests and collects no data.
 -   **Two independent switches, plus a manual override.** Enabling the plugin isn't the same as turning it loose on your whole vault: a global auto-numbering toggle decides whether editing a note triggers renumbering at all. Add `obsidian-auto-headings: true` or `false` to a note's frontmatter to override that toggle for one file — force it on while everything else stays untouched, or force it off for a file you don't want the plugin near. The **Renumber now** command ignores both: typing a command is explicit enough intent to skip every switch and renumber immediately.
 -   **Configuration lives in Settings, not in your notes.** Templates, path rules, and the whitelist are all managed from the settings panel — nothing gets written to frontmatter except that one optional override key above. Open a note and there's no sign the plugin is even installed.
 -   **Bilingual out of the box.** The entire UI follows Obsidian's own language setting (English / 简体中文), or can be locked to one manually. Fully usable on mobile (`isDesktopOnly: false`).
@@ -22,10 +22,37 @@ Everything below is what you get the moment the plugin is enabled, before you op
 1. Install and enable the plugin (see the [README](../README.md#install)).
 2. Open any note and edit it — headings from H2 down get numbered automatically.
 3. Open **Settings → Auto Headings** if you want to go further:
-    - **General**: language, global auto-numbering toggle, backlink sync, heading link suggestions, debounce delay.
-    - **Paths & templates**: the path-rule table and the template editor (live preview, whitelist).
+    - **General**: language, global auto-numbering toggle, debounce delay, numbers in the outline, backlink sync, heading link suggestions.
+    - **Paths & templates**: the path-rule table (each rule picks a template and a mode: write to file / display only) and the template editor (live preview, whitelist).
     - **Sensitive actions**: the three cleanup entries.
 4. Per-file override: add `obsidian-auto-headings: true/false` in frontmatter to force-enable/disable a single file. The command **Renumber now** bypasses all switches.
+
+## Two modes: display only and write to file
+
+Every path rule has a mode (the "Mode" column under **Settings → Paths & templates → Path rules**). Both modes use the same templates, whitelist and skip rules and produce exactly the same numbers; they only differ in where the numbers live:
+
+|                                                 | Display only                  | Write to file                          |
+| ----------------------------------------------- | ----------------------------- | -------------------------------------- |
+| Note file                                       | Never changed                 | Numbers written into headings as text  |
+| Live Preview, Reading view, embeds, hover preview | Numbers shown                 | Numbers shown                          |
+| Obsidian's built-in "Export to PDF"             | Numbers included              | Numbers included                       |
+| Source mode                                     | Shows your text as written    | Numbers are part of the text           |
+| Obsidian's Outline pane                         | Numbers shown (can be turned off) | Numbers visible                    |
+| In-file search                                  | No numbers                    | Numbers visible                        |
+| GitHub, Obsidian Publish, other editors         | No numbers                    | Numbers visible                        |
+| Links follow renamed headings                   | Yes                           | Yes                                    |
+
+-   **Defaults**: on a new install the root rule `/` is display-only, and rules you add later follow the root rule's mode. Vaults upgrading from an earlier version keep "Write to file" and behave exactly as before.
+-   **Mix by folder**: e.g. `/` display-only and `Papers/` write-to-file. The most specific rule wins, the same way templates are resolved.
+-   **Switching**: whenever changing a rule's mode, deleting a rule, editing its path, or setting its template to "No numbering" would move notes to a different mode, the plugin first shows a confirmation with the number of affected notes:
+    -   Write → display only: choose "Remove the numbers this plugin wrote" (on by default). Only the plugin's own numbers are removed — hand-written numbers stay — and links to those headings are updated. Leave it off to keep the existing numbers.
+    -   Display only → write: choose "Write numbers into these files now", or leave it off to write on the next edit (open notes update right away).
+    -   Cancel leaves the rule unchanged.
+-   **Leftover numbers**: if a display-only note still contains numbers the plugin wrote earlier (you kept them when switching, or moved the note in from a write-mode folder), the plugin hides the old number, shows a single new one, and underlines it with a dotted line; hover for an explanation. The old number is still in the file and will show up elsewhere. The command "Clear leftover plugin numbering in this file" removes it; it only appears in display-only notes.
+-   **Hand-written numbers**: if more than half of the headings in a display-only note already carry hand-written or imported numbers (say, after migrating from another numbering plugin), the plugin shows no numbers there, to avoid two sets, and offers a notice when you open the note so you can preview and clean them up. The occasional heading that happens to start with a number (like "2024 review") is unaffected and gets numbered as usual.
+-   **Outline pane**: display-only numbers also appear in Obsidian's built-in Outline pane and stay correct when you filter, collapse or drag sections there; headings with leftover numbers show the file's text as is. Turn this off under **Settings → General → Show numbers in the outline**.
+-   **Renumber now** in a display-only note only refreshes the display; it never writes to the file.
+-   **Freeze numbering and release ownership**: display-only numbers were never in the files, so they disappear once you freeze. To keep them as text, switch the rule to "Write to file" with "write now" first, then freeze.
 
 ## Customize it
 
@@ -127,6 +154,8 @@ number. For now it affects only the line it's on, not the headings nested under 
 
 ## How it works — and one thing you should know
 
+> This section only applies to **write-to-file** mode. Display-only mode never writes any character into your files.
+
 To tell its own numbering apart from your text, the plugin ends every prefix with an invisible **Word Joiner** character (U+2060): `## 1 ⁠My heading`. This is what makes it safe — headings that merely _look_ numbered (`2024 Review`, `API design`) are never mistaken for old numbering and eaten.
 
 The idea of marking prefixes with an invisible Unicode character traces back to gurjar1/auto-heading-obsidian. This plugin adds a second safeguard on top of it: since 0.7.20 the marker sits at **both ends** of the prefix, not just the end. If you delete the trailing one while editing — say, trimming a suffix — the leading one survives as proof a plugin prefix was there, so the next renumber heals the line instead of either duplicating the number or guessing wrong.
@@ -148,8 +177,9 @@ The numbering is real text, so it travels with your documents. Where each egress
 -   **Copying into other apps**: eliminated — **copy sanitization** is always on (the switch was removed in 1.0.16), so interactive copy/cut no longer carries the invisible character (see the clipboard note above).
 -   **Pandoc**: the numbers are already baked into the text, so don't let Pandoc number them again — exporting with `--number-sections` yields double numbering like `1.1 1.1 Introduction`. Drop the ready-made filter [`assets/pandoc/strip-autoheadings.lua`](../assets/pandoc/strip-autoheadings.lua) into your pipeline: by default it removes the plugin's prefixes so `--number-sections` produces clean single numbering, and `-M autoheadings=strip-marker` instead keeps the plugin's numbers and removes only the invisible character. Either way inline formatting inside headings (**bold**, `code`, links) survives. Verified against pandoc 3.10.
 -   **PDF via Pandoc**: exporting with `--pdf-engine=typst` produced **no U+2060 anywhere in the PDF text layer** — even without the filter, the marker is dropped before it reaches the page. Copy and search in the resulting PDF behave normally. Other PDF engines are untested.
--   **Obsidian's built-in "Export to PDF" / Obsidian Publish**: still unverified. These are different pipelines (Electron print-to-PDF over the reading view; Publish's own anchor generation), so the Pandoc result above does **not** carry over. If you need a guarantee today, run the clear command before exporting.
--   Want numbers visible only inside Obsidian, with zero file changes? A **virtual numbering mode** (render-layer numbering, never written to disk) is a roadmap candidate.
+-   **Obsidian's built-in "Export to PDF"**: in display-only mode the exported PDF includes the numbers (verified in 1.2.0). In write mode the numbers are in the PDF too, but how the invisible marker behaves in the PDF text layer is still unverified — the Pandoc result above does **not** carry over.
+-   **Obsidian Publish**: still unverified. Display-only numbers don't appear on Publish (Publish doesn't run this plugin).
+-   Want numbers visible only inside Obsidian, with zero file changes? Use [display-only mode](#two-modes-display-only-and-write-to-file).
 
 ## Migrating from Number Headings
 
@@ -169,6 +199,9 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 | Renumber now                    | Renumber the current file immediately, bypassing all switches                                |
 | Clear numbering in current file | Strip all numbering prefixes (including hand-written ones)                                   |
 | Clear non-plugin heading numbering | Strip only numbering **not** written by this plugin — use it to take over imported documents |
+| Clear leftover plugin numbering in this file | In a display-only note, strip only numbers this plugin wrote earlier (hand-written numbers stay) |
+| Copy numbered outline | Copy the current note's headings as an indented, numbered outline — works in both write and display-only mode |
+| Copy current section link | Copy a link to the section under the cursor (or the section the cursor is inside) — works in both write and display-only mode |
 
 ## Notes
 
@@ -179,7 +212,9 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 
 ## Uninstalling cleanly
 
-The only things this plugin ever writes into your files are numbering prefixes and two invisible marker characters — all fully removable. Two ways out, depending on whether you want to keep the numbers:
+If you only ever used display-only mode, the plugin never changed your files — just uninstall it.
+
+In write mode, the only things this plugin ever writes into your files are numbering prefixes and two invisible marker characters — all fully removable. Two ways out, depending on whether you want to keep the numbers:
 
 **Drop the numbering** — Settings → Sensitive actions → **Clear numbering in the whole vault** (it first switches global auto-numbering off, so nothing gets renumbered mid-clear). Headings go back to bare text.
 

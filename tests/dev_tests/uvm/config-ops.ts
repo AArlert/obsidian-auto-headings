@@ -45,6 +45,7 @@ export function applyConfig(w: World): void {
 		"editRulePattern",
 		"setRuleTemplate",
 		"reorderRule",
+		"setRuleMode",
 		"switchFile",
 	];
 	if (affixEmptyNow || w.cfg.allowInheritWithAffix) choices.push("setInherit");
@@ -279,6 +280,18 @@ export function applyConfig(w: World): void {
 				w.pathRules.splice(to, 0, moved);
 				w.cov.ruleReordered = true;
 				w.trace.push(`reorderRule ${from}->${to}`);
+			}
+			w.checkResolution();
+			break;
+		}
+		case "setRuleMode": {
+			// M14：翻转某条规则的编号模式（写入 ↔ 仅显示），覆盖两种模式在同一序列里交替的状态转移。
+			if (w.pathRules.length) {
+				const i = w.rng.int(w.pathRules.length);
+				const rule = w.pathRules[i];
+				rule.mode = rule.mode === "virtual" ? "write" : "virtual";
+				w.cov.ruleModeToggled = true;
+				w.trace.push(`setRuleMode #${i} -> ${rule.mode}`);
 			}
 			w.checkResolution();
 			break;

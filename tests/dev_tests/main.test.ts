@@ -14,7 +14,7 @@ import AutoHeadingsPlugin from "../../src/main";
 import { DEFAULT_TEMPLATE, WORD_JOINER, type Template } from "../../src/numbering";
 import { NO_NUMBERING_TEMPLATE, type PathRule } from "../../src/pathrules";
 import { HeadingIndex } from "../../src/headingindex";
-import { Modal, Notice, TFile as MockTFile } from "./obsidian-mock";
+import { Modal, Notice, TFile as MockTFile, type MockCommand } from "./obsidian-mock";
 
 /** 编辑器坐标。 */
 interface Pos {
@@ -133,6 +133,10 @@ interface PluginInternals {
 	setHeadingLinkSuggestEnabled(enabled: boolean): Promise<void>;
 	/** M13（1.0.28）：启动后的 VC 词典同步（重写词典 + reload 重试）。 */
 	syncVcDictionaryAfterStartup(): Promise<void>;
+	/** R 组（spec.md §A.11）：注册「复制编号大纲」「复制当前小节链接」两条命令。 */
+	registerCopyCommands(): void;
+	/** 继承自 Plugin 替身：全部经 `addCommand` 注册过的命令（见 obsidian-mock.ts）。 */
+	commands: MockCommand[];
 }
 
 /** 以 H2 中文样式覆盖默认模板（用于「改模板后即时重排」）。 */
@@ -260,6 +264,12 @@ function makePlugin(
 			return { data: new Map(sources.map((p) => [p, []])) };
 		},
 	};
+	// R 组「复制当前小节链接」：真实 Obsidian 按用户的链接设置拼装内部链接，这里只记录调用参数，
+	// 返回值本身不参与断言（命令层只关心「传给它的 file/subpath/alias 对不对」，见 main.test.ts）。
+	const generateMarkdownLink = vi.fn(
+		(file: { path: string }, _sourcePath: string, subpath?: string, alias?: string) =>
+			`[[${file.path}${subpath ?? ""}${alias ? "|" + alias : ""}]]`,
+	);
 	const app = {
 		workspace: {
 			getActiveViewOfType: (
@@ -273,6 +283,7 @@ function makePlugin(
 		},
 		vault,
 		metadataCache,
+		fileManager: { generateMarkdownLink },
 	};
 	const PluginCtor = AutoHeadingsPlugin as unknown as new (
 		app: unknown,
@@ -303,6 +314,7 @@ function makePlugin(
 		vaultFiles,
 		adapterFiles,
 		adapterWrite,
+		generateMarkdownLink,
 		setTemplate: (t: Template) => {
 			tplBox.current = t;
 		},
@@ -1624,6 +1636,182 @@ describe("M12：固化编号并交还所有权（敏感操作 TAB，testplan H9�
 	});
 });
 
+describe("H8/H17–H19：清除全库 / 固化全库改走批量通道 batchRewrite（1.2.0）", () => {
+	it("H8：清除全库时某文件正被打开、编辑器内容与磁盘不同——按编辑器内容改写，不经 vault 写回", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}落盘旧内容` },
+		});
+		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}编辑器新内容`);
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+
+		await p.clearAllVaultNumbering();
+
+		expect(ed.getValue()).toBe("## 编辑器新内容");
+		expect(ed.txnCount).toBe(1);
+		// 磁盘侧未被读改写覆盖——未落盘的编辑器内容才是真正要保留的那份。
+		expect(vaultFiles.get("a.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}落盘旧内容`);
+		expect(Notice.messages).toContain("已清除全库编号（共修改 1 个文件）");
+	});
+
+	it("H8/H19：固化全库时某文件正被打开、编辑器内容与磁盘不同——按编辑器内容改写，不经 vault 写回", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}落盘旧内容` },
+		});
+		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}编辑器新内容`);
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+
+		await p.freezeVaultNumbering();
+
+		expect(ed.getValue()).toBe("## 1 编辑器新内容");
+		expect(ed.txnCount).toBe(1);
+		expect(vaultFiles.get("a.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}落盘旧内容`);
+		expect(Notice.messages).toContain(
+			"已固化编号并交还所有权（修改 1 个文件）；编号保留为普通文本，插件停止自动编号",
+		);
+	});
+
+	it("H17：清除全库时同步内链——本文件自链接与别的文件的反链都跟着更新，只弹一次合计 Notice", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: {
+				"a.md": [
+					`## ${WORD_JOINER}1 ${WORD_JOINER}简介`,
+					`见 [[#1 ${WORD_JOINER}简介]]。`,
+				].join("\n"),
+				"b.md": "跳到 [[a#1 简介]]。",
+			},
+		});
+
+		await p.clearAllVaultNumbering();
+
+		expect(vaultFiles.get("a.md")).toBe(["## 简介", "见 [[#简介]]。"].join("\n"));
+		expect(vaultFiles.get("b.md")).toBe("跳到 [[a#简介]]。");
+		expect(Notice.messages).toContain("已清除全库编号（共修改 1 个文件）");
+		// 自链接 1 处 + 跨文件反链 1 处，合并汇总为一条 Notice（不逐文件弹）。
+		const linkNotices = Notice.messages.filter((m) => /^已更新 \d+ 处内部链接$/.test(m));
+		expect(linkNotices).toEqual(["已更新 2 处内部链接"]);
+	});
+
+	it("H17：「同步内部链接」关闭时，清除全库不触碰任何链接（与其他改写路径一致）", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: false,
+			vaultFiles: {
+				"a.md": [
+					`## ${WORD_JOINER}1 ${WORD_JOINER}简介`,
+					`见 [[#1 ${WORD_JOINER}简介]]。`,
+				].join("\n"),
+				"b.md": "跳到 [[a#1 简介]]。",
+			},
+		});
+
+		await p.clearAllVaultNumbering();
+
+		// 标题本身仍被清除（与开关无关），但链接原样不动。
+		expect(vaultFiles.get("a.md")).toBe(
+			["## 简介", `见 [[#1 ${WORD_JOINER}简介]]。`].join("\n"),
+		);
+		expect(vaultFiles.get("b.md")).toBe("跳到 [[a#1 简介]]。");
+		expect(Notice.messages.some((m) => /^已更新 \d+ 处内部链接$/.test(m))).toBe(false);
+	});
+
+	it("H18：Backlink 同步的引用方正被打开——走它的编辑器写入，不读盘覆盖未落盘的改动；未打开的引用方仍走 vault.process", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: {
+				// a.md 磁盘上是陈旧内容：编辑器里另有未落盘的改动（模拟批量改写通道里 A 刚被编辑器
+				// 事务改写、尚未被 Obsidian 自动保存的那个窗口，与 foldSelfBacklinks 同源竞态）。
+				"a.md": "STALE-ON-DISK-SENTINEL 见 [[b#简介]]。",
+				"c.md": "另见 [[b#简介]]。", // 未打开，走 vault.process 照旧生效。
+			},
+		});
+		const aEd = new FakeEditor("编辑器里未落盘的改动 见 [[b#简介]]。");
+		setLeaves([{ editor: aEd, file: { path: "a.md" } }]);
+
+		const bEd = new FakeEditor("## 简介");
+		p.runImmediateRenumber(bEd, fileInfo("b.md"));
+		await flushPromises();
+
+		expect(bEd.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}简介`);
+		// a.md 走它自己的编辑器事务——磁盘上的陈旧内容岿然不动。
+		expect(aEd.getValue()).toBe(
+			`编辑器里未落盘的改动 见 [[b#${WORD_JOINER}1 ${WORD_JOINER}简介]]。`,
+		);
+		expect(aEd.txnCount).toBe(1);
+		expect(vaultFiles.get("a.md")).toBe("STALE-ON-DISK-SENTINEL 见 [[b#简介]]。");
+		// c.md 未打开，照旧走 vault.process。
+		expect(vaultFiles.get("c.md")).toBe(`另见 [[b#${WORD_JOINER}1 ${WORD_JOINER}简介]]。`);
+		expect(Notice.messages).toContain("已更新 2 处内部链接");
+	});
+
+	it("H18（批量清除场景）：A、B 都打开时，B 的标题变化经 A 的编辑器同步，不覆盖 A 未落盘的改动", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: { "a.md": "STALE-A-ON-DISK", "b.md": "STALE-B-ON-DISK" },
+		});
+		const aEd = new FakeEditor(`编辑器里未落盘的改动 见 [[b#1 ${WORD_JOINER}乙]]。`);
+		const bEd = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}乙`);
+		setLeaves([
+			{ editor: aEd, file: { path: "a.md" } },
+			{ editor: bEd, file: { path: "b.md" } },
+		]);
+
+		await p.clearAllVaultNumbering();
+
+		expect(bEd.getValue()).toBe("## 乙");
+		expect(aEd.getValue()).toBe("编辑器里未落盘的改动 见 [[b#乙]]。");
+		expect(vaultFiles.get("a.md")).toBe("STALE-A-ON-DISK");
+		expect(vaultFiles.get("b.md")).toBe("STALE-B-ON-DISK");
+	});
+
+	it("H19：已打开文件固化时，标题与链接锚点的 WJ 一并剥净（编辑器事务分支语义不回归）", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			vaultFiles: { "a.md": "STALE-ON-DISK" },
+		});
+		const ed = new FakeEditor(
+			[`## ${WORD_JOINER}1 ${WORD_JOINER}甲`, `见 [[#1 ${WORD_JOINER}甲]]。`].join("\n"),
+		);
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+
+		await p.freezeVaultNumbering();
+
+		expect(ed.getValue()).toBe(["## 1 甲", "见 [[#1 甲]]。"].join("\n"));
+		expect(ed.getValue()).not.toContain(WORD_JOINER);
+		expect(vaultFiles.get("a.md")).toBe("STALE-ON-DISK");
+	});
+
+	it("H19：固化后快照清空（改走批量通道不影响这个既有语义）", async () => {
+		const { p } = makePlugin({ vaultFiles: { "a.md": "## 甲" } });
+		const ed = new FakeEditor("## 甲");
+		p.runImmediateRenumber(ed, fileInfo("a.md")); // 播种一条快照基线。
+		const snapshots = (p as unknown as { headingSnapshots: Map<string, unknown> })
+			.headingSnapshots;
+		expect(snapshots.size).toBeGreaterThan(0);
+
+		await p.freezeVaultNumbering();
+
+		expect(snapshots.size).toBe(0);
+	});
+
+	it("H19：retired 在任何文件写入之前已落盘（批量循环开始前即已提交）", async () => {
+		const { p } = makePlugin({
+			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲` },
+		});
+		const app = (
+			p as unknown as { app: { vault: { process: (...args: unknown[]) => unknown } } }
+		).app;
+		let retiredWhenWriting: boolean | undefined;
+		const original = app.vault.process;
+		app.vault.process = (...args: unknown[]) => {
+			retiredWhenWriting = (p.settings as unknown as { retired?: boolean }).retired;
+			return original(...args);
+		};
+
+		await p.freezeVaultNumbering();
+
+		expect(retiredWhenWriting).toBe(true);
+	});
+});
+
 describe("M12：「不编号」伪模板（testplan K15）与多文件批量重编号（K16）", () => {
 	/** 根规则投「默认」+ `sub/` 文件夹规则投「不编号」伪模板。 */
 	const noneRules = (): PathRule[] => [
@@ -2284,5 +2472,422 @@ describe("M13：VC 词典写盘（节流 / 去重 / 截断，Q11/Q20 逻辑面�
 		}
 		await promise;
 		expect(executeCommandById).toHaveBeenCalledTimes(5);
+	});
+});
+
+describe("M14：仅显示文件永不写编号（spec §3.22，testplan V8 / V10 / V12 / V21 / V22）", () => {
+	/** 根规则写入 + `v/` 文件夹仅显示。 */
+	const mixedRules = (): PathRule[] => [
+		{ pattern: "/", template: "默认" },
+		{ pattern: "v/", template: "默认", mode: "virtual" },
+	];
+	type VirtualInternals = {
+		virtualNumberingFor(path: string, content: string): Array<{ label: string | null }> | null;
+		numberingModeFor(path: string): "write" | "virtual" | null;
+		settings: { retired?: boolean };
+	};
+
+	it("V8：自动路径（防抖）不写仅显示文件；同库的写入文件照常编号", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const edV = new FakeEditor("## 甲\n### 乙");
+		const edW = new FakeEditor("## 甲");
+		p.scheduleRenumber(edV, fileInfo("v/x.md"));
+		p.scheduleRenumber(edW, fileInfo("w.md"));
+		vi.advanceTimersByTime(300);
+		expect(edV.txnCount).toBe(0);
+		expect(edV.getValue()).toBe("## 甲\n### 乙");
+		expect(edW.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}甲`);
+	});
+
+	it("V8：打开即编号、改模板即时重排都跳过仅显示文件", async () => {
+		const { p, setActiveView } = makePlugin({ pathRules: mixedRules() });
+		const ed = new FakeEditor("## 章");
+		setActiveView({ editor: ed, file: { path: "v/x.md" } });
+		p.renumberOnOpen({ path: "v/x.md" });
+		await flushPromises();
+		p.renumberActiveFile();
+		expect(ed.txnCount).toBe(0);
+		expect(ed.getValue()).toBe("## 章");
+	});
+
+	it("V21：仅显示文件里手动改被引用的标题，其他笔记里的链接照样跟随", async () => {
+		const { p, vaultFiles } = makePlugin({
+			pathRules: mixedRules(),
+			updateBacklinks: true,
+			vaultFiles: { "b.md": "见 [[x#甲]]。" },
+		});
+		const ed = new FakeEditor("## 甲");
+		p.scheduleRenumber(ed, fileInfo("v/x.md")); // 播种快照基线。
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+
+		ed.setValue("## 甲改");
+		p.scheduleRenumber(ed, fileInfo("v/x.md"));
+		vi.advanceTimersByTime(300);
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe("见 [[x#甲改]]。");
+		expect(ed.getValue()).toBe("## 甲改"); // 一个编号也没写。
+	});
+
+	it("V22：对仅显示文件执行「立即重新编号」只给说明，不写文件", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const ed = new FakeEditor("## 章");
+		p.runImmediateRenumber(ed, fileInfo("v/x.md"));
+		expect(ed.txnCount).toBe(0);
+		expect(Notice.messages).toContain(
+			"当前文件为「仅显示」模式：编号只在 Obsidian 里显示，不写入文件",
+		);
+	});
+
+	it("批量重编号跳过被仅显示规则覆盖的文件", async () => {
+		const rules = mixedRules();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: { "a.md": "## 甲", "v/x.md": "## 乙" },
+		});
+		await p.batchRenumberRule(rules[0]);
+		expect(vaultFiles.get("a.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}甲`);
+		expect(vaultFiles.get("v/x.md")).toBe("## 乙");
+		expect(Notice.messages).toContain("批量重编号完成：改写 1 个，无变化 0 个，跳过 1 个");
+	});
+
+	it("「清除当前文件编号」用在仅显示文件上：清掉残留但不写 fm:false（否则会关掉虚拟显示）", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}简介`);
+		p.runClearNumbering(ed, fileInfo("v/x.md"));
+		expect(ed.getValue()).toBe("## 简介");
+	});
+
+	it("virtualNumberingFor：仅显示文件给出编号，写入文件与不编号路径给 null", () => {
+		const { p } = makePlugin({
+			pathRules: [...mixedRules(), { pattern: "v/off/", template: NO_NUMBERING_TEMPLATE }],
+		});
+		const v = p as unknown as VirtualInternals;
+		expect(v.virtualNumberingFor("v/x.md", "## 甲\n### 乙")?.map((l) => l.label)).toEqual([
+			"1 ",
+			"1.1 ",
+		]);
+		expect(v.virtualNumberingFor("w.md", "## 甲")).toBeNull();
+		expect(v.virtualNumberingFor("v/off/y.md", "## 甲")).toBeNull();
+		expect(v.numberingModeFor("v/off/y.md")).toBeNull();
+	});
+
+	it("V10：frontmatter false、全局关、清库中、retired 都不显示", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const v = p as unknown as VirtualInternals;
+		const fmOff = ["---", "obsidian-auto-headings: false", "---", "## 甲"].join("\n");
+		expect(v.virtualNumberingFor("v/x.md", fmOff)).toBeNull();
+
+		p.settings.autoNumber = false;
+		expect(v.virtualNumberingFor("v/x.md", "## 甲")).toBeNull();
+		const fmOn = ["---", "obsidian-auto-headings: true", "---", "## 甲"].join("\n");
+		expect(v.virtualNumberingFor("v/x.md", fmOn)).not.toBeNull(); // fm:true 压过全局关。
+		p.settings.autoNumber = true;
+
+		p.vaultClearInProgress = true;
+		expect(v.virtualNumberingFor("v/x.md", "## 甲")).toBeNull();
+		p.vaultClearInProgress = false;
+
+		v.settings.retired = true;
+		expect(v.virtualNumberingFor("v/x.md", "## 甲")).toBeNull();
+	});
+
+	it("V12：有外来编号（手写、无 WJ）的文件不显示，避免两套数字", () => {
+		const { p } = makePlugin({ pathRules: mixedRules() });
+		const v = p as unknown as VirtualInternals;
+		expect(v.virtualNumberingFor("v/x.md", "## 1. 引言\n## 2. 方法")).toBeNull();
+	});
+});
+
+describe("M14 周期 2：清除残留命令与刷新广播（testplan V14 / V25）", () => {
+	const virtualRules = (): PathRule[] => [{ pattern: "/", template: "默认", mode: "virtual" }];
+
+	it("V14：「清除本文件残留编号」只剥插件前缀，手写编号保留、不写 fm:false", () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		const ed = new FakeEditor(
+			[`## ${WORD_JOINER}1 ${WORD_JOINER}概述`, "## 1.1 手写"].join("\n"),
+		);
+		(
+			p as unknown as { runClearStaleNumbering(e: unknown, c: unknown): void }
+		).runClearStaleNumbering(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toBe(["## 概述", "## 1.1 手写"].join("\n"));
+		expect(Notice.messages).toContain("已清除本插件写入的旧编号，手写编号保持不动");
+	});
+
+	it("V14：没有残留时只提示，不发起事务", () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		const ed = new FakeEditor("## 1.1 手写");
+		(
+			p as unknown as { runClearStaleNumbering(e: unknown, c: unknown): void }
+		).runClearStaleNumbering(ed, fileInfo("a.md"));
+		expect(ed.txnCount).toBe(0);
+		expect(Notice.messages).toContain("本文件没有本插件写入的旧编号");
+	});
+
+	it("V25：改模板 / 规则（renumberActiveFile）时向每个编辑器广播重算信号", () => {
+		const { p, setLeaves } = makePlugin({ pathRules: virtualRules() });
+		const dispatch = vi.fn();
+		const ed = Object.assign(new FakeEditor("## 甲"), { cm: { dispatch } });
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+		p.renumberActiveFile();
+		expect(dispatch).toHaveBeenCalledTimes(1);
+		expect(ed.getValue()).toBe("## 甲"); // 仅显示文件：只刷新显示，不写。
+	});
+});
+
+describe("M14 周期 3：模式切换的规划与执行（testplan V15 / V16 / V18）", () => {
+	type ModeInternals = {
+		planModeTransition(
+			before: PathRule[],
+			after: PathRule[],
+		): Promise<{ toVirtual: string[]; toNone: string[]; toWrite: string[] }>;
+		applyModeTransition(
+			plan: { toVirtual: string[]; toNone: string[]; toWrite: string[] },
+			opts: { clear: boolean; write: boolean },
+		): Promise<void>;
+	};
+	const W = WORD_JOINER;
+	const before = (): PathRule[] => [
+		{ pattern: "/", template: "默认" },
+		{ pattern: "v/", template: "默认" },
+		{ pattern: "v/keep/", template: "默认", mode: "write" },
+	];
+
+	it("V15：只列出真有插件编号的文件；清除只剥插件编号、手写编号保留、不写 fm:false", async () => {
+		const rules = before();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: {
+				"v/x.md": `## ${W}1 ${W}概述\n## 2.1 手写`,
+				"v/plain.md": "## 没有编号",
+				"v/keep/y.md": `## ${W}1 ${W}保留`,
+				"a.md": `## ${W}1 ${W}根`,
+			},
+		});
+		const m = p as unknown as ModeInternals;
+		const after = rules.map((r) => ({ ...r }));
+		after[1].mode = "virtual";
+		const plan = await m.planModeTransition(rules, after);
+		expect(plan).toEqual({ toVirtual: ["v/x.md"], toNone: [], toWrite: [] });
+
+		p.settings.pathRules = after;
+		await m.applyModeTransition(plan, { clear: true, write: false });
+		expect(vaultFiles.get("v/x.md")).toBe("## 概述\n## 2.1 手写");
+		expect(vaultFiles.get("v/keep/y.md")).toBe(`## ${W}1 ${W}保留`); // 更具体的写入规则不受影响
+		expect(vaultFiles.get("a.md")).toBe(`## ${W}1 ${W}根`);
+		expect(Notice.messages).toContain("已清除 1 个文件中本插件写入的编号");
+	});
+
+	it("V16：清除改了标题文本，其他笔记里的链接跟着更新", async () => {
+		const rules = before();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			updateBacklinks: true,
+			vaultFiles: { "v/x.md": `## ${W}1 ${W}概述`, "b.md": "跳到 [[x#1 概述]]。" },
+		});
+		const m = p as unknown as ModeInternals;
+		const after = rules.map((r) => ({ ...r }));
+		after[1].mode = "virtual";
+		const plan = await m.planModeTransition(rules, after);
+		p.settings.pathRules = after;
+		await m.applyModeTransition(plan, { clear: true, write: false });
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe("跳到 [[x#概述]]。");
+	});
+
+	it("不勾清除：文件原样保留（仅显示时按残留处理）", async () => {
+		const rules = before();
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: { "v/x.md": `## ${W}1 ${W}概述` },
+		});
+		const m = p as unknown as ModeInternals;
+		const after = rules.map((r) => ({ ...r }));
+		after[1].mode = "virtual";
+		const plan = await m.planModeTransition(rules, after);
+		p.settings.pathRules = after;
+		await m.applyModeTransition(plan, { clear: false, write: false });
+		expect(vaultFiles.get("v/x.md")).toBe(`## ${W}1 ${W}概述`);
+	});
+
+	it("V18：仅显示 → 写入并勾选立即写入：这些文件马上编号", async () => {
+		const rules: PathRule[] = [
+			{ pattern: "/", template: "默认" },
+			{ pattern: "v/", template: "默认", mode: "virtual" },
+		];
+		const { p, vaultFiles } = makePlugin({
+			pathRules: rules,
+			vaultFiles: { "v/x.md": "## 概述", "a.md": "## 根" },
+		});
+		const m = p as unknown as ModeInternals;
+		const after = rules.map((r) => ({ ...r }));
+		after[1].mode = "write";
+		const plan = await m.planModeTransition(rules, after);
+		expect(plan.toWrite).toEqual(["v/x.md"]);
+		p.settings.pathRules = after;
+		await m.applyModeTransition(plan, { clear: false, write: true });
+		expect(vaultFiles.get("v/x.md")).toBe(`## ${W}1 ${W}概述`);
+		expect(vaultFiles.get("a.md")).toBe("## 根"); // 不在切换范围内的文件不动
+	});
+});
+
+describe("M14 真机回归：手写编号、清理与空清除（testplan V12 / V37 / V38）", () => {
+	const virtualRules = (): PathRule[] => [{ pattern: "/", template: "默认", mode: "virtual" }];
+	type Internals = {
+		virtualNumberingFor(path: string, content: string): Array<{ label: string | null }> | null;
+		applyForeignCleanupSelection(
+			editor: unknown,
+			ctx: unknown,
+			path: string,
+			keepLines: ReadonlySet<number>,
+		): void;
+		applyModeTransition(
+			plan: { toVirtual: string[]; toNone: string[]; toWrite: string[] },
+			opts: { clear: boolean; write: boolean },
+		): Promise<void>;
+	};
+
+	it("V12：个别以数字开头的标题不再让整篇失去编号", () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		const v = p as unknown as Internals;
+		expect(
+			v.virtualNumberingFor("a.md", "## 概述\n## 2024 总结\n## 展望")?.map((l) => l.label),
+		).toEqual(["1 ", "2 ", "3 "]);
+	});
+
+	it("V37：仅显示文件里清理手写编号，只剥手写编号、不写入插件编号", () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		const ed = new FakeEditor("## 1. 引言\n## 2. 方法");
+		(p as unknown as Internals).applyForeignCleanupSelection(
+			ed,
+			fileInfo("a.md"),
+			"a.md",
+			new Set(),
+		);
+		expect(ed.getValue()).toBe("## 引言\n## 方法");
+		expect(ed.getValue()).not.toContain(WORD_JOINER);
+	});
+
+	it("V38：只有「仅显示 → 写入」时不跑清除，也不弹「已清除 0 个文件」", async () => {
+		const { p } = makePlugin({ pathRules: virtualRules() });
+		await (p as unknown as Internals).applyModeTransition(
+			{ toVirtual: [], toNone: [], toWrite: [] },
+			{ clear: true, write: false },
+		);
+		expect(Notice.messages.some((m) => m.startsWith("已清除"))).toBe(false);
+	});
+});
+
+describe("复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11）", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	/** 从已注册命令里取出指定 id，找不到直接让测试失败（避免静默 undefined 访问）。 */
+	function findCommand(p: PluginInternals, id: string): MockCommand {
+		const cmd = p.commands.find((c) => c.id === id);
+		if (!cmd) {
+			throw new Error(`未找到命令：${id}`);
+		}
+		return cmd;
+	}
+
+	/** 桩掉 navigator.clipboard.writeText（node 测试环境本无 navigator），返回其 spy。 */
+	function stubClipboard(): ReturnType<typeof vi.fn> {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		vi.stubGlobal("navigator", { clipboard: { writeText } });
+		return writeText;
+	}
+
+	it("两条命令已注册", () => {
+		const { p } = makePlugin();
+		p.registerCopyCommands();
+		expect(p.commands.map((c) => c.id)).toEqual(
+			expect.arrayContaining(["copy-numbered-outline", "copy-section-link"]),
+		);
+	});
+
+	it("复制编号大纲：没有活动 Markdown 文件时命令不可用（阅读视图同理，取决于 activeMarkdownContext）", () => {
+		const { p } = makePlugin();
+		p.registerCopyCommands();
+		expect(findCommand(p, "copy-numbered-outline").checkCallback!(true)).toBe(false);
+	});
+
+	it("复制编号大纲：写入模式文件取标题所见文本，按层级缩进", async () => {
+		const writeText = stubClipboard();
+		const { p, setActiveView } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("## 甲\n### 乙");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		const cmd = findCommand(p, "copy-numbered-outline");
+		expect(cmd.checkCallback!(true)).toBe(true); // 有活动文件 → 命令可用（checking 不执行动作）。
+		cmd.checkCallback!(false);
+		await flushPromises();
+		expect(writeText).toHaveBeenCalledWith("甲\n  乙");
+		expect(Notice.messages.at(-1)).toBe("已复制编号大纲（2 个标题）");
+	});
+
+	it("复制编号大纲：仅显示文件走虚拟编号，与编辑器所见一致，且文件字节不变", async () => {
+		const writeText = stubClipboard();
+		const { p, setActiveView } = makePlugin({
+			pathRules: [{ pattern: "/", template: "默认", mode: "virtual" }],
+		});
+		p.registerCopyCommands();
+		const ed = new FakeEditor("## 甲\n### 乙");
+		setActiveView({ editor: ed, file: { path: "v.md" } });
+		findCommand(p, "copy-numbered-outline").checkCallback!(false);
+		await flushPromises();
+		expect(writeText).toHaveBeenCalledWith("1 甲\n  1.1 乙");
+		expect(ed.getValue()).toBe("## 甲\n### 乙");
+	});
+
+	it("复制编号大纲：没有标题时只提示、不写剪贴板", async () => {
+		const writeText = stubClipboard();
+		const { p, setActiveView } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("只有正文，没有标题。");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		findCommand(p, "copy-numbered-outline").checkCallback!(false);
+		await flushPromises();
+		expect(writeText).not.toHaveBeenCalled();
+		expect(Notice.messages.at(-1)).toBe("当前文件没有标题");
+	});
+
+	it("复制当前小节链接：调用 generateMarkdownLink 且参数正确（锚点/别名见 copycommands.test.ts）", async () => {
+		const writeText = stubClipboard();
+		const { p, generateMarkdownLink } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("## 甲\n正文");
+		ed.setCursor(1);
+		const cmd = findCommand(p, "copy-section-link");
+		expect(cmd.editorCheckCallback!(true, ed, fileInfo("a.md"))).toBe(true);
+		cmd.editorCheckCallback!(false, ed, fileInfo("a.md"));
+		await flushPromises();
+		expect(generateMarkdownLink).toHaveBeenCalledWith(
+			expect.objectContaining({ path: "a.md" }),
+			"",
+			"#甲",
+			"甲",
+		);
+		expect(writeText).toHaveBeenCalledWith("[[a.md#甲|甲]]");
+		expect(Notice.messages.at(-1)).toBe("已复制链接：甲");
+	});
+
+	it("复制当前小节链接：光标在第一个标题之前时命令不可用（R5）", () => {
+		const { p } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("正文\n## 甲");
+		ed.setCursor(0);
+		const cmd = findCommand(p, "copy-section-link");
+		expect(cmd.editorCheckCallback!(true, ed, fileInfo("a.md"))).toBe(false);
+	});
+
+	it("复制当前小节链接：文件没有标题时命令不可用（R5）", () => {
+		const { p } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("只有正文，没有标题。");
+		ed.setCursor(0);
+		const cmd = findCommand(p, "copy-section-link");
+		expect(cmd.editorCheckCallback!(true, ed, fileInfo("a.md"))).toBe(false);
 	});
 });

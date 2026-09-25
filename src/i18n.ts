@@ -68,6 +68,10 @@ export interface Messages {
 	debounceDesc: (min: number, max: number, def: number) => string;
 	resetTooltip: (def: number) => string;
 
+	// —— 大纲里显示编号（1.2.0）——
+	outlineNumbersName: string;
+	outlineNumbersDesc: string;
+
 	// —— Backlink 同步 ——
 	updateBacklinksName: string;
 	updateBacklinksDesc: string;
@@ -155,6 +159,20 @@ export interface Messages {
 	batchModalBody: (pattern: string, count: number) => string;
 	batchModalConfirm: string;
 	batchModalCancel: string;
+	/** M14 路径规则的编号模式列（spec §3.22）。 */
+	pathColMode: string;
+	pathModeWrite: string;
+	pathModeVirtual: string;
+	pathModeTooltip: string;
+	batchRenumberVirtualTooltip: string;
+	/** M14 模式切换确认框。 */
+	modeModalTitle: string;
+	modeModalLeaving: (count: number, toVirtual: number, toNone: number) => string;
+	modeModalClearLabel: string;
+	modeModalEntering: (count: number) => string;
+	modeModalWriteLabel: string;
+	modeModalConfirm: string;
+	noticeModeCleared: (count: number) => string;
 
 	// —— 模板区 ——
 	templatesHeading: string;
@@ -316,6 +334,17 @@ export interface Messages {
 	cmdRenumber: string;
 	cmdClear: string;
 	cmdClearForeign: string;
+	/** 「清除本文件残留编号」命令名（M14，只在仅显示文件里出现）。 */
+	cmdClearStale: string;
+	/** 「复制编号大纲」命令名（R 组，spec.md §A.11；写入 / 仅显示两种模式都可用）。 */
+	cmdCopyOutline: string;
+	/** 「复制当前小节链接」命令名（R 组；光标在第一个标题之前时不出现在命令面板）。 */
+	cmdCopySectionLink: string;
+	/** 清除残留编号成功 / 没有残留时的提示（M14）。 */
+	noticeStaleCleared: string;
+	noticeNoStaleNumbering: string;
+	/** 残留样式编号的悬停提示（M14）。 */
+	virtualStaleTooltip: string;
 
 	// —— Notice（main.ts）——
 	noticeEnabled: string;
@@ -332,6 +361,8 @@ export interface Messages {
 	noticeNoRule: string;
 	/** 「立即重新编号」命中「不编号」伪模板时的专用提示（区别于「未匹配任何规则」，K15）。 */
 	noticeNoNumberingRule: string;
+	/** 对「仅显示」模式的文件执行「立即重新编号」时的说明（M14）。 */
+	noticeVirtualModeFile: string;
 	/** 批量重编号（K16）：命中 0 个文件 / 完成汇总。 */
 	noticeBatchNoMatch: string;
 	noticeBatchDone: (changed: number, unchanged: number, skipped: number) => string;
@@ -344,7 +375,17 @@ export interface Messages {
 	noticeBacklinksUpdated: (count: number) => string;
 	noticeBacklinksIntro: string;
 	noticeNoActiveFile: string;
+	/** 「复制编号大纲」命令（R1–R3）：当前文件没有标题时的提示，不动剪贴板。 */
+	noticeNoHeadings: string;
+	/** 「复制编号大纲」复制成功的提示，参数为复制的标题数。 */
+	noticeOutlineCopied: (count: number) => string;
+	/** 写入剪贴板失败（`navigator.clipboard.writeText` 抛错）的通用提示，两条复制命令共用。 */
+	noticeCopyFailed: string;
+	/** 「复制当前小节链接」复制成功的提示，参数为链接别名（无别名时为剥 WJ 的锚点，R4）。 */
+	noticeSectionLinkCopied: (label: string) => string;
 	noticeForeignNumberingGuard: string;
+	/** 仅显示文件过半标题带手写编号、不显示虚拟编号时的提示（M14）。 */
+	noticeForeignNumberingGuardVirtual: string;
 	/** 迁移守卫 Notice 里的可点击文案（点击打开清理预览确认框，J14）。 */
 	noticeForeignNumberingGuardAction: string;
 	/** 点击迁移守卫 Notice 时，该文件已不在任何已打开的标签页中。 */
@@ -372,6 +413,8 @@ const zh: Messages = {
 	debounceName: "防抖延迟",
 	debounceDesc: (min, max, def) => `编辑停顿 ${min}–${max} ms 后触发自动编号（默认 ${def} ms）。`,
 	resetTooltip: (def) => `恢复默认 ${def} ms`,
+	outlineNumbersName: "在大纲中显示编号",
+	outlineNumbersDesc: "「仅显示」模式下，Obsidian 自带的大纲面板里也显示编号。",
 
 	updateBacklinksName: "同步内部链接（Backlink）",
 	updateBacklinksDesc:
@@ -464,6 +507,23 @@ const zh: Messages = {
 		"「不编号」、frontmatter 关闭或含未接管外来编号的文件自动跳过。已打开的文件可撤销，未打开的直接改写。",
 	batchModalConfirm: "重新编号",
 	batchModalCancel: "取消",
+	pathColMode: "模式",
+	pathModeWrite: "写入文件",
+	pathModeVirtual: "仅显示",
+	pathModeTooltip:
+		"写入文件：编号写进笔记，外部编辑器、GitHub、Publish 里也能看到。仅显示：编号只在 Obsidian 里显示，笔记内容一个字都不改。",
+	batchRenumberVirtualTooltip: "该规则为「仅显示」，编号不写入文件，无需批量编号",
+	modeModalTitle: "编号模式变更",
+	modeModalLeaving: (count, toVirtual, toNone) =>
+		`有 ${count} 个文件里有本插件写入的编号，改动后插件不再往这些文件写编号` +
+		`（${toVirtual} 个改为仅显示，${toNone} 个不再编号）。`,
+	modeModalClearLabel:
+		"清除这些文件里本插件写入的编号（手写编号不受影响）。不勾选则保留现有编号，改为仅显示的文件会提示有旧编号残留。",
+	modeModalEntering: (count) => `有 ${count} 个文件将从「仅显示」改为「写入文件」。`,
+	modeModalWriteLabel:
+		"立即给这些文件写入编号（不勾选则在下次编辑时写入；已打开的文件会马上更新）",
+	modeModalConfirm: "确认",
+	noticeModeCleared: (count) => `已清除 ${count} 个文件中本插件写入的编号`,
 
 	templatesHeading: "模板",
 	templatesDesc: "定义各级标题的编号格式与白名单；哪个文件用哪个模板由上方「路径规则」决定。",
@@ -560,11 +620,11 @@ const zh: Messages = {
 	clearForeignBtn: "清理外来编号",
 	clearVaultName: "清除全库编号",
 	clearVaultDesc:
-		"剥离全库中本插件写入的编号前缀（不在撤销历史内，建议先备份）；确认后先关闭「全局自动编号」再清除，避免清完又被编回去。",
+		"剥离全库中本插件写入的编号前缀（不在撤销历史内，建议先备份）；确认后先关闭「全局自动编号」再清除，避免清完又被编回去（「同步内部链接（Backlink）」开着时链接一并更新）。",
 	clearVaultBtn: "清除全库编号…",
 	freezeVaultName: "固化编号并交还所有权（全库）",
 	freezeVaultDesc:
-		"**保留**现有编号、只移除不可见标记，此后插件停止一切自动编号。适合「想留住编号但不想再被管」或准备卸载；不可逆、不在撤销历史内，建议先备份。",
+		"**保留**现有编号、只移除不可见标记，此后插件停止一切自动编号。适合「想留住编号但不想再被管」或准备卸载；不可逆、不在撤销历史内，建议先备份。注意：「仅显示」模式的编号本来就不在文件里，固化后会随之消失。",
 	freezeVaultBtn: "固化编号并交还所有权…",
 	retiredBannerTitle: "插件已交还编号所有权",
 	retiredBannerBody:
@@ -596,7 +656,7 @@ const zh: Messages = {
 
 	clearVaultModalTitle: "清除全库编号",
 	clearVaultModalBody:
-		"将先关闭「全局自动编号」，再从全库剥离本插件写入的编号前缀，还原为裸标题。不在撤销历史内，建议先备份。确认继续？",
+		"将先关闭「全局自动编号」，再从全库剥离本插件写入的编号前缀，还原为裸标题（「同步内部链接（Backlink）」开着时链接一并更新）。不在撤销历史内，建议先备份。确认继续？",
 	confirmClearVault: "确认清除全库",
 
 	freezeVaultModalTitle: "固化编号并交还所有权（全库）",
@@ -616,6 +676,13 @@ const zh: Messages = {
 	cmdRenumber: "立即重新编号（当前文件）",
 	cmdClear: "清除当前文件编号",
 	cmdClearForeign: "清理非本插件的标题编号（当前文件）",
+	cmdClearStale: "清除本文件残留的插件编号（仅显示模式）",
+	cmdCopyOutline: "复制编号大纲",
+	cmdCopySectionLink: "复制当前小节链接",
+	noticeStaleCleared: "已清除本插件写入的旧编号，手写编号保持不动",
+	noticeNoStaleNumbering: "本文件没有本插件写入的旧编号",
+	virtualStaleTooltip:
+		"文件里还留着本插件以前写入的编号（导出、Publish、外部编辑器会看到它）。可用命令「清除本文件残留的插件编号」清掉",
 
 	noticeEnabled: "已启用全局自动编号",
 	noticeDisabled: "已禁用全局自动编号",
@@ -630,6 +697,7 @@ const zh: Messages = {
 	noticeResumed: "已恢复接管；若文件里留有固化过的编号，请先跑「清理非本插件的标题编号」",
 	noticeNoRule: "当前文件未匹配任何路径规则，无法编号",
 	noticeNoNumberingRule: "当前文件所在路径已设为「不编号」",
+	noticeVirtualModeFile: "当前文件为「仅显示」模式：编号只在 Obsidian 里显示，不写入文件",
 	noticeBatchNoMatch: "该规则当前未命中任何 Markdown 文件",
 	noticeBatchDone: (changed, unchanged, skipped) =>
 		`批量重编号完成：改写 ${changed} 个，无变化 ${unchanged} 个，跳过 ${skipped} 个`,
@@ -645,9 +713,15 @@ const zh: Messages = {
 	noticeBacklinksIntro:
 		"已自动更新其它文件里指向本文件标题的内部链接（避免断链；改动不在被改文件的撤销历史内）。不需要可在 设置 → 全局设置 关闭；本提示只出现一次。",
 	noticeNoActiveFile: "没有打开的 Markdown 文件",
+	noticeNoHeadings: "当前文件没有标题",
+	noticeOutlineCopied: (count) => `已复制编号大纲（${count} 个标题）`,
+	noticeCopyFailed: "复制到剪贴板失败",
+	noticeSectionLinkCopied: (label) => `已复制链接：${label}`,
 	noticeForeignNumberingGuard:
 		"这些标题看起来带编号，但插件不确定是不是你自己写的，已跳过本次自动编号。",
 	noticeForeignNumberingGuardAction: "点击查看并清理",
+	noticeForeignNumberingGuardVirtual:
+		"这篇笔记的标题大多已经带着编号，插件不确定是不是你自己写的，为免出现两套数字，暂不显示编号。",
 	noticeForeignGuardFileNotOpen: "该文件已不在任何标签页中，请重新打开后再清理",
 };
 
@@ -674,6 +748,8 @@ const en: Messages = {
 	debounceDesc: (min, max, def) =>
 		`Auto-numbering runs ${min}–${max} ms after you stop typing (default ${def} ms).`,
 	resetTooltip: (def) => `Reset to default ${def} ms`,
+	outlineNumbersName: "Show numbers in the outline",
+	outlineNumbersDesc: "In display-only mode, also show the numbers in Obsidian's Outline pane.",
 
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc:
@@ -768,6 +844,25 @@ const en: Messages = {
 		"open files support undo, closed files are rewritten directly.",
 	batchModalConfirm: "Renumber",
 	batchModalCancel: "Cancel",
+	pathColMode: "Mode",
+	pathModeWrite: "Write to file",
+	pathModeVirtual: "Display only",
+	pathModeTooltip:
+		"Write to file: numbers are written into the note and show up in external editors, GitHub and Publish. Display only: numbers are shown inside Obsidian and the note is never changed.",
+	batchRenumberVirtualTooltip:
+		"This rule is display-only — numbers are never written, nothing to renumber",
+	modeModalTitle: "Numbering mode change",
+	modeModalLeaving: (count, toVirtual, toNone) =>
+		`${count} file(s) contain numbers written by this plugin, and the plugin will stop writing to them ` +
+		`(${toVirtual} switch to display-only, ${toNone} to no numbering).`,
+	modeModalClearLabel:
+		"Remove the numbers this plugin wrote in these files (hand-written numbers are left alone). If unchecked, the numbers stay; display-only files will flag them as leftovers.",
+	modeModalEntering: (count) =>
+		`${count} file(s) will switch from display-only to write-to-file.`,
+	modeModalWriteLabel:
+		"Write numbers into these files now (otherwise on the next edit; open files update right away)",
+	modeModalConfirm: "Confirm",
+	noticeModeCleared: (count) => `Removed plugin-written numbers from ${count} file(s)`,
 
 	templatesHeading: "Templates",
 	templatesDesc:
@@ -875,11 +970,11 @@ const en: Messages = {
 	clearForeignBtn: "Clear foreign numbering",
 	clearVaultName: "Clear numbering in the whole vault",
 	clearVaultDesc:
-		"Strip the prefixes this plugin wrote from every Markdown file (NOT in undo history — back up first). Confirming first turns OFF global auto-numbering so cleared files don't get re-numbered.",
+		"Strip the prefixes this plugin wrote from every Markdown file (NOT in undo history — back up first). Confirming first turns OFF global auto-numbering so cleared files don't get re-numbered (links update too when “Sync internal links (backlinks)” is on).",
 	clearVaultBtn: "Clear vault numbering…",
 	freezeVaultName: "Freeze numbering and release ownership (entire vault)",
 	freezeVaultDesc:
-		"**Keeps** your numbers and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For “keep the numbers, drop the plugin” (e.g. before uninstalling). Irreversible and NOT in undo history — back up first.",
+		"**Keeps** your numbers and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For “keep the numbers, drop the plugin” (e.g. before uninstalling). Irreversible and NOT in undo history — back up first. Note: numbers in display-only mode were never in the files, so they disappear after freezing.",
 	freezeVaultBtn: "Freeze numbering and release ownership…",
 	retiredBannerTitle: "The plugin has released ownership of your numbering",
 	retiredBannerBody:
@@ -911,7 +1006,7 @@ const en: Messages = {
 
 	clearVaultModalTitle: "Clear vault numbering",
 	clearVaultModalBody:
-		"First turns OFF global auto-numbering, then strips this plugin's prefixes from every Markdown file, restoring bare headings. NOT in Obsidian's undo history — back up first. Continue?",
+		"First turns OFF global auto-numbering, then strips this plugin's prefixes from every Markdown file, restoring bare headings (links update too when “Sync internal links (backlinks)” is on). NOT in Obsidian's undo history — back up first. Continue?",
 	confirmClearVault: "Confirm clear vault",
 
 	freezeVaultModalTitle: "Freeze numbering and release ownership (entire vault)",
@@ -931,6 +1026,14 @@ const en: Messages = {
 	cmdRenumber: "Renumber now (current file)",
 	cmdClear: "Clear numbering in current file",
 	cmdClearForeign: "Clear non-plugin heading numbering (current file)",
+	cmdClearStale: "Clear leftover plugin numbering in this file (display-only mode)",
+	cmdCopyOutline: "Copy numbered outline",
+	cmdCopySectionLink: "Copy current section link",
+	noticeStaleCleared:
+		"Removed the old numbers this plugin had written; hand-written numbers were left alone",
+	noticeNoStaleNumbering: "This file has no numbers written by this plugin",
+	virtualStaleTooltip:
+		"This file still contains numbers the plugin wrote earlier (exports, Publish and external editors will show them). Run “Clear leftover plugin numbering in this file” to remove them",
 
 	noticeEnabled: "Global auto-numbering enabled",
 	noticeDisabled: "Global auto-numbering disabled",
@@ -946,6 +1049,8 @@ const en: Messages = {
 		"Now managing numbering again; if any frozen numbering is still in your files, run Clean foreign numbering first",
 	noticeNoRule: "The current file matches no path rule; cannot number it",
 	noticeNoNumberingRule: "This file's path is set to “No numbering”",
+	noticeVirtualModeFile:
+		"This file is in display-only mode: numbers are shown in Obsidian but never written to the file",
 	noticeBatchNoMatch: "This rule currently matches no Markdown files",
 	noticeBatchDone: (changed, unchanged, skipped) =>
 		`Batch renumber done: ${changed} updated, ${unchanged} unchanged, ${skipped} skipped`,
@@ -961,9 +1066,16 @@ const en: Messages = {
 	noticeBacklinksIntro:
 		"Auto Headings updated internal links in other files that point to headings in this file (so they don't break). Those edits are NOT in the modified files' undo history; turn off \"Sync internal links\" under Settings → General. Shown once.",
 	noticeNoActiveFile: "No open Markdown file",
+	noticeNoHeadings: "No headings in the current file",
+	noticeOutlineCopied: (count) =>
+		`Copied numbered outline (${count} heading${count === 1 ? "" : "s"})`,
+	noticeCopyFailed: "Failed to copy to clipboard",
+	noticeSectionLinkCopied: (label) => `Copied link: ${label}`,
 	noticeForeignNumberingGuard:
 		"These headings look numbered, but the plugin isn't sure you wrote that yourself — skipped auto-numbering this time.",
 	noticeForeignNumberingGuardAction: "Click to review and clean up",
+	noticeForeignNumberingGuardVirtual:
+		"Most headings in this note already carry numbers the plugin can't confirm you wrote — numbers are hidden here to avoid showing two sets.",
 	noticeForeignGuardFileNotOpen: "This file is no longer open in any tab; reopen it to clean up",
 };
 

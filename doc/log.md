@@ -34,10 +34,103 @@
 > **省 token 读盘**：接手跑 `npm run docs -- --handover` 一条命令即可（更早历史翻 `log-archive.md`）。
 > 源码已按职责拆分（编号引擎 = `template` / `count` / `render` / `strip` / `whitelist` + `numbering` 编排兼
 > barrel，外部一律从 `./numbering` 导入；设置 GUI = `SettingsTab.ts` 壳 + `settings/tabs/` 七个 TAB，
-> 均可整读）；仍大的 `main.ts`（~1290 行）与 `i18n.ts`（~710 行）先 `grep` 定位、别整读。
+> 均可整读）；仍大的 `main.ts`（~2600 行）与 `i18n.ts`（~1100 行）先 `grep` 定位、别整读。
 > UVM 压测框架（`tests/dev_tests/uvm/`）已按职责拆成 9 个文件、均可整读，入口仍是 `framework.ts`。
 
 > 一句话：**改代码 → `npm run bump` → 写本文件新块 + `status.jsonl` → `npm run preflight`（= docs + release + test + lint + format:check）→ 提交（含 `release/`）。**
+
+---
+
+## 2026-09-25 发版前一轮开发：大纲显示虚拟编号、两条复制命令、H8（1.2.0，交接：claude/m14-virtual-mode）
+
+### 做了什么
+
+- **内置大纲面板显示虚拟编号**（原 M14 二期，用户要求提前；testplan V40–V45）：新增 `src/virtual/outlineView.ts`。
+  动手前从本机 `E:\Obsidian\resources\obsidian.asar` 只读解出 app.js 核对 1.10 的大纲实现，据此推翻了参照竞品
+  Heading Decorator 的思路（扫屏幕 DOM、按层级 + 文本对齐标题）——1.10 的大纲是虚拟滚动，屏幕外条目不在 DOM 里，
+  那样滚动 / 折叠 / 过滤后会错位。现做法：
+  - 遍历视图的条目对象 `cachedHeadingDom`，按 `heading.position.start.line` 取编号并核对级别，写成 `innerEl` 上的
+    `data-ah-number` 属性，CSS `::before` 画出（大纲每次刷新都 `setText` 重写文字，插节点会被冲掉）；
+  - `requestUpdate` 构造时就捕获了原始 `update`，实例打补丁挂不住 → 用 MutationObserver 看 `childList`，合并到
+    微任务里核对全部条目；新开 / 关闭的大纲靠 `layout-change` / `active-leaf-change` 挂摘观察器；
+  - 残留旧编号（WJ 开头）的标题不画；设置「在大纲中显示编号」`showOutlineNumbers` 默认开，关掉后对大纲零接触；
+    结构认不出静默。
+- **两条复制命令**（testplan R1–R6，spec A.11 借鉴；feature-coder 实现、我审）：`src/copycommands.ts` + main.ts
+  `registerCopyCommands`。「复制编号大纲」用 `checkCallback`（阅读视图可用），写入模式取标题所见文本、仅显示取
+  虚拟编号，按全文最浅级别缩进两格；「复制当前小节链接」用 `editorCheckCallback`，锚点保留 WJ（与标题链接建议
+  同口径，否则写入模式解析不到）、别名剥编号，链接由 `generateMarkdownLink` 按用户的链接设置生成。
+- **H8 + H17–H19**（feature-coder 实现、我审）：清全库 / 固化改走 `batchRewrite`（已打开走编辑器事务、未打开走
+  `vault.process`），清全库顺带同步链接（H17）。审方案时发现同一类竞态还在 `syncBacklinksCounted`：已打开的
+  引用方仍走 `vault.process`，批量通道里互相引用的两篇都开着时会读到落盘前的旧内容、冲掉刚做的改写（M18 同源），
+  一并改为走引用方的编辑器（H18，所有同步路径受益）。固化时 `linkAnchor` 剥 WJ 比较，纯去 WJ 不算改名，同步实为
+  空操作，不会多写、不会多弹提示。
+- 模板同名冲突提示：用户认为 `default.json` 恒生效、冲突副本被忽略可以接受，**不做**。
+- 文档：spec §3.22（渲染 / 已知限制 / 代码组织）、§3.10、§3.12、§3.1 命令表、Roadmap M11 / M12 / M14；使用指南中英
+  （两种模式对照表、大纲一条、命令表）；README 中英；1.2.0 发布说明补大纲、两条命令、清全库同步链接；实测样例
+  `tests/user_tests/13-仅显示大纲与复制命令.md`；记忆补「从 asar 查 Obsidian 内部实现」。
+- 两个 feature-coder 都因 API 额度上限中断过一次，用 SendMessage 续跑完成。本周期派发 5 次（feature-coder × 2、
+  quality-gate × 3）。
+
+### 没做什么
+
+- **清全库 / 固化没上真机**（会改动整个库，只有单测）。写入模式下的两条命令、R6 写入模式没上真机；在大纲里拖动
+  小节没单独测（与插入标题同一刷新路径）；停用插件后大纲复原只有单测。
+- M11「清库撤销」（自建快照 / 还原）未做。
+- 没合并 master、没打 tag（发版须用户明确同意）。
+
+### 下一步
+
+- 用户过目后发 1.2.0：按 §5.1 合并 master + 打 `1.2.0` tag（须用户明确同意）；Community Hub 索引滞后时去维护者
+  面板点「修复」。
+- 1.3.0 候选：M12 内置三套预设模板；`main.ts` 已约 2600 行，改到相关代码时顺手拆。
+- 主工作区 `D:/Documents/Code/obsidian-auto-headings` 里的本地 `claude/m14-virtual-mode` 落后于 origin（本会话在
+  独立 worktree 里开发并推送），在那边接着干前先 `git pull --ff-only`。
+
+### 验证方式
+
+- quality-gate（合并后全量）：`release` 通过；`npm test` 787 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows
+  既有伪影）；`lint`、`format:check`、`docs --check` 通过；`test:fuzz` 三块记分板通过（标题索引 34.1s）。
+- 真机（Oblivion 库 `Claude测试/`，电脑操作）：大纲 V40 / V41（搜索过滤、折叠、最前面插标题、2000 标题长大纲滚到
+  末尾）/ V43（设置开关）；命令 R2–R6（仅显示）；H18（两篇分屏，刚粘贴未落盘的链接随改名同步）。测后测试笔记
+  逐字节核对还原。
+
+---
+
+## 2026-09-25 把 master 的 stripPrefix 修复合进 M14（1.2.0，交接：claude/m14-virtual-mode）
+
+### 做了什么
+
+- 用户决定 1.1.5 **不单独发版**，修复随 1.2.0 一起发。把 master（`1a84d17`，含 `claude/fix-wj-midtext`）合进 M14 分支。
+- 冲突处理：
+  - `src/cleanup.ts` `hasUnclaimedForeignNumbering`：先走修复加的结构性证据（`CLAIMED_LINE_RE` 行首 WJ +
+    `hasPluginPrefix`），末行用 M14 的 `looksForeignNumbered`；M14 的 `isMostlyForeignNumbered` 原样保留，
+    它按 `!startsWith(WJ)` 判归属，与修复同一口径。
+  - 版本号文件取 1.2.0；`versions.json` **保留 `1.1.5` 条目**（仓库惯例：每次 bump 都登记，没发版的
+    1.0.26–1.0.32 也在列）。
+  - `log.md` / `status.jsonl`：修复周期块 / 概括行插在 M14 各块之上；两份 archive 以 M14 为准（已是超集）。
+  - `release/` 重建。
+- 同类排查：M14 新代码里判 WJ 归属的地方都只认行首 WJ。`computeVirtualNumbers` 的残留区间取自编号引擎
+  剥出的纯文本，合入修复后，E39 形态（尾哨兵被毁 + 标题里有带 WJ 的链接）的残留区间从「一直吞到链接锚点」
+  变成只含残缺前缀，自动受益；阅读视图 `decorateHeading` 只在首个文本节点里找尾哨兵（链接是独立元素），
+  不受影响。
+- `doc/release-notes/1.2.0.md` 补修复条目（中英）。
+- testplan 里 `M18` 有两行重名，合并前三方就都是这样，未动。
+- 本周期派发 1 次（quality-gate × 1）。
+
+### 没做什么
+
+- 没合并 master、没打 tag（发版须用户明确同意）。
+
+### 下一步
+
+- 发版前一轮开发（用户已选定）：H8（清全库 / 固化改走 `batchRewrite`）、「复制编号大纲」「复制当前小节链接」
+  两条命令、**内置大纲面板显示虚拟编号**（原登记为 M14 二期，用户要求提前）。模板同名提示**不做**——用户
+  认为 `default.json` 恒生效、冲突副本被忽略可以接受。
+
+### 验证方式
+
+- 分项跑（quality-gate）：`release` 通过；`npm test` 740 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows
+  既有伪影）；`lint`、`format:check`、`docs --check` 通过；`test:fuzz` 三块记分板通过（31.9s）。
 
 ---
 
@@ -101,112 +194,6 @@
 
 ---
 
-## 2026-09-24 README 瘦身为商店门面 + 新增双语使用指南（1.1.4，纯文档不 bump）
-
-### 做了什么
-
-用户诉求：README 是商店展示页，要「简洁易懂、看了想装、技术细节隐藏」；GIF 由用户自录，
-**README 里不得留图片占位**（断图过不了 Obsidian 自动审查）。
-
-- **README.md / README.zh.md 重写**（各 ~210 行 → ~95 行）：一句话定位 → 6 条卖点 → 三步上手 →
-  6 个功能小节（每节 1–3 句）→ 命令表 → FAQ（5 问）→ 安装 → 了解更多。参考主流插件门面写法
-  （卖点先行、每节一句话、细节外链）。全部链接改 GitHub 绝对地址（商店页相对链接不可靠）。
-  顺手订正三处与现状不符的旧文案：「人工审核仍在进行中」（已通过）、英文命令名
-  「Clean foreign numbering」（实为 `Clear non-plugin heading numbering`）、命令表漏了
-  「切换全局自动编号」。
-- **技术细节下沉到新文件 `doc/user-guide.md` / `doc/user-guide.zh.md`**：由旧 README「开箱即用」
-  起的全部内容平移（删去营销开场与安装节，修相对链接、命令名），信息零丢失。附录 A 定下的
-  信任类承诺（WJ 披露、导出与外发、干净离开、Number Headings 迁移）在 README 各保留 FAQ 一问 + 链接，
-  不再展开；`<!-- skip -->` 手写标记按 spec 纪律「不得当卖点」，README 不提，只留在指南。
-- 登记新文件：根 `CLAUDE.md` §3.1 表（并写明 README 写作纪律）、本文件「目录结构约定」块、
-  `spec.md` A.9 落点索引行。
-- 本周期派发 2 次（quality-gate × 2：接手基线门槛 + 收尾 preflight）。
-
-### 没做什么
-
-- 未录 / 未引用任何 GIF / 截图（用户自录，建议清单已在会话中给出；录好后放 `assets/` 并用
-  GitHub raw 绝对地址引用）。
-- 未改 `manifest.json` 的 description（M12「manifest description 卖点重排」仍待做，改它需发版）。
-- 未动 i18n / 关于页里的文案。
-
-### 下一步
-
-- 用户录好 GIF 后插回 README（首图放一句话定位下方，其余各配一个功能小节）。
-- 开发侧建议：先做一个整理周期（刷新 status 首行、拆 `main.ts` 2170 行、压缩 spec Roadmap 已完成项），
-  再开 M11「H8 修复 + 清库撤销」→「Backlink 审阅模式」。
-
-### 验证方式
-
-- `npm run preflight` 全绿（纯文档改动，release 重建无差异）。
-- 人工核对：README 内无 `![` 图片语法、无相对链接；user-guide 内相对链接（`marker-contract.md`、
-  `../assets/pandoc/…`、`../README*.md`）均指向存在的文件。
-
----
-
-## 2026-09-13 修复嵌套围栏数量不匹配致编号重置（1.1.4，issue #9）
-
-### 做了什么
-
-用户报告（[issue #9](https://github.com/AArlert/obsidian-auto-headings/issues/9)，附截图）：多层
-代码块嵌套、内层围栏用注释符号 `#` 时，其后标题序号会从 1 重新开始。用 GitHub API 取 issue 原文
-+ 下载截图核实（WebFetch 摘要与 API 原文一致，本次未撞上 [[webfetch-verification-blind-spots]]
-记录的截断/编造问题），复现出的具体场景是：外层 4 个反引号围栏包一段示例 Markdown，内嵌一段
-3 个反引号的 yaml 围栏，两层都各有一行 `#` 开头的注释。
-
-- **根因定位**（派 `repo-scout` 定位 + 主模型用 vitest 写 scratch 测试实测复现）：`src/scan.ts`
-  的 `scanSkipRegions` 围栏状态机（`FENCE_RE` 捕获组其实带了完整反引号游程长度，但状态机只取
-  `fence[1][0]` 比较**符号种类**，从未比较**数量**）。按 CommonMark，闭合围栏须同符号**且数量
-  ≥ 开启行**；内层 3 个反引号本不该闭合外层 4 个反引号的围栏，但旧实现见到同符号就直接切换
-  `inFence`，导致内层 3 反引号「关闭」了外层围栏，内层 `# 这是最里层代码块` 被当成真标题
-  （level 1，浅于周围 H2 标题），推进计数器时把更深层的 H2 计数器清零——这就是「序号被清零
-  回 1」的完整链路，用 `renumberContent` 实测复现出与截图完全一致的 `## 2 标题二` → `## 1
-  标题三`（而非线性递增到 4），根因链条到此闭环，无需再猜。
-- **修复**：`scanSkipRegions` 新增 `fenceLen` 状态，闭合判定改为「同符号 **且** 本行游程长度
-  ≥ 开启时的长度」；数量不足（或符号不同）的类围栏行不再切换 `inFence`、也不再标记为
-  `isFenceMarker`，原样落入「围栏内普通内容」分支——语义上更贴合 `SkipState.isFenceMarker`
-  自己的文档定义（「本行**就是**围栏定界行」），不只是打个补丁。`parser.ts`、`scan.ts` 顶部
-  文档注释与 `doc/spec.md` §3.17（新增裁决表 R11）同步更新，避免下次改动时规格与实现再次漂移。
-- **回归测试**：`parser.test.ts` 新增 2 例（数量不足不闭合的嵌套写法；数量更多的闭合行合法，
-  对称验证没有矫枉过正）；`known_bugs.test.ts` 新增 issue #9 端到端 describe 块，直接断言
-  `renumberContent` 在 issue 原始场景下的输出（含幂等性）。`doc/testplan.md` 补 `E3b` 行
-  （✅，链接两个回归测试）。
-- 质量门槛：派 `quality-gate` 跑 `npm test`（639 通过，唯一失败是既有 zh-CN locale 排序环境
-  伪影，与本次无关）、`lint`、`format:check` 全绿；核心逻辑改动按规则额外跑一遍 `test:fuzz`
-  （5000 序列 × 80 步）全绿。本周期派发 2 次（repo-scout × 1 定位根因，quality-gate × 1 验证）。
-
-### 没做什么
-
-- 未改 `isSkipped()` 的对外行为——`isFenceMarker` 语义收紧后 `inFence` 仍覆盖同一行，
-  `isSkipped = inFence || isFenceMarker || inComment` 的外部可见结果（哪些行被跳过）不变，
-  只有「这一行算不算定界行本身」这个内部细节更准了，`cleanDemotedResidue` 因此受益
-  （之前会把这类误判的类围栏行当定界行跳过清理，现在正确按「围栏内普通内容」走
-  `scope.fences` 开关）——顺带验证过 `cleanup.test.ts` 全过，未额外补测试（行为改进但无
-  用户可见入口触发这条路径的已知场景，且现有测试已覆盖足够多样例）。
-- 未处理 `doc/testplan.md` 里 E3（不同符号不闭合）状态标记为 🔲 但实际早被
-  `parser.test.ts`「不同栅栏符号不互相闭合」覆盖的既有偏差——与本次改动无关的历史遗留，
-  不在本 issue 范围内，未顺手修，留给下次涉及该区域时处理。
-
-### 下一步
-
-- 已 `npm run bump` → `1.1.3 → 1.1.4`；已写 `doc/release-notes/1.1.4.md`（双语，如实描述
-  用户可见的编号 bug 修复）。
-- 待 `npm run preflight` 全绿后提交（含 `release/`）、按 §5.1 合并回 `master`，打 `1.1.4` tag
-  并推送，`release.yml` 自动创建 GitHub Release。
-- 可考虑回 issue #9 留评论告知已修复、将在 1.1.4 发布，但本仓库当前无 `gh` CLI
-  （见 [[windows-env-quirks]]），需用户自己评论或后续会话走 API/网页操作。
-
-### 验证方式
-
-- `npx vitest run tests/dev_tests/parser.test.ts tests/dev_tests/known_bugs.test.ts`：新增用例
-  与既有用例全过。
-- `npm test` 639 通过（1 个既有 locale 环境伪影，基线同样失败，非本次引入）；`lint` /
-  `format:check` / `test:fuzz`（5000×80）全绿。
-- 用 issue 原始截图的确切文本（外层 4 反引号 + 内层 3 反引号 yaml，各一行 `#` 注释）跑
-  `renumberContent`，修复前输出 `## 1 标题三`（复现截图），修复后输出 `## 3 标题三`
-  （正确续号），且二次调用幂等。
-
----
-
 ## 目录结构约定（按职责分类）
 
 ```
@@ -228,9 +215,16 @@ obsidian-auto-headings/
 │   ├── headingtrigger.ts   标题链接建议的触发边界/上下文屏蔽/排序/链接构造（纯函数，M13）
 │   ├── headingsuggest.ts   标题链接建议 EditorSuggest 薄适配层（M13，DOM/CM6 交互留真机手验）
 │   ├── vcintegration.ts    Various Complements 联动（探测/词典生成/分层防御写入，M13）
-│   ├── pathrules.ts        路径规则 → 模板解析（纯函数）
+│   ├── pathrules.ts        路径规则 → 模板 / 编号模式解析（纯函数）
 │   ├── frontmatter.ts      单文件开关（obsidian-auto-headings: true/false）读取
 │   ├── i18n.ts             中英双语文案（Messages 接口 + zh/en 两套）
+│   ├── copycommands.ts     「复制编号大纲」「复制当前小节链接」两条命令的纯逻辑（R 组，spec §A.11）
+│   ├── virtual/            虚拟编号模式（M14，只显示不写文件，spec §3.22）
+│   │   ├── compute.ts      纯逻辑：每个标题的显示编号 + 残留前缀区间 + 自动路径门控 resolveNumberingAction
+│   │   ├── editorExtension.ts 编辑视图：CM6 ViewPlugin + 编号 widget + 重算信号（纯函数 buildVirtualDecorations）
+│   │   ├── readingView.ts  阅读视图：markdown post-processor + 缓存 + 兜底匹配
+│   │   ├── outlineView.ts  内置大纲面板：条目上挂属性 + CSS 画编号，MutationObserver 跟大纲刷新（1.2.0）
+│   │   └── modeSwitch.ts   规则变动引起的模式切换：改动前后逐文件比较有效模式（纯函数）
 │   ├── settings/
 │   │   ├── model.ts        设置数据模型（全局开关、防抖延迟、路径规则持久化）
 │   │   ├── SettingsTab.ts  设置 GUI 壳：TAB 栏 + 分发（内容在 tabs/，M7 多 TAB 已拆完）

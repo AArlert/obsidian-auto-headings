@@ -94,6 +94,13 @@ export interface AutoHeadingsSettings {
 	 * VC 未安装 / 未启用时本字段无效——没有竞争者，本插件的框照常弹。
 	 */
 	headingSuggestWhenVcActive: "yield" | "own";
+	/**
+	 * 仅显示模式下，Obsidian 内置大纲面板里也显示编号（1.2.0，原 M14 二期，见 spec.md §3.22 与
+	 * `virtual/outlineView.ts`）。**默认开**——仅显示模式本来就该「看得到编号」，大纲少了编号反倒像缺陷。
+	 * 大纲没有公开 API，靠其内部结构挂编号；关掉后插件对大纲零接触，留作内部实现变化时的退路。
+	 * 写入模式不受影响（编号本就在标题文字里）。
+	 */
+	showOutlineNumbers: boolean;
 }
 
 /** 防抖延迟的边界与默认值（见 spec.md §3.9）。 */
@@ -104,6 +111,14 @@ export const DEBOUNCE_DEFAULT = 300;
 /** 默认路径规则：一条 `/` 根规则指向「默认」模板，开箱即对全库生效（见 spec.md §3.8）。 */
 export function defaultPathRules(): PathRule[] {
 	return [{ pattern: "/", template: "默认" }];
+}
+
+/**
+ * 全新安装时的路径规则（M14，见 spec.md §3.22「新装与升级」）：与 {@link defaultPathRules} 相同，
+ * 只是根规则设为「仅显示」。老用户升级不走这里，缺省 mode 仍按写入处理。
+ */
+export function freshInstallPathRules(): PathRule[] {
+	return [{ pattern: "/", template: "默认", mode: "virtual" }];
 }
 
 /** 默认设置：全局自动编号开启、防抖延迟 300 ms、预置 `/`→「默认」根规则、语言自动、
@@ -119,6 +134,7 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	headingLinkSuggestEnabled: true,
 	vcIntegrationMode: "off",
 	headingSuggestWhenVcActive: "yield",
+	showOutlineNumbers: true,
 };
 
 /** 将防抖延迟夹到合法范围 [50, 2000]，非数字回退到默认值。 */

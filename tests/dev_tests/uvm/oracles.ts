@@ -3,14 +3,20 @@
  * 白名单 / 层级跳变覆盖率探测、幂等性记分板、参考模型记分板 `check`。
  */
 
-import { renumberContent, type Template } from "../../../src/numbering";
+import {
+	renumberContent,
+	stripWordJoiners,
+	WORD_JOINER,
+	type Template,
+} from "../../../src/numbering";
+import { computeVirtualNumbers, resolveNumberingAction } from "../../../src/virtual/compute";
 import { parseHeadings, type Heading } from "../../../src/parser";
 import {
 	computeHeadingRenames,
 	linkAnchor,
 	rewriteBacklinksInContent,
 } from "../../../src/backlinks";
-import { resolvePathRule, type PathRule } from "../../../src/pathrules";
+import { resolveNumberingMode, resolvePathRule, type PathRule } from "../../../src/pathrules";
 import { headingLevels, serialize, type Line } from "./model";
 import { ANCHOR_TEMPLATE } from "./stimulus";
 import { SequenceError } from "./coverage";
@@ -248,4 +254,58 @@ export function runCheck(w: World, template: Template): void {
 			`标题层级被改写：DUT=${dutLevels} 参考=${refLevels} 裸=${bareLevels}`,
 		);
 	}
+}
+
+/**
+ * 虚拟编号记分板（M14，spec §3.22）：仅显示文件被触发时——
+ * - **不写**：`rendered` 字节不变（模型里本就不调 DUT 写入；这里核对门控与模式判定的一致性）；
+ * - **显示 = 写入**：`computeVirtualNumbers(rendered)` 给出的每个标题的编号，必须等于写入模式对同一份
+ *   内容会写下的前缀（去 WJ）。两种模式共用一个引擎，任何分叉都是 bug；
+ * - **门控同源**：自动路径下 `resolveNumberingAction` 必须判为 `"virtual"`（真实 main.ts 用的同一函数）。
+ */
+export function runCheckVirtual(
+	w: World,
+	template: Template,
+	sw: boolean | null,
+	manual: boolean,
+): void {
+	const before = w.rendered.join("\n");
+	const fail = (msg: string): never => {
+		throw new SequenceError(
+			w.seed,
+			w.trace,
+			`虚拟编号记分板：${msg}\n  内容 : ${JSON.stringify(before)}`,
+		);
+	};
+	if (!manual) {
+		const action = resolveNumberingAction({
+			retired: false,
+			clearing: false,
+			fileSwitch: sw,
+			autoNumber: w.autoNumber,
+			mode: resolveNumberingMode(w.pathRules, w.file.path),
+			hasTemplate: true,
+		});
+		if (action !== "virtual")
+			fail(`门控放行后 resolveNumberingAction 应为 virtual，实得 ${action}`);
+	}
+	const labels = computeVirtualNumbers(before, template, w.opts);
+	const written = renumberContent(before, template, w.opts);
+	const expected = parseHeadings(written).map((h) => {
+		if (!h.rawText.startsWith(WORD_JOINER)) return null;
+		const end = h.rawText.indexOf(WORD_JOINER, 1);
+		return stripWordJoiners(h.rawText.slice(0, end + 1));
+	});
+	const got = labels.map((l) => l.label);
+	if (JSON.stringify(got) !== JSON.stringify(expected)) {
+		fail(
+			`显示的编号与写入模式不一致\n  显示 : ${JSON.stringify(got)}\n  写入 : ${JSON.stringify(expected)}`,
+		);
+	}
+	if (w.rendered.join("\n") !== before) fail("仅显示文件被改写");
+	if (labels.some((l) => l.staleRange)) w.cov.virtualStale = true;
+	w.cov.virtualTrigger = true;
+	w.cov.bumpOp(manual ? "manualTrigger" : "trigger");
+	w.cov.triggers++;
+	w.trace.push(manual ? "— manualTrigger (virtual) —" : "— autoTrigger (virtual) —");
 }
