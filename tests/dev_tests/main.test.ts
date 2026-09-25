@@ -14,7 +14,7 @@ import AutoHeadingsPlugin from "../../src/main";
 import { DEFAULT_TEMPLATE, WORD_JOINER, type Template } from "../../src/numbering";
 import { NO_NUMBERING_TEMPLATE, type PathRule } from "../../src/pathrules";
 import { HeadingIndex } from "../../src/headingindex";
-import { Modal, Notice, TFile as MockTFile } from "./obsidian-mock";
+import { Modal, Notice, TFile as MockTFile, type MockCommand } from "./obsidian-mock";
 
 /** 编辑器坐标。 */
 interface Pos {
@@ -133,6 +133,10 @@ interface PluginInternals {
 	setHeadingLinkSuggestEnabled(enabled: boolean): Promise<void>;
 	/** M13（1.0.28）：启动后的 VC 词典同步（重写词典 + reload 重试）。 */
 	syncVcDictionaryAfterStartup(): Promise<void>;
+	/** R 组（spec.md §A.11）：注册「复制编号大纲」「复制当前小节链接」两条命令。 */
+	registerCopyCommands(): void;
+	/** 继承自 Plugin 替身：全部经 `addCommand` 注册过的命令（见 obsidian-mock.ts）。 */
+	commands: MockCommand[];
 }
 
 /** 以 H2 中文样式覆盖默认模板（用于「改模板后即时重排」）。 */
@@ -260,6 +264,12 @@ function makePlugin(
 			return { data: new Map(sources.map((p) => [p, []])) };
 		},
 	};
+	// R 组「复制当前小节链接」：真实 Obsidian 按用户的链接设置拼装内部链接，这里只记录调用参数，
+	// 返回值本身不参与断言（命令层只关心「传给它的 file/subpath/alias 对不对」，见 main.test.ts）。
+	const generateMarkdownLink = vi.fn(
+		(file: { path: string }, _sourcePath: string, subpath?: string, alias?: string) =>
+			`[[${file.path}${subpath ?? ""}${alias ? "|" + alias : ""}]]`,
+	);
 	const app = {
 		workspace: {
 			getActiveViewOfType: (
@@ -273,6 +283,7 @@ function makePlugin(
 		},
 		vault,
 		metadataCache,
+		fileManager: { generateMarkdownLink },
 	};
 	const PluginCtor = AutoHeadingsPlugin as unknown as new (
 		app: unknown,
@@ -303,6 +314,7 @@ function makePlugin(
 		vaultFiles,
 		adapterFiles,
 		adapterWrite,
+		generateMarkdownLink,
 		setTemplate: (t: Template) => {
 			tplBox.current = t;
 		},
@@ -2587,5 +2599,119 @@ describe("M14 真机回归：手写编号、清理与空清除（testplan V12 / 
 			{ clear: true, write: false },
 		);
 		expect(Notice.messages.some((m) => m.startsWith("已清除"))).toBe(false);
+	});
+});
+
+describe("复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11）", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	/** 从已注册命令里取出指定 id，找不到直接让测试失败（避免静默 undefined 访问）。 */
+	function findCommand(p: PluginInternals, id: string): MockCommand {
+		const cmd = p.commands.find((c) => c.id === id);
+		if (!cmd) {
+			throw new Error(`未找到命令：${id}`);
+		}
+		return cmd;
+	}
+
+	/** 桩掉 navigator.clipboard.writeText（node 测试环境本无 navigator），返回其 spy。 */
+	function stubClipboard(): ReturnType<typeof vi.fn> {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		vi.stubGlobal("navigator", { clipboard: { writeText } });
+		return writeText;
+	}
+
+	it("两条命令已注册", () => {
+		const { p } = makePlugin();
+		p.registerCopyCommands();
+		expect(p.commands.map((c) => c.id)).toEqual(
+			expect.arrayContaining(["copy-numbered-outline", "copy-section-link"]),
+		);
+	});
+
+	it("复制编号大纲：没有活动 Markdown 文件时命令不可用（阅读视图同理，取决于 activeMarkdownContext）", () => {
+		const { p } = makePlugin();
+		p.registerCopyCommands();
+		expect(findCommand(p, "copy-numbered-outline").checkCallback!(true)).toBe(false);
+	});
+
+	it("复制编号大纲：写入模式文件取标题所见文本，按层级缩进", async () => {
+		const writeText = stubClipboard();
+		const { p, setActiveView } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("## 甲\n### 乙");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		const cmd = findCommand(p, "copy-numbered-outline");
+		expect(cmd.checkCallback!(true)).toBe(true); // 有活动文件 → 命令可用（checking 不执行动作）。
+		cmd.checkCallback!(false);
+		await flushPromises();
+		expect(writeText).toHaveBeenCalledWith("甲\n  乙");
+		expect(Notice.messages.at(-1)).toBe("已复制编号大纲（2 个标题）");
+	});
+
+	it("复制编号大纲：仅显示文件走虚拟编号，与编辑器所见一致，且文件字节不变", async () => {
+		const writeText = stubClipboard();
+		const { p, setActiveView } = makePlugin({
+			pathRules: [{ pattern: "/", template: "默认", mode: "virtual" }],
+		});
+		p.registerCopyCommands();
+		const ed = new FakeEditor("## 甲\n### 乙");
+		setActiveView({ editor: ed, file: { path: "v.md" } });
+		findCommand(p, "copy-numbered-outline").checkCallback!(false);
+		await flushPromises();
+		expect(writeText).toHaveBeenCalledWith("1 甲\n  1.1 乙");
+		expect(ed.getValue()).toBe("## 甲\n### 乙");
+	});
+
+	it("复制编号大纲：没有标题时只提示、不写剪贴板", async () => {
+		const writeText = stubClipboard();
+		const { p, setActiveView } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("只有正文，没有标题。");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		findCommand(p, "copy-numbered-outline").checkCallback!(false);
+		await flushPromises();
+		expect(writeText).not.toHaveBeenCalled();
+		expect(Notice.messages.at(-1)).toBe("当前文件没有标题");
+	});
+
+	it("复制当前小节链接：调用 generateMarkdownLink 且参数正确（锚点/别名见 copycommands.test.ts）", async () => {
+		const writeText = stubClipboard();
+		const { p, generateMarkdownLink } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("## 甲\n正文");
+		ed.setCursor(1);
+		const cmd = findCommand(p, "copy-section-link");
+		expect(cmd.editorCheckCallback!(true, ed, fileInfo("a.md"))).toBe(true);
+		cmd.editorCheckCallback!(false, ed, fileInfo("a.md"));
+		await flushPromises();
+		expect(generateMarkdownLink).toHaveBeenCalledWith(
+			expect.objectContaining({ path: "a.md" }),
+			"",
+			"#甲",
+			"甲",
+		);
+		expect(writeText).toHaveBeenCalledWith("[[a.md#甲|甲]]");
+		expect(Notice.messages.at(-1)).toBe("已复制链接：甲");
+	});
+
+	it("复制当前小节链接：光标在第一个标题之前时命令不可用（R5）", () => {
+		const { p } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("正文\n## 甲");
+		ed.setCursor(0);
+		const cmd = findCommand(p, "copy-section-link");
+		expect(cmd.editorCheckCallback!(true, ed, fileInfo("a.md"))).toBe(false);
+	});
+
+	it("复制当前小节链接：文件没有标题时命令不可用（R5）", () => {
+		const { p } = makePlugin();
+		p.registerCopyCommands();
+		const ed = new FakeEditor("只有正文，没有标题。");
+		ed.setCursor(0);
+		const cmd = findCommand(p, "copy-section-link");
+		expect(cmd.editorCheckCallback!(true, ed, fileInfo("a.md"))).toBe(false);
 	});
 });

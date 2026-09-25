@@ -61,13 +61,15 @@ Notes with hand-typed or imported numbering can be cleaned up with one command, 
 
 ## Commands
 
-| Command                                      | What it does                                                  |
-| -------------------------------------------- | ------------------------------------------------------------- |
-| Renumber now                                 | Renumber the current note right away                          |
-| Clear numbering in current file              | Remove all numbering from the current note                    |
-| Clear non-plugin heading numbering           | Remove hand-typed or imported numbering only                  |
-| Clear leftover plugin numbering in this file | In display-only mode, remove numbers the plugin wrote earlier |
-| Toggle global auto-numbering                 | Turn automatic numbering on or off for the vault              |
+| Command                                      | What it does                                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Renumber now                                 | Renumber the current note right away                                                   |
+| Clear numbering in current file              | Remove all numbering from the current note                                             |
+| Clear non-plugin heading numbering           | Remove hand-typed or imported numbering only                                           |
+| Clear leftover plugin numbering in this file | In display-only mode, remove numbers the plugin wrote earlier                          |
+| Toggle global auto-numbering                 | Turn automatic numbering on or off for the vault                                       |
+| Copy numbered outline                        | Copy the note's headings as an indented, numbered outline (write or display-only mode) |
+| Copy current section link                    | Copy a link to the section under the cursor (write or display-only mode)               |
 
 ## FAQ
 

@@ -226,6 +226,7 @@ obsidian-auto-headings/
 │   ├── pathrules.ts        路径规则 → 模板 / 编号模式解析（纯函数）
 │   ├── frontmatter.ts      单文件开关（obsidian-auto-headings: true/false）读取
 │   ├── i18n.ts             中英双语文案（Messages 接口 + zh/en 两套）
+│   ├── copycommands.ts     「复制编号大纲」「复制当前小节链接」两条命令的纯逻辑（R 组，spec §A.11）
 │   ├── virtual/            虚拟编号模式（M14，只显示不写文件，spec §3.22）
 │   │   ├── compute.ts      纯逻辑：每个标题的显示编号 + 残留前缀区间 + 自动路径门控 resolveNumberingAction
 │   │   ├── editorExtension.ts 编辑视图：CM6 ViewPlugin + 编号 widget + 重算信号（纯函数 buildVirtualDecorations）

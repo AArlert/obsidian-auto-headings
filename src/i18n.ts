@@ -332,6 +332,10 @@ export interface Messages {
 	cmdClearForeign: string;
 	/** 「清除本文件残留编号」命令名（M14，只在仅显示文件里出现）。 */
 	cmdClearStale: string;
+	/** 「复制编号大纲」命令名（R 组，spec.md §A.11；写入 / 仅显示两种模式都可用）。 */
+	cmdCopyOutline: string;
+	/** 「复制当前小节链接」命令名（R 组；光标在第一个标题之前时不出现在命令面板）。 */
+	cmdCopySectionLink: string;
 	/** 清除残留编号成功 / 没有残留时的提示（M14）。 */
 	noticeStaleCleared: string;
 	noticeNoStaleNumbering: string;
@@ -367,6 +371,14 @@ export interface Messages {
 	noticeBacklinksUpdated: (count: number) => string;
 	noticeBacklinksIntro: string;
 	noticeNoActiveFile: string;
+	/** 「复制编号大纲」命令（R1–R3）：当前文件没有标题时的提示，不动剪贴板。 */
+	noticeNoHeadings: string;
+	/** 「复制编号大纲」复制成功的提示，参数为复制的标题数。 */
+	noticeOutlineCopied: (count: number) => string;
+	/** 写入剪贴板失败（`navigator.clipboard.writeText` 抛错）的通用提示，两条复制命令共用。 */
+	noticeCopyFailed: string;
+	/** 「复制当前小节链接」复制成功的提示，参数为链接别名（无别名时为剥 WJ 的锚点，R4）。 */
+	noticeSectionLinkCopied: (label: string) => string;
 	noticeForeignNumberingGuard: string;
 	/** 仅显示文件过半标题带手写编号、不显示虚拟编号时的提示（M14）。 */
 	noticeForeignNumberingGuardVirtual: string;
@@ -659,6 +671,8 @@ const zh: Messages = {
 	cmdClear: "清除当前文件编号",
 	cmdClearForeign: "清理非本插件的标题编号（当前文件）",
 	cmdClearStale: "清除本文件残留的插件编号（仅显示模式）",
+	cmdCopyOutline: "复制编号大纲",
+	cmdCopySectionLink: "复制当前小节链接",
 	noticeStaleCleared: "已清除本插件写入的旧编号，手写编号保持不动",
 	noticeNoStaleNumbering: "本文件没有本插件写入的旧编号",
 	virtualStaleTooltip:
@@ -693,6 +707,10 @@ const zh: Messages = {
 	noticeBacklinksIntro:
 		"已自动更新其它文件里指向本文件标题的内部链接（避免断链；改动不在被改文件的撤销历史内）。不需要可在 设置 → 全局设置 关闭；本提示只出现一次。",
 	noticeNoActiveFile: "没有打开的 Markdown 文件",
+	noticeNoHeadings: "当前文件没有标题",
+	noticeOutlineCopied: (count) => `已复制编号大纲（${count} 个标题）`,
+	noticeCopyFailed: "复制到剪贴板失败",
+	noticeSectionLinkCopied: (label) => `已复制链接：${label}`,
 	noticeForeignNumberingGuard:
 		"这些标题看起来带编号，但插件不确定是不是你自己写的，已跳过本次自动编号。",
 	noticeForeignNumberingGuardAction: "点击查看并清理",
@@ -1001,6 +1019,8 @@ const en: Messages = {
 	cmdClear: "Clear numbering in current file",
 	cmdClearForeign: "Clear non-plugin heading numbering (current file)",
 	cmdClearStale: "Clear leftover plugin numbering in this file (display-only mode)",
+	cmdCopyOutline: "Copy numbered outline",
+	cmdCopySectionLink: "Copy current section link",
 	noticeStaleCleared:
 		"Removed the old numbers this plugin had written; hand-written numbers were left alone",
 	noticeNoStaleNumbering: "This file has no numbers written by this plugin",
@@ -1038,6 +1058,11 @@ const en: Messages = {
 	noticeBacklinksIntro:
 		"Auto Headings updated internal links in other files that point to headings in this file (so they don't break). Those edits are NOT in the modified files' undo history; turn off \"Sync internal links\" under Settings → General. Shown once.",
 	noticeNoActiveFile: "No open Markdown file",
+	noticeNoHeadings: "No headings in the current file",
+	noticeOutlineCopied: (count) =>
+		`Copied numbered outline (${count} heading${count === 1 ? "" : "s"})`,
+	noticeCopyFailed: "Failed to copy to clipboard",
+	noticeSectionLinkCopied: (label) => `Copied link: ${label}`,
 	noticeForeignNumberingGuard:
 		"These headings look numbered, but the plugin isn't sure you wrote that yourself — skipped auto-numbering this time.",
 	noticeForeignNumberingGuardAction: "Click to review and clean up",
