@@ -22,7 +22,7 @@ Everything below is what you get the moment the plugin is enabled, before you op
 1. Install and enable the plugin (see the [README](../README.md#install)).
 2. Open any note and edit it — headings from H2 down get numbered automatically.
 3. Open **Settings → Auto Headings** if you want to go further:
-    - **General**: language, global auto-numbering toggle, backlink sync, heading link suggestions, debounce delay.
+    - **General**: language, global auto-numbering toggle, debounce delay, numbers in the outline, backlink sync, heading link suggestions.
     - **Paths & templates**: the path-rule table (each rule picks a template and a mode: write to file / display only) and the template editor (live preview, whitelist).
     - **Sensitive actions**: the three cleanup entries.
 4. Per-file override: add `obsidian-auto-headings: true/false` in frontmatter to force-enable/disable a single file. The command **Renumber now** bypasses all switches.
@@ -37,7 +37,8 @@ Every path rule has a mode (the "Mode" column under **Settings → Paths & templ
 | Live Preview, Reading view, embeds, hover preview | Numbers shown                 | Numbers shown                          |
 | Obsidian's built-in "Export to PDF"             | Numbers included              | Numbers included                       |
 | Source mode                                     | Shows your text as written    | Numbers are part of the text           |
-| Outline pane, in-file search                    | No numbers                    | Numbers visible                        |
+| Obsidian's Outline pane                         | Numbers shown (can be turned off) | Numbers visible                    |
+| In-file search                                  | No numbers                    | Numbers visible                        |
 | GitHub, Obsidian Publish, other editors         | No numbers                    | Numbers visible                        |
 | Links follow renamed headings                   | Yes                           | Yes                                    |
 
@@ -49,6 +50,7 @@ Every path rule has a mode (the "Mode" column under **Settings → Paths & templ
     -   Cancel leaves the rule unchanged.
 -   **Leftover numbers**: if a display-only note still contains numbers the plugin wrote earlier (you kept them when switching, or moved the note in from a write-mode folder), the plugin hides the old number, shows a single new one, and underlines it with a dotted line; hover for an explanation. The old number is still in the file and will show up elsewhere. The command "Clear leftover plugin numbering in this file" removes it; it only appears in display-only notes.
 -   **Hand-written numbers**: if more than half of the headings in a display-only note already carry hand-written or imported numbers (say, after migrating from another numbering plugin), the plugin shows no numbers there, to avoid two sets, and offers a notice when you open the note so you can preview and clean them up. The occasional heading that happens to start with a number (like "2024 review") is unaffected and gets numbered as usual.
+-   **Outline pane**: display-only numbers also appear in Obsidian's built-in Outline pane and stay correct when you filter, collapse or drag sections there; headings with leftover numbers show the file's text as is. Turn this off under **Settings → General → Show numbers in the outline**.
 -   **Renumber now** in a display-only note only refreshes the display; it never writes to the file.
 -   **Freeze numbering and release ownership**: display-only numbers were never in the files, so they disappear once you freeze. To keep them as text, switch the rule to "Write to file" with "write now" first, then freeze.
 

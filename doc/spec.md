@@ -1666,6 +1666,21 @@ Heading Keeper 54（默认虚拟，写入需明确开启）。本插件的差异
   - 内置「导出 PDF」走阅读视图渲染管线，真机验证带编号。
 - 样式 `.ah-virtual-number`：颜色跟随标题、`user-select: none`（阅读视图里复制不带编号；编辑视图的
   widget 本就不在文档文本里）。
+- **内置大纲面板**（1.2.0，原二期候选，用户要求提前；testplan V40–V45）：大纲是核心插件视图，没有公开
+  API，按 Obsidian 1.10 的实现（asar 里的 app.js）核对后这样挂：
+  - 视图持有 `file` 与条目数组 `cachedHeadingDom`（文档顺序），条目带 `heading`（metadataCache 的
+    `HeadingCache`）与 `innerEl`（`.tree-item-inner`）。按条目的 `heading.position.start.line` 取编号、
+    再核对级别，对不上就不画；编号来自 `cachedRead` 的全文，与 metadataCache 解析的是同一份内容。
+  - 大纲每次刷新都用 `innerEl.setText()` 重写文字，插节点会被冲掉，所以编号只写成 `data-ah-number`
+    属性、由 CSS `::before` 画出，不碰大纲的搜索高亮、拖动与点击跳转。
+  - 条目按需渲染（虚拟滚动），屏幕外的条目不在 DOM 里。编号挂在**条目对象**的元素上，滚进视口时自带；
+    **不能**像 Heading Decorator 那样扫描屏幕上的 DOM 去对齐标题（滚动 / 折叠 / 过滤后会错位）。
+  - 刷新入口 `requestUpdate` 在构造时捕获了原始 `update`，实例打补丁挂不住——改用 MutationObserver 看
+    `childList` 变化（刷新会重写可见条目的文字），合并到一个微任务里核对全部条目；写属性不触发它，不自激。
+    新开 / 关闭 / 延迟加载完的大纲靠 `layout-change` / `active-leaf-change` 挂上或摘掉观察器。
+  - 以 WJ 开头的残留旧编号标题不画（大纲只能显示原文，叠上去是两层数字）。
+  - 设置「在大纲中显示编号」（`showOutlineNumbers`，默认开）；关掉后插件对大纲零接触、已画的编号立即去掉，
+    留作 Obsidian 改内部实现时的退路。结构认不出就什么都不做（失败静默），不影响编辑 / 阅读视图。
 
 #### 残留前缀
 
@@ -1710,15 +1725,15 @@ Heading Keeper 54（默认虚拟，写入需明确开启）。本插件的差异
   代价要在按钮说明里写清楚：**仅显示的编号本就不在文件里，固化后随插件离场一起消失**。「把虚拟编号
   一次性烧录成纯文本」登记为 M9 候选。（周期 0 曾写成「虚拟文件跳过」，周期 1 订正。）
 - **已知限制**（写进使用指南，不回避）：文件内搜索、Publish、GitHub、外部编辑器里**看不到**虚拟编号。
-  内置大纲面板**一期不做**，但并非做不到（Heading Decorator 已用 DOM 装饰实现），登记为 M14 二期候选；
-  M8a 自建的侧栏大纲应直接显示虚拟编号。
+  内置大纲面板 1.2.0 起能看到（见上文「渲染」）；M8a 自建的侧栏大纲应直接显示虚拟编号。
 
 #### 代码组织
 
 `main.ts` 已约 2170 行，虚拟模式新代码**不往里加**，放 `src/virtual/`：`compute.ts`（纯函数：原文 + 模板
 + 选项 → `[{lineIndex, label, burnedPrefixRange?}]`，node 可测）、`editorExtension.ts`（ViewPlugin /
 StateEffect / Widget）、`readingView.ts`（post-processor 与缓存）、`modeSwitch.ts`（切换确认、命中文件
-筛选、批量编排，通过接口回调 main.ts 的批量通道）。main.ts 只加接线。验证场景见 testplan V 组。
+筛选、批量编排，通过接口回调 main.ts 的批量通道）、`outlineView.ts`（内置大纲面板的编号，1.2.0）。
+main.ts 只加接线。验证场景见 testplan V 组。
 
 ## 4. 架构设计
 
@@ -1840,7 +1855,8 @@ i18n.ts                     // 中英双语文案（Messages 接口 + zh/en 两�
       文件」，FAQ「会往笔记里加隐藏的东西吗？」按模式分答；新增 FAQ「占资源吗？」（口径见 M12
       「README 资源与隐私承诺」）；user-guide 新增「两种模式」一节；manifest description 顺带重排（M12 项）；
       合并 master、打 tag
-- [ ] **二期候选**：内置大纲面板显示虚拟编号（DOM 装饰，参照 Heading Decorator）
+- [x] **内置大纲面板显示虚拟编号**（原二期候选，1.2.0 应用户要求提前）：条目对象上挂属性 + CSS 画编号、
+      MutationObserver 跟刷新，设置可关，见 [3.22](#322-虚拟编号模式m14)「渲染」与 testplan V40–V45
 
 ### Milestone 11 — 信任包（插队 M8a 之前）
 

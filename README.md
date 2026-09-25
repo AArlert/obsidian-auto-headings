@@ -25,7 +25,7 @@ Automatic heading numbering for Obsidian that keeps up with you. Add, delete or 
 
 Each path rule picks its own mode:
 
--   **Display only** (the default for new installs): numbers appear in Live Preview, Reading view and PDF export, and the note file is never changed. Source mode shows your text exactly as written.
+-   **Display only** (the default for new installs): numbers appear in Live Preview, Reading view, the Outline pane and PDF export, and the note file is never changed. Source mode shows your text exactly as written.
 -   **Write to file**: numbers are written into the note as real text, so they also show up on GitHub, in Obsidian Publish and in other editors.
 
 Both modes use the same templates and produce the same numbers. You can switch at any time; the plugin first tells you how many notes are affected, then removes or writes the numbers as you choose. Vaults upgrading from an earlier version keep "Write to file".

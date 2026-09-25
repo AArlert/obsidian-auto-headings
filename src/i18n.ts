@@ -68,6 +68,10 @@ export interface Messages {
 	debounceDesc: (min: number, max: number, def: number) => string;
 	resetTooltip: (def: number) => string;
 
+	// —— 大纲里显示编号（1.2.0）——
+	outlineNumbersName: string;
+	outlineNumbersDesc: string;
+
 	// —— Backlink 同步 ——
 	updateBacklinksName: string;
 	updateBacklinksDesc: string;
@@ -397,6 +401,8 @@ const zh: Messages = {
 	debounceName: "防抖延迟",
 	debounceDesc: (min, max, def) => `编辑停顿 ${min}–${max} ms 后触发自动编号（默认 ${def} ms）。`,
 	resetTooltip: (def) => `恢复默认 ${def} ms`,
+	outlineNumbersName: "在大纲中显示编号",
+	outlineNumbersDesc: "「仅显示」模式下，Obsidian 自带的大纲面板里也显示编号。",
 
 	updateBacklinksName: "同步内部链接（Backlink）",
 	updateBacklinksDesc:
@@ -724,6 +730,8 @@ const en: Messages = {
 	debounceDesc: (min, max, def) =>
 		`Auto-numbering runs ${min}–${max} ms after you stop typing (default ${def} ms).`,
 	resetTooltip: (def) => `Reset to default ${def} ms`,
+	outlineNumbersName: "Show numbers in the outline",
+	outlineNumbersDesc: "In display-only mode, also show the numbers in Obsidian's Outline pane.",
 
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc:

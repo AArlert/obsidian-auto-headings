@@ -63,6 +63,7 @@ import {
 	type VirtualHeadingLabel,
 } from "./virtual/compute";
 import { virtualNumberingExtension, virtualRefreshEffect } from "./virtual/editorExtension";
+import { VirtualOutlineDecorator } from "./virtual/outlineView";
 import { VirtualReadingRenderer } from "./virtual/readingView";
 import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
@@ -193,6 +194,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 故调用处一律用可选链。
 	 */
 	private readingRenderer?: VirtualReadingRenderer;
+	private outlineDecorator?: VirtualOutlineDecorator;
 
 	/**
 	 * 当前界面语言的文案表（按 `settings.language` 解析，见 {@link resolveLang} / {@link getMessages}）。
@@ -299,6 +301,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 				this.readingRenderer?.scheduleSweep(file.path);
 			}),
 		);
+		// 内置大纲面板也显示虚拟编号（1.2.0，见 virtual/outlineView.ts）：大纲自己刷新时由观察器跟上；
+		// 新开 / 关闭 / 延迟加载完的大纲靠布局事件挂上或摘掉观察器。
+		this.outlineDecorator = new VirtualOutlineDecorator(this, this.app.workspace);
+		const attachOutlines = () => this.outlineDecorator?.attachAll();
+		this.registerEvent(this.app.workspace.on("layout-change", attachOutlines));
+		this.registerEvent(this.app.workspace.on("active-leaf-change", attachOutlines));
+		this.app.workspace.onLayoutReady(attachOutlines);
 
 		// 实时编辑监听：editor onChange → 重置该文件的防抖计时器（编号 + M13 标题索引各一套）。
 		this.registerEvent(
@@ -431,6 +440,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		this.debounceTimers.clear();
 		this.readingRenderer?.dispose();
+		this.outlineDecorator?.dispose(); // 大纲恢复原样，不留编号属性（testplan V43）。
 		this.headingSnapshots.clear();
 		this.activeGuardNotice?.notice.hide();
 		this.activeGuardNotice = null;
@@ -1809,6 +1819,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (merged.headingSuggestWhenVcActive !== "own") {
 			merged.headingSuggestWhenVcActive = "yield";
 		}
+		// 1.2.0：大纲里显示仅显示模式的编号，缺省 / 非法值回退到默认开。
+		if (typeof merged.showOutlineNumbers !== "boolean") {
+			merged.showOutlineNumbers = true;
+		}
 		// 迁移：历史独立开关 `backlinkStandaloneTrigger`（0.7.8–1.0.8，CR-18）已并入 `updateBacklinks`
 		// （1.0.9 起单开关全局生效，与是否命中编号模板无关）；旧字段不再读取，随迁移一并清理。
 		delete merged.backlinkStandaloneTrigger;
@@ -1842,6 +1856,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 		}
 		this.readingRenderer?.refreshAll();
+		this.outlineDecorator?.refreshAll();
 	}
 
 	/**
@@ -1867,6 +1882,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/** 残留样式编号的悬停提示（M14，供渲染器调用）。 */
 	staleTooltip(): string {
 		return this.messages().virtualStaleTooltip;
+	}
+
+	/** 设置「在大纲中显示编号」是否开着（1.2.0，供大纲渲染器调用）。 */
+	outlineNumbersEnabled(): boolean {
+		return this.settings.showOutlineNumbers !== false;
 	}
 
 	/** 阅读视图拿不到段落信息时读文件全文（M14 兜底）；不是 Markdown 文件或读失败返回 `null`。 */

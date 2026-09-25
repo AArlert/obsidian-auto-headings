@@ -230,6 +230,7 @@ obsidian-auto-headings/
 │   │   ├── compute.ts      纯逻辑：每个标题的显示编号 + 残留前缀区间 + 自动路径门控 resolveNumberingAction
 │   │   ├── editorExtension.ts 编辑视图：CM6 ViewPlugin + 编号 widget + 重算信号（纯函数 buildVirtualDecorations）
 │   │   ├── readingView.ts  阅读视图：markdown post-processor + 缓存 + 兜底匹配
+│   │   ├── outlineView.ts  内置大纲面板：条目上挂属性 + CSS 画编号，MutationObserver 跟大纲刷新（1.2.0）
 │   │   └── modeSwitch.ts   规则变动引起的模式切换：改动前后逐文件比较有效模式（纯函数）
 │   ├── settings/
 │   │   ├── model.ts        设置数据模型（全局开关、防抖延迟、路径规则持久化）

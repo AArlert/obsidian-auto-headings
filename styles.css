@@ -952,3 +952,10 @@ button.ah-tab.ah-tab-active:hover {
 	text-underline-offset: 0.2em;
 	cursor: help;
 }
+
+/* 仅显示模式在内置大纲面板里的编号（1.2.0）：大纲每次刷新都会重写条目文字，
+   所以编号只作为属性挂在条目上、由 ::before 画出（见 src/virtual/outlineView.ts）。 */
+.tree-item-inner[data-ah-number]::before {
+	content: attr(data-ah-number);
+	white-space: pre;
+}

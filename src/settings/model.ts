@@ -94,6 +94,13 @@ export interface AutoHeadingsSettings {
 	 * VC 未安装 / 未启用时本字段无效——没有竞争者，本插件的框照常弹。
 	 */
 	headingSuggestWhenVcActive: "yield" | "own";
+	/**
+	 * 仅显示模式下，Obsidian 内置大纲面板里也显示编号（1.2.0，原 M14 二期，见 spec.md §3.22 与
+	 * `virtual/outlineView.ts`）。**默认开**——仅显示模式本来就该「看得到编号」，大纲少了编号反倒像缺陷。
+	 * 大纲没有公开 API，靠其内部结构挂编号；关掉后插件对大纲零接触，留作内部实现变化时的退路。
+	 * 写入模式不受影响（编号本就在标题文字里）。
+	 */
+	showOutlineNumbers: boolean;
 }
 
 /** 防抖延迟的边界与默认值（见 spec.md §3.9）。 */
@@ -127,6 +134,7 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	headingLinkSuggestEnabled: true,
 	vcIntegrationMode: "off",
 	headingSuggestWhenVcActive: "yield",
+	showOutlineNumbers: true,
 };
 
 /** 将防抖延迟夹到合法范围 [50, 2000]，非数字回退到默认值。 */
