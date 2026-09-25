@@ -5,6 +5,49 @@
 
 ---
 
+## 2026-09-25 M14 虚拟编号模式 周期 2：渲染（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **编辑视图**（新建 `src/virtual/editorExtension.ts`）：CM6 ViewPlugin。标题正文起点放编号 widget（`side: 1`，
+  参照 Heading Decorator 在实时预览里的放法）；残留前缀用同一 widget `Decoration.replace` 替换并标残留样式，
+  且登记为原子区（光标整体跨过）；不编号标题上的残留**不藏**。文档变化先 `map`，100ms 去抖后自发
+  `virtualRefreshEffect` 重算；`view.composing` 期间顺延；编辑器换了文件立即重算，不映射上一篇的编号。
+  「编号 → DecorationSet」是纯函数 `buildVirtualDecorations`。
+- **阅读视图**（新建 `src/virtual/readingView.ts`）：post-processor 按 `getSectionInfo` 行号取编号并核对元素级别；
+  按路径缓存上次原文、字符串比较命中；拿不到段落信息时读文件、按文本唯一命中兜底；残留前缀从第一个文本
+  节点去掉（尾哨兵被毁则不画）。`NodeFilter.SHOW_TEXT` 写成常量，node 可测。
+- **接线**（`main.ts`）：注册两个扩展；`refreshVirtualViews()` 向所有编辑器 dispatch 重算信号、阅读视图
+  `rerender(true)`，挂在 `saveSettings`、`renumberActiveFile`（改模板 / 规则）、`onExternalSettingsChange`、
+  清库与固化结束、仅显示文件的「立即重新编号」；新命令「清除本文件残留的插件编号」（`editorCheckCallback`，
+  只在仅显示文件里出现，走 `clearPluginNumberingContent` + backlink 同步，不暂停）。
+- `compute.ts` 的输出补 `level` / `text` 字段；`styles.css` 加 `.ah-virtual-number`（跟随标题、不可选中）与
+  `--stale`（虚线下划线 + 悬停说明）；i18n 四个新 key；obsidian-mock 补 `registerEditorExtension` /
+  `registerMarkdownPostProcessor` / `editorInfoField`。
+- **测试**：新建 `virtual-render.test.ts`（13 条：装饰位置、残留替换、白名单残留不藏、map 后不漂移、越界、
+  按行 / 按文本匹配、假 DOM 上的插入与残留剥离、缓存只算一次、兜底、门控不放行）；`main.test` +3（清除残留
+  命令两条、刷新广播）。
+- 已部署到用户测试库。本周期派发 1 次（quality-gate × 1：收尾 preflight）。
+
+### 没做什么
+
+- 没有 UI：规则的模式下拉框、切换确认框都在周期 3。真机测试要先手动在 data.json 里给规则加 `"mode": "virtual"`。
+- 视觉、光标、输入法、PDF 导出、移动端、大文件性能都还没真机验证。
+
+### 下一步
+
+- 用户真机验 V27–V31（实时预览 / 源码 / 阅读视图、输入法、复制、PDF、嵌入与悬浮预览）；根据结果调整
+  widget 位置或样式。
+- **周期 3**：路径规则行的模式下拉框、切换确认 Modal（含删规则 / 改路径 / 改不编号入口）、固化按钮说明。
+
+### 验证方式
+
+- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机按下一步清单。
+
+---
+
 ## 2026-09-25 M14 虚拟编号模式 周期 1：模型 + 纯逻辑 + 门控（1.2.0）
 
 交接人：`claude/m14-virtual-mode`

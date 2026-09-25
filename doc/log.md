@@ -41,6 +41,44 @@
 
 ---
 
+## 2026-09-25 M14 虚拟编号模式 周期 4（文档部分）：对外文档与发版准备（1.2.0）
+
+交接人：`claude/m14-virtual-mode`
+
+### 做了什么
+
+- **真机补测**：用户确认中文输入法组合正常（V28）；我用电脑操作测了悬浮预览（Ctrl + 悬停 `[[基础#概述]]` 与 `[[基础]]`），
+  小节与整篇都按全文编号（V29）。
+- **README 中英**：卖点首条改为「可以完全不改文件」；快速上手改为「显示编号、文件不变」；新增「只显示，或者写进文件」
+  一节；「全自动编号」按两种模式分述；命令表加「清除本文件残留的插件编号」；FAQ「会往笔记里加隐藏的东西吗？」按
+  模式分答、「不想用了」补仅显示直接卸载；**新增 FAQ「占资源吗？」**，只写已核实的事实（`src/` 无网络请求，只有
+  关于页的链接；启动时本地读一遍全库标题用于链接建议、可关；标题索引 5 万条、剪贴板缓存约 2MB）。
+- **使用指南中英**：新增「两种模式：仅显示与写入文件」一节（对照表、默认值、按文件夹混用、切换确认框、残留、
+  手写编号过半、立即重新编号、固化）；订正「无论库多大都没有后台开销 / 从不扫描全库」的旧说法；「工作原理」节
+  注明只适用于写入模式；导出节更新（仅显示下内置 PDF 实测带编号）；命令表、干净离开节补仅显示。
+- **release notes** `doc/release-notes/1.2.0.md`（双语）。
+- **manifest description** 改为「可只显示 / 写入 + 链接跟随」打头（191 字符，M12 该项勾掉），同时勾掉 M12
+  「README 资源与隐私承诺」。
+- 本周期派发 1 次（quality-gate × 1：收尾 preflight）。
+
+### 没做什么
+
+- **没合并 master、没打 tag**：打 tag 会触发 Release 工作流、向所有用户发布，须用户确认；另一个会话正在 master 上修
+  stripPrefix 截断标题的数据丢失 bug（1.1.5），建议等它合并后再合 M14，让 1.2.0 一并带上这个修复。
+- 移动端未测。
+
+### 下一步
+
+- stripPrefix 修复合进 master 后：把 master 合进本分支（版本号保持 1.2.0；`log.md` / `status.jsonl` / `testplan.md` /
+  `release/` 按两边合并、release 重建；release notes 补一句该修复），跑 preflight + fuzz，再按 §5.1 合并 master。
+- 用户确认后打 `1.2.0` tag；Community Hub 索引滞后时去维护者面板点「修复」。
+
+### 验证方式
+
+- `npm run preflight`（见本周期提交前的 quality-gate 报告）。
+
+---
+
 ## 2026-09-25 M14 虚拟编号模式：真机实测修复（1.2.0）
 
 交接人：`claude/m14-virtual-mode`
@@ -120,49 +158,6 @@
 
 - 等用户真机反馈（渲染 V27–V31 + 设置界面切换 V15–V19），按反馈修；然后周期 4：README / 使用指南 / release
   notes 1.2.0、合并 master（注意与 stripPrefix 修复分支的版本号与 docs 冲突）、打 tag。
-
-### 验证方式
-
-- `npm run preflight`（见本周期提交前的 quality-gate 报告）；真机按下一步清单。
-
----
-
-## 2026-09-25 M14 虚拟编号模式 周期 2：渲染（1.2.0）
-
-交接人：`claude/m14-virtual-mode`
-
-### 做了什么
-
-- **编辑视图**（新建 `src/virtual/editorExtension.ts`）：CM6 ViewPlugin。标题正文起点放编号 widget（`side: 1`，
-  参照 Heading Decorator 在实时预览里的放法）；残留前缀用同一 widget `Decoration.replace` 替换并标残留样式，
-  且登记为原子区（光标整体跨过）；不编号标题上的残留**不藏**。文档变化先 `map`，100ms 去抖后自发
-  `virtualRefreshEffect` 重算；`view.composing` 期间顺延；编辑器换了文件立即重算，不映射上一篇的编号。
-  「编号 → DecorationSet」是纯函数 `buildVirtualDecorations`。
-- **阅读视图**（新建 `src/virtual/readingView.ts`）：post-processor 按 `getSectionInfo` 行号取编号并核对元素级别；
-  按路径缓存上次原文、字符串比较命中；拿不到段落信息时读文件、按文本唯一命中兜底；残留前缀从第一个文本
-  节点去掉（尾哨兵被毁则不画）。`NodeFilter.SHOW_TEXT` 写成常量，node 可测。
-- **接线**（`main.ts`）：注册两个扩展；`refreshVirtualViews()` 向所有编辑器 dispatch 重算信号、阅读视图
-  `rerender(true)`，挂在 `saveSettings`、`renumberActiveFile`（改模板 / 规则）、`onExternalSettingsChange`、
-  清库与固化结束、仅显示文件的「立即重新编号」；新命令「清除本文件残留的插件编号」（`editorCheckCallback`，
-  只在仅显示文件里出现，走 `clearPluginNumberingContent` + backlink 同步，不暂停）。
-- `compute.ts` 的输出补 `level` / `text` 字段；`styles.css` 加 `.ah-virtual-number`（跟随标题、不可选中）与
-  `--stale`（虚线下划线 + 悬停说明）；i18n 四个新 key；obsidian-mock 补 `registerEditorExtension` /
-  `registerMarkdownPostProcessor` / `editorInfoField`。
-- **测试**：新建 `virtual-render.test.ts`（13 条：装饰位置、残留替换、白名单残留不藏、map 后不漂移、越界、
-  按行 / 按文本匹配、假 DOM 上的插入与残留剥离、缓存只算一次、兜底、门控不放行）；`main.test` +3（清除残留
-  命令两条、刷新广播）。
-- 已部署到用户测试库。本周期派发 1 次（quality-gate × 1：收尾 preflight）。
-
-### 没做什么
-
-- 没有 UI：规则的模式下拉框、切换确认框都在周期 3。真机测试要先手动在 data.json 里给规则加 `"mode": "virtual"`。
-- 视觉、光标、输入法、PDF 导出、移动端、大文件性能都还没真机验证。
-
-### 下一步
-
-- 用户真机验 V27–V31（实时预览 / 源码 / 阅读视图、输入法、复制、PDF、嵌入与悬浮预览）；根据结果调整
-  widget 位置或样式。
-- **周期 3**：路径规则行的模式下拉框、切换确认 Modal（含删规则 / 改路径 / 改不编号入口）、固化按钮说明。
 
 ### 验证方式
 

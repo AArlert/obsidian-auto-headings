@@ -1830,7 +1830,7 @@ i18n.ts                     // 中英双语文案（Messages 接口 + zh/en 两�
 - [x] **周期 3｜UI 与切换**（2026-09-25，逻辑单测完成；确认框交互待真机）：路径规则行加 mode 下拉框（虚拟行隐藏或禁用批量重编号）、切换确认 Modal
       （含删规则 / 改路径 / 改不编号入口与冻结选项）、i18n 中英 key、立即重新编号的虚拟提示、固化按钮说明、
       `modeSwitch.ts` 测命中筛选与取消语义
-- [ ] **周期 4｜对外文档与发版**：release notes 1.2.0（双语）；README 卖点加「可以只显示编号、完全不改
+- [ ] **周期 4｜对外文档与发版**（2026-09-25：文档部分已完成——README 中英、使用指南「两种模式」一节、release notes 1.2.0、manifest description；合并 master 与打 tag 待用户确认）：release notes 1.2.0（双语）；README 卖点加「可以只显示编号、完全不改
       文件」，FAQ「会往笔记里加隐藏的东西吗？」按模式分答；新增 FAQ「占资源吗？」（口径见 M12
       「README 资源与隐私承诺」）；user-guide 新增「两种模式」一节；manifest description 顺带重排（M12 项）；
       合并 master、打 tag
@@ -1910,12 +1910,12 @@ i18n.ts                     // 中英双语文案（Messages 接口 + zh/en 两�
       的历史缺口
 - [ ] **内置三套预设模板：学术 / 书稿 / 公文**（2026-09-25 登记，对标 Number Suite 的层级 / 公文 /
       法律三套方案）：新用户开箱即可选，不必自己拼模板
-- [ ] **README 资源与隐私承诺**（2026-09-25 登记，借鉴 Heading Keeper / Number Suite 的写法，随 M14
+- [x] **README 资源与隐私承诺**（2026-09-25 登记并随 M14 周期 4 落地，借鉴 Heading Keeper / Number Suite 的写法，随 M14
       周期 4 一起落）：只写已核实的事实——不联网、不收集数据（`src/` 无 `requestUrl` / `fetch`，发版前
       再查）；**启动时在本地读取一次全库标题用于链接建议（可在设置里关掉），之后编号只处理正在编辑的
       笔记**（注意：「从不扫描全库」**不成立**，见 `buildInitialHeadingIndex`）；内存有上限（标题索引 5 万条、
       剪贴板缓存约 2MB）
-- [ ] **manifest description 卖点重排**（自 M9 升格）：backlink 同步前置为第一句；manifest 属产物，
+- [x] **manifest description 卖点重排**（自 M9 升格；2026-09-25 随 M14 改为「可只显示 / 写入 + 链接跟随」打头）：backlink 同步前置为第一句；manifest 属产物，
       按上架后策略随下一个行为版本一并 bump
 - [ ] **公开 API 第一步：标题改名事件**：改名表产出后广播（workspace 自定义事件或插件实例公开方法
       + 类型声明），让 Tasks / Dataview 脚本 / 其他大纲、编号插件消费"某文件某行标题 X→Y"——
