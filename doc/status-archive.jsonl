@@ -1,3 +1,4 @@
+{"type":"log","date":"2026-08-19","version":"1.1.2","summary":"M27：PR #8 审核修复——行级括号配对表消除未闭合括号的 O(L²) 卡死；`[[…]]` 整段跳过防括号段双改写；注释区并入排除。testplan 加 M27，backlinks 42/42，门槛除 locale 伪影全绿。"}
 {"type":"log","date":"2026-08-19","version":"1.1.2","summary":"M26：Backlink 同步补齐 Markdown inline link/image；只改 URL 编码标题 fragment，保留 label/path/title/!，并保守跳过外链、纯文件、block、多级 fragment、坏编码、转义与代码区。基于 upstream 1.1.1；单测 633/633、fuzz 与 NesDev 9/9 通过。"}
 {"type":"log","date":"2026-08-19","version":"1.1.1","summary":"i18n/面板文案瘦身（用户反馈过于繁琐）：src/i18n.ts 全量压缩长文案——设置项 desc、分区导语、确认框要点、冻结/清理对话框、Notice、鸣谢段，中英逐条镜像；保留关键警告与默认值，测试断言的 notice 短语一字未动，Messages 接口零改动；bump 1.1.1 并打 tag 发版（release-notes/1.1.1.md 双语）。"}
 {"type":"log","date":"2026-08-19","version":"1.1.0","summary":"M13 收官 + 发版：同名标题在短查询下不出现的根因是 VC 混排全部来源后按显示文本长度升序 slice(0, maxNumberOfSuggestions=5)，带后缀的同名标题恰是最长候选。自动配置把该上限只抬不降到 10（全局项，确认框单列）；不在启动时重放写入以免跟用户抢设置。写 release-notes/1.1.0.md 双语并打 tag。"}

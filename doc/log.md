@@ -34,10 +34,65 @@
 > **省 token 读盘**：接手跑 `npm run docs -- --handover` 一条命令即可（更早历史翻 `log-archive.md`）。
 > 源码已按职责拆分（编号引擎 = `template` / `count` / `render` / `strip` / `whitelist` + `numbering` 编排兼
 > barrel，外部一律从 `./numbering` 导入；设置 GUI = `SettingsTab.ts` 壳 + `settings/tabs/` 七个 TAB，
-> 均可整读）；仍大的 `main.ts`（~1290 行）与 `i18n.ts`（~710 行）先 `grep` 定位、别整读。
+> 均可整读）；仍大的 `main.ts`（~2600 行）与 `i18n.ts`（~1100 行）先 `grep` 定位、别整读。
 > UVM 压测框架（`tests/dev_tests/uvm/`）已按职责拆成 9 个文件、均可整读，入口仍是 `framework.ts`。
 
 > 一句话：**改代码 → `npm run bump` → 写本文件新块 + `status.jsonl` → `npm run preflight`（= docs + release + test + lint + format:check）→ 提交（含 `release/`）。**
+
+---
+
+## 2026-09-25 发版前一轮开发：大纲显示虚拟编号、两条复制命令、H8（1.2.0，交接：claude/m14-virtual-mode）
+
+### 做了什么
+
+- **内置大纲面板显示虚拟编号**（原 M14 二期，用户要求提前；testplan V40–V45）：新增 `src/virtual/outlineView.ts`。
+  动手前从本机 `E:\Obsidian\resources\obsidian.asar` 只读解出 app.js 核对 1.10 的大纲实现，据此推翻了参照竞品
+  Heading Decorator 的思路（扫屏幕 DOM、按层级 + 文本对齐标题）——1.10 的大纲是虚拟滚动，屏幕外条目不在 DOM 里，
+  那样滚动 / 折叠 / 过滤后会错位。现做法：
+  - 遍历视图的条目对象 `cachedHeadingDom`，按 `heading.position.start.line` 取编号并核对级别，写成 `innerEl` 上的
+    `data-ah-number` 属性，CSS `::before` 画出（大纲每次刷新都 `setText` 重写文字，插节点会被冲掉）；
+  - `requestUpdate` 构造时就捕获了原始 `update`，实例打补丁挂不住 → 用 MutationObserver 看 `childList`，合并到
+    微任务里核对全部条目；新开 / 关闭的大纲靠 `layout-change` / `active-leaf-change` 挂摘观察器；
+  - 残留旧编号（WJ 开头）的标题不画；设置「在大纲中显示编号」`showOutlineNumbers` 默认开，关掉后对大纲零接触；
+    结构认不出静默。
+- **两条复制命令**（testplan R1–R6，spec A.11 借鉴；feature-coder 实现、我审）：`src/copycommands.ts` + main.ts
+  `registerCopyCommands`。「复制编号大纲」用 `checkCallback`（阅读视图可用），写入模式取标题所见文本、仅显示取
+  虚拟编号，按全文最浅级别缩进两格；「复制当前小节链接」用 `editorCheckCallback`，锚点保留 WJ（与标题链接建议
+  同口径，否则写入模式解析不到）、别名剥编号，链接由 `generateMarkdownLink` 按用户的链接设置生成。
+- **H8 + H17–H19**（feature-coder 实现、我审）：清全库 / 固化改走 `batchRewrite`（已打开走编辑器事务、未打开走
+  `vault.process`），清全库顺带同步链接（H17）。审方案时发现同一类竞态还在 `syncBacklinksCounted`：已打开的
+  引用方仍走 `vault.process`，批量通道里互相引用的两篇都开着时会读到落盘前的旧内容、冲掉刚做的改写（M18 同源），
+  一并改为走引用方的编辑器（H18，所有同步路径受益）。固化时 `linkAnchor` 剥 WJ 比较，纯去 WJ 不算改名，同步实为
+  空操作，不会多写、不会多弹提示。
+- 模板同名冲突提示：用户认为 `default.json` 恒生效、冲突副本被忽略可以接受，**不做**。
+- 文档：spec §3.22（渲染 / 已知限制 / 代码组织）、§3.10、§3.12、§3.1 命令表、Roadmap M11 / M12 / M14；使用指南中英
+  （两种模式对照表、大纲一条、命令表）；README 中英；1.2.0 发布说明补大纲、两条命令、清全库同步链接；实测样例
+  `tests/user_tests/13-仅显示大纲与复制命令.md`；记忆补「从 asar 查 Obsidian 内部实现」。
+- 两个 feature-coder 都因 API 额度上限中断过一次，用 SendMessage 续跑完成。本周期派发 5 次（feature-coder × 2、
+  quality-gate × 3）。
+
+### 没做什么
+
+- **清全库 / 固化没上真机**（会改动整个库，只有单测）。写入模式下的两条命令、R6 写入模式没上真机；在大纲里拖动
+  小节没单独测（与插入标题同一刷新路径）；停用插件后大纲复原只有单测。
+- M11「清库撤销」（自建快照 / 还原）未做。
+- 没合并 master、没打 tag（发版须用户明确同意）。
+
+### 下一步
+
+- 用户过目后发 1.2.0：按 §5.1 合并 master + 打 `1.2.0` tag（须用户明确同意）；Community Hub 索引滞后时去维护者
+  面板点「修复」。
+- 1.3.0 候选：M12 内置三套预设模板；`main.ts` 已约 2600 行，改到相关代码时顺手拆。
+- 主工作区 `D:/Documents/Code/obsidian-auto-headings` 里的本地 `claude/m14-virtual-mode` 落后于 origin（本会话在
+  独立 worktree 里开发并推送），在那边接着干前先 `git pull --ff-only`。
+
+### 验证方式
+
+- quality-gate（合并后全量）：`release` 通过；`npm test` 787 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows
+  既有伪影）；`lint`、`format:check`、`docs --check` 通过；`test:fuzz` 三块记分板通过（标题索引 34.1s）。
+- 真机（Oblivion 库 `Claude测试/`，电脑操作）：大纲 V40 / V41（搜索过滤、折叠、最前面插标题、2000 标题长大纲滚到
+  末尾）/ V43（设置开关）；命令 R2–R6（仅显示）；H18（两篇分屏，刚粘贴未落盘的链接随改名同步）。测后测试笔记
+  逐字节核对还原。
 
 ---
 
@@ -136,69 +191,6 @@
 - 回归用例：`numbering.test.ts`「标题中间的 WJ 属于正文」、`known_bugs.test.ts` E37–E41、`cleanup.test.ts`「非本插件
   判定不看链接锚点里的 WJ」。
 - Pandoc：`pandoc x.md -t markdown -L assets/pandoc/strip-autoheadings.lua`（两种模式）实跑核对 O5h。
-
----
-
-## 2026-09-25 M14 虚拟编号模式 周期 4（文档部分）：对外文档与发版准备（1.2.0）
-
-交接人：`claude/m14-virtual-mode`
-
-### 做了什么
-
-- **真机补测**：用户确认中文输入法组合正常（V28）；我用电脑操作测了悬浮预览（Ctrl + 悬停 `[[基础#概述]]` 与 `[[基础]]`），
-  小节与整篇都按全文编号（V29）。
-- **README 中英**：卖点首条改为「可以完全不改文件」；快速上手改为「显示编号、文件不变」；新增「只显示，或者写进文件」
-  一节；「全自动编号」按两种模式分述；命令表加「清除本文件残留的插件编号」；FAQ「会往笔记里加隐藏的东西吗？」按
-  模式分答、「不想用了」补仅显示直接卸载；**新增 FAQ「占资源吗？」**，只写已核实的事实（`src/` 无网络请求，只有
-  关于页的链接；启动时本地读一遍全库标题用于链接建议、可关；标题索引 5 万条、剪贴板缓存约 2MB）。
-- **使用指南中英**：新增「两种模式：仅显示与写入文件」一节（对照表、默认值、按文件夹混用、切换确认框、残留、
-  手写编号过半、立即重新编号、固化）；订正「无论库多大都没有后台开销 / 从不扫描全库」的旧说法；「工作原理」节
-  注明只适用于写入模式；导出节更新（仅显示下内置 PDF 实测带编号）；命令表、干净离开节补仅显示。
-- **release notes** `doc/release-notes/1.2.0.md`（双语）。
-- **manifest description** 改为「可只显示 / 写入 + 链接跟随」打头（191 字符，M12 该项勾掉），同时勾掉 M12
-  「README 资源与隐私承诺」。
-- 本周期派发 1 次（quality-gate × 1：收尾 preflight）。
-
-### 没做什么
-
-- **没合并 master、没打 tag——用户明确说「先别着急发新版」**，要在 1.2.0 发布前再做一轮开发。打 tag 会触发
-  Release 工作流向所有用户发布，任何时候都须用户明确同意。
-- 另一个会话正在 master 上修 stripPrefix 截断标题的数据丢失 bug（1.1.5，见 `spawn_task` 那条），尚未合并。
-- 移动端（V31）未测；可请用户用手机打开 iCloud 库里的仅显示笔记看一眼。
-
-### 下一步（交接，2026-09-25 会话因上下文将满在此结束）
-
-**接手先跑 `npm run docs -- --handover`。** 分支 `claude/m14-virtual-mode`，相对 master 7 个提交，已推送、未合并；
-用户 Oblivion 库里跑的就是本分支的 1.2.0 构建。
-
-1. **1.2.0 发布前的一轮开发**——已向用户推荐下面三项（都小），**等用户选定再做**（用户倾向先做，但新会话开工前确认一句）：
-   - **H8 修复**：`clearAllVaultNumbering`（`main.ts:1388`，1411 `vault.read` / 1417 `vault.modify`）与
-     `freezeVaultNumbering`（`main.ts:1450`，1466 / 1469）改走周期 3 抽出的 `batchRewrite`（`main.ts:1628`，
-     已打开走编辑器事务、未打开走 `vault.process`），变换函数分别是 `clearNumberingContent` 与 `stripWordJoiners`。
-     **行为变化要先定案**：现在的清全库**不同步其他笔记里的链接**（只刷新快照），指向带编号标题的链接清完会断；
-     走 `batchRewrite` 会顺带同步链接（修掉这个断链，但全库清除会多出链接写入）。固化本来就全文剥 WJ（链接两侧
-     一致），走 `batchRewrite` 时变换函数要保持「全文剥 WJ」而不是只剥标题。保留两者现有的顺序约束：清库先持久关
-     `autoNumber`、全程 `vaultClearInProgress`；固化先落盘 `retired`；结束后 `refreshVirtualViews()`。testplan H8 行改 ✅。
-   - **两条借鉴命令**：「复制编号大纲」「复制当前小节链接」（spec Roadmap M12「迁移向导自动配置 + 两条借鉴命令」，
-     参考见 spec 附录 A.11 对 gurjar1 `commandRegistry.ts` 的记录）。两种模式都要能用：仅显示用
-     `virtualNumberingFor` 的 label，写入模式用标题文本剥 WJ；testplan 先登记新场景。
-   - **模板同名冲突提示**：`TemplateStore.reload`（`src/templates/TemplateStore.ts:63`）对与「默认」同名的其它文件
-     **静默跳过**（`default.json` 恒生效——用户库里的 `default(1).json` 就是 iCloud 冲突副本，被静默忽略），其它
-     同名模板则后读到的覆盖先读到的。改为发现同名时提示一次、说明哪个生效。（本会话曾对用户说「谁生效看加载
-     顺序」，对「默认」而言说错了，已当面更正。）
-   - 之后 1.3.0 的主打：内置大纲面板显示虚拟编号（M14 二期，风险在于改 Obsidian 核心大纲 DOM，要可关、失败静默）、
-     内置三套预设模板（M12）。拆 `main.ts`（约 2400 行）不单独做，改到相关代码时顺手拆。
-2. **stripPrefix 修复合进 master 后**：把 master 合进本分支（版本号保持 1.2.0；`log.md` / `status.jsonl` /
-   `testplan.md` / `release/` 按两边合并、release 重建；`doc/release-notes/1.2.0.md` 补一句该修复），跑 preflight + fuzz。
-3. **发版**（按 §5.1 合并 master + 打 `1.2.0` tag）须用户明确同意；Community Hub 索引滞后时去维护者面板点「修复」。
-4. **用户库里的测试残留**：`Claude测试/` 文件夹（基础 / 残留 / 手写编号 / 嵌入 / 大文件五篇）与路径规则第 4 行
-   `Claude测试/`（仅显示），用户可自行删除；第 3 行 `未命名/`（仅显示）是用户自己的测试规则。
-5. 操作经验已存进记忆：电脑操作实测 Obsidian 的坑（`obsidian-computer-use-testing`）、heredoc 转义坑
-   （`windows-env-quirks` 第 8 条）、部署前先核对库里版本（`deploy-release-to-icloud-vault`）。
-
-### 验证方式
-
-- `npm run preflight`（见本周期提交前的 quality-gate 报告）。
 
 ---
 
