@@ -112,6 +112,48 @@ describe("bug 回归（0.7.20 双哨兵自愈 E14–E18：删后缀致序号重�
 	});
 });
 
+describe("bug 回归（1.1.5：标题中间的链接锚点 WJ 被当旧单哨兵，吃掉标题开头，testplan E37–E41）", () => {
+	const W = WORD_JOINER;
+	const link = `[[a#${W}1 ${W}概述]]`;
+
+	it("E37 编号范围内：`## 参见 [[a#⁠1 ⁠概述]]` 链接一字不丢（旧行为得 `## ⁠1 ⁠1 ⁠概述]]`）", () => {
+		const one = renumberContent(`## 参见 ${link}`, DEFAULT_TEMPLATE);
+		expect(one).toBe(`## ${W}1 ${W}参见 ${link}`);
+		expect(renumberContent(one, DEFAULT_TEMPLATE)).toBe(one);
+	});
+
+	it("E38 超出编号区间：H1 原样保留（旧行为被定点循环蚕食成 `# 概述]]`）", () => {
+		const out = renumberContent(`# 书 ${link}\n## 甲`, DEFAULT_TEMPLATE);
+		expect(out.split("\n")[0]).toBe(`# 书 ${link}`);
+	});
+
+	it("E39 尾哨兵被毁 + 正文含链接：愈合且链接完好", () => {
+		const out = renumberContent(`## ${W}1参见 ${link}`, DEFAULT_TEMPLATE);
+		expect(out).toBe(`## ${W}1 ${W}参见 ${link}`);
+		// cjk + 后缀、删掉 `、⁠` 的 E14 同款操作发生在带链接的标题上。
+		const cjk = setAll(tpl(), { numeral: "cjk", suffix: "、", titleSeparator: "" });
+		const healed = renumberContent(`## ${W}一参见 ${link}`, cjk);
+		expect(healed).toBe(`## ${W}一、${W}参见 ${link}`);
+	});
+
+	it("E40 清除编号：只剥真前缀，链接保留；手写编号照常清", () => {
+		const doc = [`## ${W}1 ${W}参见 ${link}`, `# 书 ${link}`, `## 1. 手写 ${link}`].join("\n");
+		expect(clearNumberingContent(doc)).toBe(
+			[`## 参见 ${link}`, `# 书 ${link}`, `## 手写 ${link}`].join("\n"),
+		);
+	});
+
+	it("E40 降级残留行也带链接：只清行首前缀", () => {
+		const doc = `## ${W}1 ${W}甲\n${W}2 ${W}参见 ${link}`;
+		expect(renumberContent(doc, DEFAULT_TEMPLATE)).toBe(`## ${W}1 ${W}甲\n参见 ${link}`);
+	});
+
+	it("E41 旧单哨兵兼容不回归：升级为双哨兵", () => {
+		expect(renumberContent(`## 1 ${W}标题`, DEFAULT_TEMPLATE)).toBe(`## ${W}1 ${W}标题`);
+		expect(renumberContent(`## 1.2 ${W}标题`, DEFAULT_TEMPLATE)).toBe(`## ${W}1 ${W}标题`);
+	});
+});
+
 describe("bug 回归（issue #9：嵌套围栏反引号数量不匹配致编号重置）", () => {
 	// 用户报告：外层 4 根反引号包一段示例 Markdown，内含 3 根反引号的 yaml 围栏，两层内容都有
 	// `#` 开头的行。根因：scan.ts 的围栏状态机只比较符号种类、不比较数量，内层 3 根反引号被

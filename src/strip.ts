@@ -115,6 +115,26 @@ function numeralTokenPattern(style: NumeralStyle): string {
 	}
 }
 
+/** 某序号样式的字符类**内容**（不含方括号），供把多种样式合成单个字符类（见 `isLegacyPrefixSegment`）。 */
+function numeralCharClass(style: NumeralStyle): string {
+	switch (style) {
+		case "arabic":
+			return "0-9";
+		case "cjk":
+			return "〇零一二三四五六七八九十百千万亿兆";
+		case "circled":
+			return "\\u2460-\\u2473\\u3251-\\u325F\\u32B1-\\u32BF";
+		case "lower-alpha":
+			return "a-z";
+		case "upper-alpha":
+			return "A-Z";
+		case "lower-roman":
+			return "ivxlcdm";
+		case "upper-roman":
+			return "IVXLCDM";
+	}
+}
+
 /** 序号样式的固定枚举顺序，供构造 union token 时稳定遍历。 */
 const ALL_NUMERAL_STYLES: NumeralStyle[] = [
 	"arabic",
@@ -166,16 +186,106 @@ function boundedStripDamagedPrefix(
 }
 
 /**
+ * 链接语法签名：`[[`（wikilink / 嵌入）或 `](`（Markdown 行内链接）。
+ *
+ * WJ 除了作前缀哨兵，还会**合法地出现在标题 / 正文中间**：`backlinks.ts` 的 `displayAnchor` 刻意把目标标题的
+ * WJ 原样写进链接锚点（`[[a#⁠1 ⁠概述]]`，Obsidian 按字节比对锚点）。这种 WJ 之前必有链接开头；而任何合法前缀
+ * （前缀字面量 + 序号 + 后缀 + 间隔符）里都不会出现这两个双字符组合——据此判定「这个 WJ 属于正文里的链接」。
+ */
+const LINK_OPENER_RE = /\[\[|\]\(/;
+
+/** 字面量是否每个字符都落在给定字符类里（被覆盖的字面量无需再作正则分支，见 `isLegacyPrefixSegment`）。 */
+function coveredByClass(literal: string, charClass: string): boolean {
+	const re = new RegExp(`^${charClass}+$`);
+	return re.test(literal);
+}
+
+/**
+ * 判定「首个 WJ 之前的那一段」是否**整段就是一个编号前缀**，即 0.6.4–0.7.19 旧**单**哨兵格式
+ * （`1.2 ⁠标题`，WJ 在前缀末尾），或首哨兵被删、尾哨兵尚在的同形残缺。
+ *
+ * **1.1.5 修（testplan E37–E41）**：旧实现只要首个 WJ 不在位置 0 就剥到它之后，于是标题中间的链接锚点 WJ
+ * （见 {@link LINK_OPENER_RE}）被误当旧哨兵，`## 参见 [[a#⁠1 ⁠概述]]` 的 `参见 [[a#` 整段被吃。现要求该段
+ * **完整匹配**「可选前缀字面量 + 序号（多段以序号间隔符拼接）+ 可选后缀字面量 + 可选标题间隔符」；不匹配即
+ * 视为正文，**宁可不剥也不吃正文**——1.0 上架时已是双哨兵，单哨兵只存在于早期开发数据。
+ *
+ * 序号样式**恒取全部**：旧前缀可能写于另一套模板之下（H3 从 cjk 改回 arabic 后仍要剥 `1.二.1 ⁠`）。安全性
+ * 来自「整段完整匹配 + 不含链接语法」，而非样式收窄——正文里的中间 WJ 只来自链接，前一段必含 `[[` / `](`。
+ * 给了 `template` 时额外把其六级前后缀 / 间隔符字面量并入候选。
+ */
+function isLegacyPrefixSegment(
+	segment: string,
+	template: Template | undefined,
+	options: StripAffixOptions,
+): boolean {
+	if (segment === "" || LINK_OPENER_RE.test(segment)) {
+		return false;
+	}
+	const prefixes = [...(options.strippablePrefixes ?? []), ""];
+	const suffixes = [...(options.strippableSuffixes ?? []), ""];
+	const numSeps = [`${NUMBER_SEPARATOR_CLASS}+`];
+	const titleSeps = [TITLE_SEPARATOR_CLASS];
+	// 注：各段序号合成**一个字符类的游程**、段间间隔符**必选**——两者字符集不相交，匹配线性；
+	// 不能写成 `\d+(?:sep?\d+)*` 这类嵌套量词（失配时指数回溯）。numberSeparator 为空串的模板把各段
+	// 直接拼接，恰好落在同一个游程里，无需可选间隔符。
+	if (template) {
+		for (let l = 1; l <= 6; l++) {
+			const f = getLevelFormat(template, l);
+			if (!f) {
+				continue;
+			}
+			prefixes.push(f.prefix);
+			suffixes.push(f.suffix);
+			// 只并入字符类**覆盖不了**的间隔符字面量：默认的空格 / `.` 已在类里，再作为可选分支并入会让
+			// `(?:[类]| )*` 这类重复内的歧义分支在长空白串上指数回溯。
+			if (f.numberSeparator && !coveredByClass(f.numberSeparator, NUMBER_SEPARATOR_CLASS)) {
+				numSeps.push(escapeRegExp(f.numberSeparator));
+			}
+			if (f.titleSeparator && !coveredByClass(f.titleSeparator, TITLE_SEPARATOR_CLASS)) {
+				titleSeps.push(escapeRegExp(f.titleSeparator));
+			}
+		}
+	}
+	const run = `[${ALL_NUMERAL_STYLES.map(numeralCharClass).join("")}]+`;
+	const numPart = `${run}(?:(?:${numSeps.join("|")})${run})*`;
+	const pattern = new RegExp(
+		`^${affixAlternation(prefixes)}${numPart}${affixAlternation(suffixes)}(?:${titleSeps.join("|")})*$`,
+	);
+	return pattern.test(segment);
+}
+
+/**
+ * 只读判定：一段标题文本是否带有**本插件写入的编号前缀**（结构性证据），供「非本插件」语义的命令与迁移守卫使用。
+ *
+ * - 首字符即 WJ（双哨兵的首哨兵）→ 是；
+ * - 首个 WJ 在中间 → 仅当其前一段整段像编号前缀（旧单哨兵，见 {@link isLegacyPrefixSegment}）才算；
+ *   否则那个 WJ 属于正文（典型：指向已编号标题的链接锚点），**不能**据此把整条标题认作「插件的」；
+ * - 不含 WJ → 否。
+ *
+ * 取代旧的 `rawText.includes(WORD_JOINER)`：后者会把「手写编号 + 链接」的标题误当插件所有而跳过清理，
+ * 也会让正文里的一条链接就废掉整份文件的迁移守卫（testplan E40）。
+ */
+export function hasPluginPrefix(text: string, options: StripAffixOptions = {}): boolean {
+	const first = text.indexOf(WORD_JOINER);
+	if (first < 0) {
+		return false;
+	}
+	return first === 0 || isLegacyPrefixSegment(text.slice(0, first), undefined, options);
+}
+
+/**
  * 剥离标题文本中由本插件写入的编号前缀（**方案 A，0.6.6：Word Joiner 边界** + **0.7.20 双哨兵自愈**）。
  *
  * `buildPrefix` 写出的前缀**首尾各带一个 Word Joiner 哨兵**（`⁠前缀内容⁠`）。剥离规则：
  * - **首字符即 WJ（首哨兵在）**：
- *   - 还能找到**第二个 WJ**（尾哨兵在）→ 精确剥到第二个 WJ 之后（O(n)、无正则、常规路径）。
- *   - 找不到第二个 WJ（**尾哨兵连同后缀被用户删掉**）→ 首哨兵作证据，对其后内容启用
+ *   - 还能找到**第二个 WJ**、且两者之间不含链接语法（尾哨兵在）→ 精确剥到第二个 WJ 之后（常规路径）。
+ *   - 找不到第二个 WJ（**尾哨兵连同后缀被用户删掉**），或第二个 WJ 其实属于正文里的链接锚点
+ *     （`⁠1参见 [[a#⁠1 ⁠概述]]`，testplan E39）→ 首哨兵作证据，对其后内容启用
  *     {@link boundedStripDamagedPrefix} 有界剥离，把残缺前缀（如 `一` / `一、`）剥净——**根治
  *     「删后缀致序号重复」bug**（`一、⁠标题` 删成 `一标题` → 下轮愈合回 `标题`，见 testplan E14–E17）。
- * - **含 WJ 但不在首位**（0.6.4 起的旧**单**哨兵格式，或首哨兵被删、尾哨兵尚在）→ 剥到第一个 WJ 之后，
- *   与旧行为一致（向后兼容）。
+ * - **含 WJ 但不在首位** → 仅当首个 WJ 之前**整段像编号前缀**（0.6.4 起的旧**单**哨兵格式，或首哨兵被删、
+ *   尾哨兵尚在，见 {@link isLegacyPrefixSegment}）才剥到该 WJ 之后；否则那个 WJ 属于正文（如标题里指向
+ *   已编号标题的链接 `[[a#⁠1 ⁠概述]]`），**原样返回**（1.1.5 修 testplan E37/E38 数据丢失）。
  * - **完全不含 WJ** → 整段视为**纯用户文本、原样返回**（方案 A）。用户写的 `## 2024 年度总结` 首次触发
  *   也不会把 `2024` 当前缀吃掉。**首尾哨兵均被毁**的极端情形（要连行首附近的首哨兵也删掉，很罕见）不
  *   自愈——此时与真实用户文本已无从区分，强行猜测会重蹈方案 A 要根治的 E5 误伤，故保留现状、由用户主动
@@ -196,18 +306,21 @@ export function stripPrefix(
 	}
 	if (first === 0) {
 		const second = text.indexOf(WORD_JOINER, 1);
-		if (second >= 0) {
+		if (second >= 0 && !LINK_OPENER_RE.test(text.slice(1, second))) {
 			return text.slice(second + 1); // 双哨兵完好：剥到尾哨兵之后。
 		}
-		// 尾哨兵被毁，首哨兵作证据 → 有界剥离残缺前缀。
+		// 尾哨兵被毁（第二个 WJ 缺失或属于正文链接），首哨兵作证据 → 有界剥离残缺前缀。
 		const rest = text.slice(1);
 		if (level !== undefined && template) {
 			return boundedStripDamagedPrefix(rest, level, template, options);
 		}
 		return rest;
 	}
-	// 旧单哨兵格式 / 首哨兵被删而尾哨兵在：剥到第一个 WJ 之后。
-	return text.slice(first + 1);
+	// 旧单哨兵格式 / 首哨兵被删而尾哨兵在：剥到第一个 WJ 之后——前提是前一段整段像编号前缀。
+	if (isLegacyPrefixSegment(text.slice(0, first), template, options)) {
+		return text.slice(first + 1);
+	}
+	return text; // 中间的 WJ 属于正文（链接锚点等）：一个字节都不动。
 }
 
 /**
@@ -255,14 +368,22 @@ export function stripPrefixBroad(
 	// 下方正则路径兼容。
 	const wjIdx = rawText.indexOf(WORD_JOINER);
 	if (wjIdx === 0) {
-		// 双哨兵：首字符即 WJ。尾哨兵在 → 剥到**第二个** WJ 之后（整段前缀清净）；尾哨兵被毁 →
-		// 去掉首哨兵后**落入下方全样式正则**剥残缺前缀（不能只去首哨兵留下 `①） 三`）。
+		// 双哨兵：首字符即 WJ。尾哨兵在 → 剥到**第二个** WJ 之后（整段前缀清净）；尾哨兵被毁（或第二个
+		// WJ 属于正文链接锚点）→ 去掉首哨兵后**落入下方全样式正则**剥残缺前缀（不能只去首哨兵留下 `①） 三`）。
 		const second = rawText.indexOf(WORD_JOINER, 1);
-		if (second >= 0) {
+		if (second >= 0 && !LINK_OPENER_RE.test(rawText.slice(1, second))) {
 			return rawText.slice(second + 1).replace(/\s+$/, "");
 		}
 		rawText = rawText.slice(1);
-	} else if (wjIdx > 0) {
+	} else if (
+		wjIdx > 0 &&
+		isLegacyPrefixSegment(rawText.slice(0, wjIdx), undefined, {
+			strippablePrefixes: knownPrefixes,
+			strippableSuffixes: knownSuffixes,
+		})
+	) {
+		// 旧单哨兵：前一段整段像编号才剥到该 WJ 之后；否则 WJ 属于正文（链接锚点），交给下方正则
+		// 只剥行首真正像编号的部分（testplan E40）。
 		return rawText.slice(wjIdx + 1).replace(/\s+$/, "");
 	}
 	const allToken = `(?:${ALL_NUMERAL_STYLES.map(numeralTokenPattern).join("|")})`;

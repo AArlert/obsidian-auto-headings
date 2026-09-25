@@ -41,6 +41,66 @@
 
 ---
 
+## 2026-09-25 修复标题中间 WJ 被当旧单哨兵致标题开头被吃（1.1.5，交接：claude/fix-wj-midtext）
+
+### 做了什么
+
+用户实测复现的**数据丢失** bug（1.1.4 已上线即有）：标题**中间**含 WJ 时——典型来源是标题里放了指向
+「已编号标题」的链接，`displayAnchor` 把 WJ 写进锚点 `[[a#⁠1 ⁠概述]]`——编号时标题开头被吃：
+`## 参见 [[a#…]]` → `## ⁠1 ⁠1 ⁠概述]]`；超出编号区间的 H1 更被 `bareHeading` 定点循环蚕食成 `# 概述]]`。
+
+- **根因**：`strip.ts` 的 `stripPrefix` / `stripPrefixBroad` 把「首个 WJ 不在位置 0」一律当旧单哨兵，剥到该 WJ
+  之后。同类第二处：首哨兵在、尾哨兵被毁时，「第二个 WJ」可能是正文链接里的（E14 删后缀操作发生在带链接的
+  标题上），同样整段吃掉。
+- **修法（strip.ts）**：
+  - 新增 `isLegacyPrefixSegment`：首个 WJ 之前那段须**整段匹配**「前缀字面量? + 序号游程（段间必有间隔符）+
+    后缀字面量? + 标题间隔符*」且不含 `[[` / `](` 才当旧单哨兵剥；否则原样返回（宁可不剥）。序号样式恒取
+    全部（旧前缀可能写于另一模板，既有用例 `1.二.1 ⁠` 要求如此），安全性靠整段匹配 + 链接语法排除。
+  - 首哨兵在时，第二个 WJ 之前若有 `[[` / `](` → 视为尾哨兵被毁，走既有有界剥离愈合。
+  - **ReDoS**：初稿 `(?:[类]| )*` 在默认空格间隔符下指数回溯（长空白串实测卡死），改为：序号合成单字符类游程、
+    段间间隔符必选、被字符类覆盖的间隔符字面量不再作分支。加了 5000 字符的回归用例。
+  - 新增导出 `hasPluginPrefix`（只认行首哨兵或旧单哨兵）。
+- **同类排查（cleanup.ts）**：「清理非本插件编号」/ 预览 / 迁移守卫原按 `includes(WJ)` 判归属——手写
+  `## 1. 参见 [[a#…]]` 被当插件的跳过清理；**正文里一条带 WJ 的链接就废掉整份文件的迁移守卫**。改用
+  `hasPluginPrefix` + 「某行以 WJ 哨兵起头」的结构性证据。`cleanDemotedResidue` 只处理 WJ 起头行，靠
+  stripPrefix 修复自动受益；`main.ts` 的 WJ 用法（剪贴板净化、空标题 `endsWith`）无此问题。
+- **Pandoc filter**（`assets/pandoc/strip-autoheadings.lua`）同病：本机 pandoc 实跑，未编号标题
+  `# 参见 [[a#…]]` 导出成 `# 概述]]`。`pickTarget` 改为：行首 WJ 才认双哨兵（前缀属地须纯文本且无链接语法），
+  中间 WJ 仅当前一段全是序号 / 分隔字符才认旧单哨兵；已实跑验证 6 种标题（testplan O5h）。
+- **标记契约 / spec 订正**：契约原称「WJ 不会出现在正文」「未编号标题不含 WJ」与事实不符（链接锚点带 WJ），
+  改为「只有标题首字符的 WJ 才标记前缀」；「剥整前缀」配方从全局 `/…/g` 改为行首锚定（否则会剥掉标题内链接
+  锚点的 WJ 对）。这是事实描述与配方的订正，格式本身未变，不涉主版本迁移。spec §2.5 配套取舍、§A 契约摘要同步。
+- **顺修 fuzz 超时**：`random_sequence.test.ts` 的内联 30s 超时**覆盖** `fuzz.mjs` 的 `--testTimeout`，M13
+  记分板 5000×80 在本机约 25–30s 撞线（与本修复无关，已对照基线同速）。改为内联读 `AAH_FUZZ_TIMEOUT`，
+  `fuzz.mjs` 传 600000。
+- testplan：新增 E37–E41、O5h（先 ❌ 后 ✅），§3.1 已修 bug #15。
+- 本周期派发 2 次（quality-gate × 2）。
+
+### 没做什么
+
+- 基于 master 做（独立 worktree `../obsidian-auto-headings-wjfix`），**未碰 M14 分支**。
+- 未改 M14 的 `clearPluginNumberingContent` / `computeVirtualNumbers`（M14 分支，已刻意只认 WJ 起头）；前者调
+  `stripPrefixBroad`，合并后自动获得「第二个 WJ 属链接」防护。
+- 未打 tag / 未发版。
+
+### 下一步
+
+- 打 1.1.5 tag 发版（Release 工作流需 `doc/release-notes/1.1.5.md`，本周期未写）。
+- **M14 分支合回 master 前先 merge 本修复**：预计冲突 ① `cleanup.ts` `hasUnclaimedForeignNumbering` 末行（M14 改成
+  `looksForeignNumbered`，本修复改了其上方几行）——保留两边：先结构性证据判定，末行用 `looksForeignNumbered`；
+  ② 版本号文件（M14 已 1.2.0，取 1.2.0）；③ log.md / status.jsonl 周期块并存。M14 新增的 `isMostlyForeignNumbered`
+  用 `!startsWith(WJ)` 判归属，与本修复口径一致。
+
+### 验证方式
+
+- `npm test`：657 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows 既有伪影）；`lint`、`format:check` 通过；
+  `npm run test:fuzz` 5000×80 通过（标题索引记分板 ~25.6s）。
+- 回归用例：`numbering.test.ts`「标题中间的 WJ 属于正文」、`known_bugs.test.ts` E37–E41、`cleanup.test.ts`「非本插件
+  判定不看链接锚点里的 WJ」。
+- Pandoc：`pandoc x.md -t markdown -L assets/pandoc/strip-autoheadings.lua`（两种模式）实跑核对 O5h。
+
+---
+
 ## 2026-09-24 README 瘦身为商店门面 + 新增双语使用指南（1.1.4，纯文档不 bump）
 
 ### 做了什么
@@ -144,93 +204,6 @@
 - 用 issue 原始截图的确切文本（外层 4 反引号 + 内层 3 反引号 yaml，各一行 `#` 注释）跑
   `renumberContent`，修复前输出 `## 1 标题三`（复现截图），修复后输出 `## 3 标题三`
   （正确续号），且二次调用幂等。
-
----
-
-## 2026-08-19 Community Hub 审核修复（1.1.3）
-
-### 做了什么
-
-用户贴出 Obsidian Community Hub 自动代码检查报告（1 error + 5 warning），逐条核实现状后修复
-真正仍存在的问题（发现报告本身**部分过期**——ForeignNumberingCleanupModal.ts / PathRules.ts /
-WhitelistEditor.ts 的多处 `prefer-create-el` 位置当前代码早已用 `createEl`，报告引用的是旧快照，
-应与 [[obsidian-community-hub-distribution]] 记录的 Community Hub 索引滞后是同一根因）：
-
-- **`no-static-styles-assignment`（error，阻断项）**：`VcIntegrationSection.ts` 复制回退用的临时
-  textarea 两行 `.style.x=` 改 `setCssStyles`；顺手排查全仓库 `.style.` 赋值，额外发现报告**未提及**
-  的 `PathSuggest.ts`（路径建议弹窗定位，3 行）同类写法一并改掉，避免下次扫描再次因同一条规则挂掉。
-- **`prefer-create-el`（warning）**：核实后仅 3 处仍是真问题——`VcIntegrationSection.ts:28`
-  （随上面一起改，`document.body.createEl` 顺带消掉一次多余的 `appendChild`）、`WhitelistEditor.ts:129`
-  （行内编辑输入框，改用 `row.createEl(...)` 而非 `activeDocument.createElement`——`row` 就是
-  `textEl` 的实际父节点，同文档无歧义，`replaceWith` 同步执行不会闪烁）。`main.ts:2152`
-  （`renderSelectionHtml` 的分离容器）**特意保留不改**：该函数以 `doc: Document` 为形参正是为了
-  单测可注入 mock（`clipboard.test.ts`「阅读模式路径」用例），而单测环境 `vitest.config.ts` 是
-  `environment: "node"`、`obsidian-mock.ts` 不提供全局 `createEl`——换了会让该用例静默退化（异常
-  被 `sanitizeClipboardEvent` 的降级 catch 吞掉，`preventDefault`/`setData` 都不会发生）。已在代码
-  加注释说明，接受这一条 warning 长期挂着。
-- **`editor-paste` 的 `defaultPrevented` 检查 + `preventDefault` 位置（warning ×2）**：根因是检查
-  工具做不了跨函数静态分析——真实逻辑早就正确（`restoreSanitizedPaste` 内部本就先判
-  `defaultPrevented`、只在全部守卫通过时才 `preventDefault`），只是这层判断裹在私有方法里、
-  检查工具看不见注册处那个箭头函数字面量里有没有这两行。改法：注册处内联 `defaultPrevented`
-  前置判断 + 按 `restoreSanitizedPaste` 返回值决定是否 `preventDefault`；方法本身改回返回
-  `boolean`（原为 `void`），**内部仍保留一份 `defaultPrevented` 早退**（防御性冗余，换来该方法被
-  单测直接单独调用时仍安全——见下）。
-- 同步改了 `tests/dev_tests/clipboard.test.ts`：本地 `ClipboardInternals` 接口的
-  `restoreSanitizedPaste` 返回类型 `void → boolean`；「全守卫通过」用例把
-  `expect(evt.defaultPrevented).toBe(true)` 改成断言返回值（该方法自己不再触发
-  `preventDefault`，那是调用方注册处的职责）。其余 9 个 O9 守卫矩阵用例逐条核对过，均不依赖
-  「方法自身调用 preventDefault」这个已变化的细节，未改。
-- `getSettingDefinitions()`（warning，SettingsTab.ts:40，Obsidian 1.13.0 新增声明式设置搜索
-  API）**判断为超出本次范围，未实现**：读了已安装的 `node_modules/obsidian/obsidian.d.ts`
-  确认真实签名——一旦 `getSettingDefinitions()` 返回非空数组，Obsidian 1.13+ 就**不再调用**
-  `display()`，整页改由声明式定义渲染；本插件设置页现状是 4 个手写 TAB（含路径规则表、
-  可行内编辑/带命中角标的白名单编辑器等高度动态 UI），贸然只声明部分设置会让未声明的部分在
-  1.13+ 用户面前直接消失，是真实破坏性风险而非纯新增。API 本身留了退路——
-  `SettingDefinitionPage.page?: () => SettingPage` 允许某个子页保持命令式渲染（`SettingPage`
-  是 `abstract class { containerEl; abstract display(): void }`，形状与现有 `renderXxxTab(tab,
-  containerEl)` 函数很接近，理论上可行），但四个 TAB 该拆成纯声明式 / 保留命令式 page、
-  manifest 最低版本 1.8.7 意味着 `display()` 兜底还得长期共存——这是架构决策，留给用户拍板
-  是否值得开一个新 Milestone，本周期只记录调研结论，不擅自实现。
-- 质量门槛：`npm run build`（tsc + esbuild）、`npm run lint`（eslint）全绿；`npm test`
-  636/637——唯一失败是 [[windows-env-quirks]] 记录的 `whitelist.test.ts:406` zh-CN locale
-  排序环境伪影，与本次改动无关，`clipboard.test.ts` 30/30 全过（含改动最直接触及的「全守卫
-  通过」「他人已 preventDefault」两条）。本周期派发 1 次（quality-gate × 1，验证本次改动）。
-
-### 没做什么
-
-- 未实现 `getSettingDefinitions()`——原因见上，判断为独立 Milestone 量级的架构决策。
-- 未处理 `main.ts:2152` 的 `prefer-create-el` warning——原因见上（单测可注入性 vs lint 合规的
-  取舍，已判断为不值得，代码内联注释说明）。
-- 未改任何用户可见行为——本周期全部改动是 DOM 构造方式 / 内部函数签名的等价重构，不涉及
-  编号、Backlink、剪贴板还原等功能逻辑本身。
-- 未验证 Community Hub 重新扫描后是否真的转绿——这需要 tag/Release 真正发布后由 Community
-  Hub 侧重新抓取，本机看不到。
-
-### 下一步
-
-- 已 `npm run bump` → `1.1.2 → 1.1.3`（纯合规修复，无用户可见行为变化，但 Community Hub 的
-  审核大概率是照已发布 Release 的内容扫描，1.1.2 的 tag 已指向旧提交，不出新版本这批修复它
-  看不见——判断为需要新 tag 才能让审核转绿，而非常规「仅行为改动才 bump」的例外）。已写
-  `doc/release-notes/1.1.3.md`（双语，如实说明「无用户可见行为变化，修复审核发现」）。
-- 待 `npm run preflight` 全绿后提交 + 打 `1.1.3` tag 并推送，`release.yml` 会自动创建 GitHub
-  Release（同 1.1.1/1.1.2 的自动化路径，见上一块记录）。
-- 用户可在打完 tag 后回 Community Hub 维护者面板重新触发检查，确认这批修复真的清掉了对应
-  条目（本机没有手段验证 Community Hub 侧的重新扫描结果）。
-- `getSettingDefinitions()` 迁移：若用户认为值得做，建议开新 Milestone（当前最大到 M13），
-  按上面记的 API 形状（`SettingDefinitionPage.page` 命令式子页 + `display()` 长期共存）评估
-  工作量再排入 Roadmap，不建议下个周期直接动手实现。
-
-### 验证方式
-
-- `npm run build` / `npm run lint` 全绿；`npm test` 636/637（唯一失败为既有 locale 环境伪影，
-  基线同样失败）；`clipboard.test.ts` 30/30（quality-gate 代跑，见本块「做了什么」的门槛记录）。
-- `main.ts` 的 `restoreSanitizedPaste` 契约变化（`void → boolean`，`preventDefault` 调用点从
-  方法内部移到调用方）逐条核对过全部 10 个「paste 端守卫矩阵」用例：仅 1 个直接依赖旧契约
-  （已同步改断言），其余 9 个不受影响。
-- VcIntegrationSection / PathSuggest / WhitelistEditor 三处 DOM 构造改动**无自动化测试覆盖**
-  （这几个渲染函数向来是仓库既定的手验范围，`obsidian-mock.ts` 的 `PluginSettingTab.display()`
-  与 `Modal.open()` 都是空实现，见该文件注释）——只靠人工审代码逻辑确认等价，建议用户在真机
-  过一遍：复制词典路径按钮、白名单词条点击行内改名、路径规则输入框的建议弹窗定位。
 
 ---
 

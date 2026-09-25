@@ -37,10 +37,16 @@ Properties you can rely on:
 - **Legacy format** (plugin v0.6.4–0.7.19): a single WJ at the *end* of the prefix
   (`## 1.2 ⁠Module design`). The plugin still recognizes and upgrades these on next
   renumber; third-party code should tolerate both.
-- WJ never appears anywhere else as a result of this plugin: not in body text, not in
-  frontmatter, not in non-heading lines (a heading demoted to body text by the user may
-  transiently carry residue; the plugin cleans it on next trigger).
-- **Unnumbered headings contain no WJ.** Absence of WJ ⇒ the plugin has never touched
+- Outside heading prefixes, the plugin writes WJ in exactly one other place: **wikilink
+  anchors that point at a numbered heading**. When a numbered heading is renamed, links to it
+  are rewritten byte-for-byte, e.g. `[[notes#⁠1.2 ⁠Module design]]` (Obsidian matches anchors
+  byte-for-byte, so the WJs must be there). Such a link can sit in body text **or inside
+  another heading**. So a WJ marks a prefix only when it is the **first character of the
+  heading text**. A WJ in the middle of a heading is part of the user's text. Otherwise WJ
+  does not appear in frontmatter or non-heading lines (a heading demoted to body text by the
+  user may briefly keep residue; the plugin cleans it on the next trigger).
+- **Unnumbered headings do not start with WJ** (they may still contain one inside a link, see
+  above). No leading WJ ⇒ the plugin has never touched
   that heading, or its numbering was fully cleared, **or the user ran
   *Freeze numbering and release ownership*** (see §5) — that command deliberately leaves the
   numbers behind as ordinary text while removing every marker, so afterwards those numbers
@@ -92,8 +98,9 @@ const clean = heading.replace(/\u2060/g, "");
 ### Remove the whole numbering prefix (get the bare title)
 
 ```js
-// Double-sentinel format (v0.7.20+): drop everything between the paired WJs.
-const bare = heading.replace(/\u2060[^\u2060\n]*\u2060/g, "");
+// Double-sentinel format (v0.7.20+): drop the leading WJ pair. Anchor it at the start and do
+// NOT use the /g flag: a wikilink inside the heading may carry its own WJ pair (see \u00a71).
+const bare = heading.replace(/^\u2060[^\u2060\n]*\u2060/, "");
 ```
 
 For mixed vaults that may still contain the legacy single-WJ format, prefer the plugin's
@@ -143,7 +150,7 @@ Since Dataview has no heading index, read Obsidian's metadata cache directly:
 
 ```js
 const MARKER = /\u2060/g;
-const PREFIX = /\u2060[^\u2060\n]*\u2060/g;
+const PREFIX = /^\u2060[^\u2060\n]*\u2060/;
 const headings = app.metadataCache.getCache(dv.current().file.path)?.headings ?? [];
 dv.table(
     ["Level", "Numbered", "Bare title"],
