@@ -1624,6 +1624,182 @@ describe("M12：固化编号并交还所有权（敏感操作 TAB，testplan H9�
 	});
 });
 
+describe("H8/H17–H19：清除全库 / 固化全库改走批量通道 batchRewrite（1.2.0）", () => {
+	it("H8：清除全库时某文件正被打开、编辑器内容与磁盘不同——按编辑器内容改写，不经 vault 写回", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}落盘旧内容` },
+		});
+		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}编辑器新内容`);
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+
+		await p.clearAllVaultNumbering();
+
+		expect(ed.getValue()).toBe("## 编辑器新内容");
+		expect(ed.txnCount).toBe(1);
+		// 磁盘侧未被读改写覆盖——未落盘的编辑器内容才是真正要保留的那份。
+		expect(vaultFiles.get("a.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}落盘旧内容`);
+		expect(Notice.messages).toContain("已清除全库编号（共修改 1 个文件）");
+	});
+
+	it("H8/H19：固化全库时某文件正被打开、编辑器内容与磁盘不同——按编辑器内容改写，不经 vault 写回", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}落盘旧内容` },
+		});
+		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}编辑器新内容`);
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+
+		await p.freezeVaultNumbering();
+
+		expect(ed.getValue()).toBe("## 1 编辑器新内容");
+		expect(ed.txnCount).toBe(1);
+		expect(vaultFiles.get("a.md")).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}落盘旧内容`);
+		expect(Notice.messages).toContain(
+			"已固化编号并交还所有权（修改 1 个文件）；编号保留为普通文本，插件停止自动编号",
+		);
+	});
+
+	it("H17：清除全库时同步内链——本文件自链接与别的文件的反链都跟着更新，只弹一次合计 Notice", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: {
+				"a.md": [
+					`## ${WORD_JOINER}1 ${WORD_JOINER}简介`,
+					`见 [[#1 ${WORD_JOINER}简介]]。`,
+				].join("\n"),
+				"b.md": "跳到 [[a#1 简介]]。",
+			},
+		});
+
+		await p.clearAllVaultNumbering();
+
+		expect(vaultFiles.get("a.md")).toBe(["## 简介", "见 [[#简介]]。"].join("\n"));
+		expect(vaultFiles.get("b.md")).toBe("跳到 [[a#简介]]。");
+		expect(Notice.messages).toContain("已清除全库编号（共修改 1 个文件）");
+		// 自链接 1 处 + 跨文件反链 1 处，合并汇总为一条 Notice（不逐文件弹）。
+		const linkNotices = Notice.messages.filter((m) => /^已更新 \d+ 处内部链接$/.test(m));
+		expect(linkNotices).toEqual(["已更新 2 处内部链接"]);
+	});
+
+	it("H17：「同步内部链接」关闭时，清除全库不触碰任何链接（与其他改写路径一致）", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: false,
+			vaultFiles: {
+				"a.md": [
+					`## ${WORD_JOINER}1 ${WORD_JOINER}简介`,
+					`见 [[#1 ${WORD_JOINER}简介]]。`,
+				].join("\n"),
+				"b.md": "跳到 [[a#1 简介]]。",
+			},
+		});
+
+		await p.clearAllVaultNumbering();
+
+		// 标题本身仍被清除（与开关无关），但链接原样不动。
+		expect(vaultFiles.get("a.md")).toBe(
+			["## 简介", `见 [[#1 ${WORD_JOINER}简介]]。`].join("\n"),
+		);
+		expect(vaultFiles.get("b.md")).toBe("跳到 [[a#1 简介]]。");
+		expect(Notice.messages.some((m) => /^已更新 \d+ 处内部链接$/.test(m))).toBe(false);
+	});
+
+	it("H18：Backlink 同步的引用方正被打开——走它的编辑器写入，不读盘覆盖未落盘的改动；未打开的引用方仍走 vault.process", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: {
+				// a.md 磁盘上是陈旧内容：编辑器里另有未落盘的改动（模拟批量改写通道里 A 刚被编辑器
+				// 事务改写、尚未被 Obsidian 自动保存的那个窗口，与 foldSelfBacklinks 同源竞态）。
+				"a.md": "STALE-ON-DISK-SENTINEL 见 [[b#简介]]。",
+				"c.md": "另见 [[b#简介]]。", // 未打开，走 vault.process 照旧生效。
+			},
+		});
+		const aEd = new FakeEditor("编辑器里未落盘的改动 见 [[b#简介]]。");
+		setLeaves([{ editor: aEd, file: { path: "a.md" } }]);
+
+		const bEd = new FakeEditor("## 简介");
+		p.runImmediateRenumber(bEd, fileInfo("b.md"));
+		await flushPromises();
+
+		expect(bEd.getValue()).toBe(`## ${WORD_JOINER}1 ${WORD_JOINER}简介`);
+		// a.md 走它自己的编辑器事务——磁盘上的陈旧内容岿然不动。
+		expect(aEd.getValue()).toBe(
+			`编辑器里未落盘的改动 见 [[b#${WORD_JOINER}1 ${WORD_JOINER}简介]]。`,
+		);
+		expect(aEd.txnCount).toBe(1);
+		expect(vaultFiles.get("a.md")).toBe("STALE-ON-DISK-SENTINEL 见 [[b#简介]]。");
+		// c.md 未打开，照旧走 vault.process。
+		expect(vaultFiles.get("c.md")).toBe(`另见 [[b#${WORD_JOINER}1 ${WORD_JOINER}简介]]。`);
+		expect(Notice.messages).toContain("已更新 2 处内部链接");
+	});
+
+	it("H18（批量清除场景）：A、B 都打开时，B 的标题变化经 A 的编辑器同步，不覆盖 A 未落盘的改动", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: { "a.md": "STALE-A-ON-DISK", "b.md": "STALE-B-ON-DISK" },
+		});
+		const aEd = new FakeEditor(`编辑器里未落盘的改动 见 [[b#1 ${WORD_JOINER}乙]]。`);
+		const bEd = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}乙`);
+		setLeaves([
+			{ editor: aEd, file: { path: "a.md" } },
+			{ editor: bEd, file: { path: "b.md" } },
+		]);
+
+		await p.clearAllVaultNumbering();
+
+		expect(bEd.getValue()).toBe("## 乙");
+		expect(aEd.getValue()).toBe("编辑器里未落盘的改动 见 [[b#乙]]。");
+		expect(vaultFiles.get("a.md")).toBe("STALE-A-ON-DISK");
+		expect(vaultFiles.get("b.md")).toBe("STALE-B-ON-DISK");
+	});
+
+	it("H19：已打开文件固化时，标题与链接锚点的 WJ 一并剥净（编辑器事务分支语义不回归）", async () => {
+		const { p, vaultFiles, setLeaves } = makePlugin({
+			vaultFiles: { "a.md": "STALE-ON-DISK" },
+		});
+		const ed = new FakeEditor(
+			[`## ${WORD_JOINER}1 ${WORD_JOINER}甲`, `见 [[#1 ${WORD_JOINER}甲]]。`].join("\n"),
+		);
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+
+		await p.freezeVaultNumbering();
+
+		expect(ed.getValue()).toBe(["## 1 甲", "见 [[#1 甲]]。"].join("\n"));
+		expect(ed.getValue()).not.toContain(WORD_JOINER);
+		expect(vaultFiles.get("a.md")).toBe("STALE-ON-DISK");
+	});
+
+	it("H19：固化后快照清空（改走批量通道不影响这个既有语义）", async () => {
+		const { p } = makePlugin({ vaultFiles: { "a.md": "## 甲" } });
+		const ed = new FakeEditor("## 甲");
+		p.runImmediateRenumber(ed, fileInfo("a.md")); // 播种一条快照基线。
+		const snapshots = (p as unknown as { headingSnapshots: Map<string, unknown> })
+			.headingSnapshots;
+		expect(snapshots.size).toBeGreaterThan(0);
+
+		await p.freezeVaultNumbering();
+
+		expect(snapshots.size).toBe(0);
+	});
+
+	it("H19：retired 在任何文件写入之前已落盘（批量循环开始前即已提交）", async () => {
+		const { p } = makePlugin({
+			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲` },
+		});
+		const app = (
+			p as unknown as { app: { vault: { process: (...args: unknown[]) => unknown } } }
+		).app;
+		let retiredWhenWriting: boolean | undefined;
+		const original = app.vault.process;
+		app.vault.process = (...args: unknown[]) => {
+			retiredWhenWriting = (p.settings as unknown as { retired?: boolean }).retired;
+			return original(...args);
+		};
+
+		await p.freezeVaultNumbering();
+
+		expect(retiredWhenWriting).toBe(true);
+	});
+});
+
 describe("M12：「不编号」伪模板（testplan K15）与多文件批量重编号（K16）", () => {
 	/** 根规则投「默认」+ `sub/` 文件夹规则投「不编号」伪模板。 */
 	const noneRules = (): PathRule[] => [
