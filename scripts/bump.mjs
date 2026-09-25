@@ -24,8 +24,10 @@ import { dirname, join } from "path";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const p = (f) => join(root, f);
 
-/** 读 JSON（保留为对象，写回时用 2-space + 行尾换行，与仓库现状一致）。 */
-const readJson = (f) => JSON.parse(readFileSync(p(f), "utf8"));
+/** 读 JSON（保留为对象，写回时用 2-space + 行尾换行，与仓库现状一致）。
+ * 先 trimStart 剥掉开头的 UTF-8 BOM（U+FEFF 属于 JS 空白字符）：Windows PowerShell 5.1 写文件默认带 BOM，
+ * JSON.parse 会直接报错；写回时不再带 BOM。 */
+const readJson = (f) => JSON.parse(readFileSync(p(f), "utf8").trimStart());
 const writeJson = (f, obj) => writeFileSync(p(f), JSON.stringify(obj, null, "\t") + "\n");
 
 const manifest = readJson("manifest.json");
