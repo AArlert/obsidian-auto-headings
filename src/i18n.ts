@@ -602,7 +602,7 @@ const zh: Messages = {
 	clearForeignBtn: "清理外来编号",
 	clearVaultName: "清除全库编号",
 	clearVaultDesc:
-		"剥离全库中本插件写入的编号前缀（不在撤销历史内，建议先备份）；确认后先关闭「全局自动编号」再清除，避免清完又被编回去。",
+		"剥离全库中本插件写入的编号前缀（不在撤销历史内，建议先备份）；确认后先关闭「全局自动编号」再清除，避免清完又被编回去（「同步内部链接（Backlink）」开着时链接一并更新）。",
 	clearVaultBtn: "清除全库编号…",
 	freezeVaultName: "固化编号并交还所有权（全库）",
 	freezeVaultDesc:
@@ -638,7 +638,7 @@ const zh: Messages = {
 
 	clearVaultModalTitle: "清除全库编号",
 	clearVaultModalBody:
-		"将先关闭「全局自动编号」，再从全库剥离本插件写入的编号前缀，还原为裸标题。不在撤销历史内，建议先备份。确认继续？",
+		"将先关闭「全局自动编号」，再从全库剥离本插件写入的编号前缀，还原为裸标题（「同步内部链接（Backlink）」开着时链接一并更新）。不在撤销历史内，建议先备份。确认继续？",
 	confirmClearVault: "确认清除全库",
 
 	freezeVaultModalTitle: "固化编号并交还所有权（全库）",
@@ -944,7 +944,7 @@ const en: Messages = {
 	clearForeignBtn: "Clear foreign numbering",
 	clearVaultName: "Clear numbering in the whole vault",
 	clearVaultDesc:
-		"Strip the prefixes this plugin wrote from every Markdown file (NOT in undo history — back up first). Confirming first turns OFF global auto-numbering so cleared files don't get re-numbered.",
+		"Strip the prefixes this plugin wrote from every Markdown file (NOT in undo history — back up first). Confirming first turns OFF global auto-numbering so cleared files don't get re-numbered (links update too when “Sync internal links (backlinks)” is on).",
 	clearVaultBtn: "Clear vault numbering…",
 	freezeVaultName: "Freeze numbering and release ownership (entire vault)",
 	freezeVaultDesc:
@@ -980,7 +980,7 @@ const en: Messages = {
 
 	clearVaultModalTitle: "Clear vault numbering",
 	clearVaultModalBody:
-		"First turns OFF global auto-numbering, then strips this plugin's prefixes from every Markdown file, restoring bare headings. NOT in Obsidian's undo history — back up first. Continue?",
+		"First turns OFF global auto-numbering, then strips this plugin's prefixes from every Markdown file, restoring bare headings (links update too when “Sync internal links (backlinks)” is on). NOT in Obsidian's undo history — back up first. Continue?",
 	confirmClearVault: "Confirm clear vault",
 
 	freezeVaultModalTitle: "Freeze numbering and release ownership (entire vault)",

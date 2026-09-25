@@ -1382,8 +1382,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 清除全库所有 Markdown 文件的编号前缀（见 spec.md §3.10「清除全库编号」按钮）。
 	 * 由 SettingsTab 的 ClearVaultModal 在二次确认后调用。
 	 *
-	 * **不在 Obsidian 编辑历史内（vault.modify 无撤销），建议用户操作前备份。**
-	 * 逐文件读取 → 清除 → 写回；仅修改实际有变化的文件。
+	 * 改走批量通道 {@link batchRewrite}（1.2.0，testplan H8/H17）：已打开的文件在它的编辑器里以
+	 * 事务改写（可在该编辑器里撤销，不读盘、不会被未落盘的改动覆盖），未打开的走 `vault.process`
+	 * 原子读改写（不在撤销历史内，确认框已提示备份）。顺带同步指向这些标题的内链——同文件自
+	 * 链接随主事务折叠，跨文件反链汇总为一条 Notice（{@link notifyBacklinkTotal}）。
 	 */
 	async clearAllVaultNumbering(): Promise<void> {
 		// 先**持久关闭**「全局自动编号」（0.7.17，testplan H7）：清完全库却留着开关开，
@@ -1406,23 +1408,14 @@ export default class AutoHeadingsPlugin extends Plugin {
 		try {
 			const { prefixes, suffixes } = this.strippableAffixes();
 			const files = this.app.vault.getMarkdownFiles();
-			let count = 0;
-			for (const file of files) {
-				const content = await this.app.vault.read(file);
-				const newContent = clearNumberingContent(content, {
+			const r = await this.batchRewrite(files, (_file, content) =>
+				clearNumberingContent(content, {
 					strippablePrefixes: prefixes,
 					strippableSuffixes: suffixes,
-				});
-				if (newContent !== content) {
-					await this.app.vault.modify(file, newContent);
-					count++;
-					// 若该文件有快照基线，同步刷新（全库清除绕开编辑器路径，基线不能留在清除前的状态）。
-					if (this.headingSnapshots.has(file.path)) {
-						this.headingSnapshots.set(file.path, snapshotHeadings(newContent));
-					}
-				}
-			}
-			new Notice(this.messages().noticeClearedVault(count));
+				}),
+			);
+			new Notice(this.messages().noticeClearedVault(r.changed));
+			await this.notifyBacklinkTotal(r.links);
 		} finally {
 			this.vaultClearInProgress = false;
 			this.refreshVirtualViews(); // 清库期间暂停了虚拟显示（M14），结束后补一次。
@@ -1446,6 +1439,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * {@link guardForeignNumbering} 兜着，不必新建机制。
 	 *
 	 * **不在 Obsidian 编辑历史内（vault.modify 无撤销），确认框已提示建议备份。**
+	 *
+	 * 改走批量通道 {@link batchRewrite}（1.2.0，testplan H8/H19）：已打开的文件走它的编辑器事务
+	 * （可撤销、不读盘），未打开的走 `vault.process`。变换函数保持 `stripWordJoiners(content)`——
+	 * 仍是**全文**剥离（标题与链接锚点两侧的 WJ 同时归零，见上文「为什么是全文级剥离」）；批量通道
+	 * 顺带触发的 backlink 同步（{@link foldSelfBacklinks}/{@link syncBacklinksCounted}）在这里通常
+	 * 是空操作——`linkAnchor` 判定改名时本就剥 WJ 比较，纯去 WJ 不构成「锚点变化」，链接侧的归零已由
+	 * 逐文件全文剥离本身完成，两者不冲突。
 	 */
 	async freezeVaultNumbering(): Promise<void> {
 		// 先落盘「已离场」再动文件：中途异常也不会留下「标记已剥、插件却还在编号」的坏状态
@@ -1461,18 +1461,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.debounceTimers.clear();
 		try {
 			const files = this.app.vault.getMarkdownFiles();
-			let count = 0;
-			for (const file of files) {
-				const content = await this.app.vault.read(file);
-				const frozen = stripWordJoiners(content);
-				if (frozen !== content) {
-					await this.app.vault.modify(file, frozen);
-					count++;
-				}
-			}
+			const r = await this.batchRewrite(files, (_file, content) => stripWordJoiners(content));
 			// 快照直接清空：插件已离场，改名表基线不再有意义（与清库的「刷新」不同）。
 			this.headingSnapshots.clear();
-			new Notice(this.messages().noticeFrozenVault(count));
+			new Notice(this.messages().noticeFrozenVault(r.changed));
+			await this.notifyBacklinkTotal(r.links);
 		} finally {
 			this.vaultClearInProgress = false;
 			this.refreshVirtualViews(); // 已离场：让仅显示文件的编号随之消失（M14）。
@@ -2375,10 +2368,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 内部链接。**仅在 `updateBacklinks` 开启时工作**（默认开）。改名表由调用方（
 	 * {@link foldSelfBacklinks}）算好传入，本方法只负责反查引用方 + 写回，不重算。
 	 *
-	 * 用 `metadataCache.getBacklinksForFile` 反查引用方 → 对每个**别的**引用文件用 `vault.process`
-	 * 原子重写锚点（纯函数 {@link rewriteBacklinksInContent}）——**跳过引用方=本文件自身**的条目：
-	 * 那一支已经在 {@link foldSelfBacklinks} 里随主事务同步处理过，这里重复处理只会重新引入
-	 * 「读盘覆盖未落盘编辑器内容」的竞态（见 {@link foldSelfBacklinks} 的详细说明）。
+	 * 用 `metadataCache.getBacklinksForFile` 反查引用方 → 每个**别的**引用文件按是否已打开分流
+	 * 写回（见 {@link syncBacklinksCounted} 的根因说明，testplan H18）——**跳过引用方=本文件自身**
+	 * 的条目：那一支已经在 {@link foldSelfBacklinks} 里随主事务同步处理过，这里重复处理只会重新
+	 * 引入「读盘覆盖未落盘编辑器内容」的竞态（同一份说明）。
 	 *
 	 * 防御性：`getBacklinksForFile` 为半公开 API（返回 `{data}` 包装），缺失 / 异常时**静默降级**——
 	 * 绝不因链接同步失败而打断编号本身。
@@ -2394,7 +2387,17 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	/**
 	 * {@link syncBacklinks} 的计数核心（不弹 Notice，返回改写的链接总数）：批量重编号（M12，
-	 * testplan K16）逐文件调用本方法并**汇总成一条** Notice，避免一次批量弹出几十条「已更新链接」。
+	 * testplan K16）与批量清除 / 固化（1.2.0，testplan H17–H19）逐文件调用本方法并**汇总成一条**
+	 * Notice，避免一次批量弹出几十条「已更新链接」。
+	 *
+	 * **引用方已打开时走它的编辑器事务**（1.2.0，testplan H18）：与 {@link foldSelfBacklinks} 同源的
+	 * 竞态——批量改写（清除全库 / 固化全库 / 模式切换 / 批量重编号）里 A、B 互相引用且都开着时，
+	 * 若先改写了 A（编辑器事务，尚未落盘）、再因 B 的标题变化去同步 A 里指向 B 的链接，`vault.process`
+	 * 读到的是 A 落盘前的旧内容，写回后把 A 刚完成的改写冲掉。改为对已打开的引用方取 `editor.getValue()`
+	 * 现改现写、经 {@link writeLineDiff} 写回同一个编辑器：`rewriteBacklinksInContent` 只替换链接锚点
+	 * 内的有界文本（wikilink 正则排除 `\n`、Markdown 目的地解析逐行清栈、写入锚点经 `stripIllegal`
+	 * 折叠空白/换行）——不可能增删任何行，故按行对齐比较的 `writeLineDiff` 可以安全复用，不必另起一套
+	 * 改写路径。未打开的引用方仍走 `vault.process` 原子读改写（无撤销，确认框已提示）。
 	 */
 	private async syncBacklinksCounted(
 		target: LinkTarget | null | undefined,
@@ -2416,9 +2419,21 @@ export default class AutoHeadingsPlugin extends Plugin {
 			const data = backlinkMap(raw);
 			if (data) {
 				const basename = target.basename ?? linkBasename(target.path);
+				const editors = this.openEditorsByPath();
 				for (const sourcePath of data.keys()) {
 					if (typeof sourcePath !== "string" || sourcePath === target.path) {
 						continue; // 本文件自身已由 foldSelfBacklinks 随主事务处理，跳过避免竞态重复写。
+					}
+					const editor = editors.get(sourcePath);
+					if (editor) {
+						// 引用方正被打开：走它的编辑器，不读盘（见本方法上方的根因说明）。
+						const old = editor.getValue();
+						const result = rewriteBacklinksInContent(old, basename, false, map);
+						if (result.count > 0) {
+							this.writeLineDiff(editor, old, result.content);
+						}
+						total += result.count;
+						continue;
 					}
 					const file = vault.getAbstractFileByPath(sourcePath);
 					// 仅处理文件（instanceof 收窄，排除文件夹，商店审核要求勿用 as TFile 断言）。
