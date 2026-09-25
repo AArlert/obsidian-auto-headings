@@ -45,7 +45,8 @@ const r = spawnSync(
 		vitestBin,
 		"run",
 		"tests/dev_tests/random_sequence.test.ts",
-		// 重型压测远超用例内联的 30s 超时（random_sequence.test.ts:34/50），此处整体放宽。
+		// 重型压测远超用例内联的 30s 超时。内联超时优先于 CLI 参数，故两处都放宽：CLI 管 hook，
+		// AAH_FUZZ_TIMEOUT 管用例（random_sequence.test.ts 的 TIMEOUT）。
 		"--testTimeout=600000",
 	],
 	{
@@ -56,6 +57,7 @@ const r = spawnSync(
 			AAH_FUZZ_RUNS: runs,
 			AAH_FUZZ_OPS: ops,
 			AAH_FUZZ_SEED: seed,
+			AAH_FUZZ_TIMEOUT: "600000",
 		},
 	},
 );

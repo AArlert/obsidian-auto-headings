@@ -14,8 +14,10 @@ import {
 	numberHeadings,
 	previewLevel,
 	renderNumeral,
+	hasPluginPrefix,
 	renumberContent,
 	stripPrefix,
+	stripPrefixBroad,
 	type SkipFill,
 	type Template,
 } from "../../src/numbering";
@@ -304,6 +306,83 @@ describe("stripPrefix（默认模板，方案A：纯 WJ 边界）", () => {
 		c.bump(3);
 		const prefixed = buildPrefix(DEFAULT_TEMPLATE, 3, c) + "标题";
 		expect(stripPrefix(prefixed, 3, DEFAULT_TEMPLATE)).toBe("标题");
+	});
+});
+
+describe("标题中间的 WJ 属于正文（1.1.5 修数据丢失，testplan E37–E41）", () => {
+	const W = WORD_JOINER;
+	// 典型来源：displayAnchor 把目标标题的 WJ 写进链接锚点。
+	const link = `[[a#${W}1 ${W}概述]]`;
+
+	it("stripPrefix：首个 WJ 在中间且前一段不像编号 → 原样返回（不再剥到该 WJ 之后）", () => {
+		expect(stripPrefix(`参见 ${link}`, 2, DEFAULT_TEMPLATE)).toBe(`参见 ${link}`);
+		expect(stripPrefix(`1 ${link}`, 2, DEFAULT_TEMPLATE)).toBe(`1 ${link}`);
+		expect(stripPrefix(link, 2, DEFAULT_TEMPLATE)).toBe(link);
+		// 无模板的只读调用（headingindex）同口径。
+		expect(stripPrefix(`参见 ${link}`)).toBe(`参见 ${link}`);
+	});
+
+	it("stripPrefix：双哨兵完好 + 正文含链接 → 只剥行首那对哨兵", () => {
+		expect(stripPrefix(`${W}1 ${W}参见 ${link}`, 2, DEFAULT_TEMPLATE)).toBe(`参见 ${link}`);
+	});
+
+	it("stripPrefix：尾哨兵被毁 + 正文含链接 → 第二个 WJ 不当尾哨兵，有界剥离残缺前缀（E39）", () => {
+		expect(stripPrefix(`${W}1参见 ${link}`, 2, DEFAULT_TEMPLATE)).toBe(`参见 ${link}`);
+		expect(stripPrefix(`${W}1 参见 ${link}`, 2, DEFAULT_TEMPLATE)).toBe(`参见 ${link}`);
+	});
+
+	it("stripPrefix：旧单哨兵只在前一段整段像编号时才剥（E41）", () => {
+		expect(stripPrefix(`1.2.3 ${W}标题`, 4, DEFAULT_TEMPLATE)).toBe("标题");
+		// 模板前缀字面量在候选集内。
+		const t = structuredClone(DEFAULT_TEMPLATE);
+		t.levels.h2.prefix = "第";
+		t.levels.h2.suffix = "章";
+		expect(stripPrefix(`第1章 ${W}标题`, 2, t)).toBe("标题");
+		// 前一段含正文 → 不剥。
+		expect(stripPrefix(`1 总结 ${W}标题`, 2, DEFAULT_TEMPLATE)).toBe(`1 总结 ${W}标题`);
+	});
+
+	it("stripPrefixBroad：中间 WJ 不当前缀；手写编号仍按全样式剥（E40 清除编号）", () => {
+		expect(stripPrefixBroad(`参见 ${link}`)).toBe(`参见 ${link}`);
+		expect(stripPrefixBroad(`1. 手写 ${link}`)).toBe(`手写 ${link}`);
+		expect(stripPrefixBroad(`${W}1 ${W}参见 ${link}`)).toBe(`参见 ${link}`);
+		// 尾哨兵被毁：清除命令的全样式正则要求序号后跟间隔符，无间隔符的孤儿序号历来不剥——关键是链接不丢。
+		expect(stripPrefixBroad(`${W}1参见 ${link}`)).toBe(`1参见 ${link}`);
+		expect(stripPrefixBroad(`1.2 ${W}旧单哨兵`)).toBe("旧单哨兵");
+	});
+
+	it("hasPluginPrefix：只认行首哨兵或旧单哨兵，不认链接锚点里的 WJ", () => {
+		expect(hasPluginPrefix(`${W}1 ${W}标题`)).toBe(true);
+		expect(hasPluginPrefix(`1 ${W}标题`)).toBe(true);
+		expect(hasPluginPrefix(`参见 ${link}`)).toBe(false);
+		expect(hasPluginPrefix(`1. 参见 ${link}`)).toBe(false);
+		expect(hasPluginPrefix("1 标题")).toBe(false);
+	});
+
+	it("旧单哨兵判定对长分隔符串不指数回溯（默认空格间隔符已在字符类内，不另作分支）", () => {
+		// 以不可能出现在编号里的字符收尾 → 走「失配后回溯」的最坏路径。
+		const nasty = [
+			"1" + " ".repeat(5000) + "#",
+			"1" + ".".repeat(5000) + "#",
+			"1. ".repeat(2000) + "#",
+		];
+		const t0 = Date.now();
+		for (const n of nasty) {
+			const s = `${n}${W}y`;
+			expect(stripPrefix(s, 2, DEFAULT_TEMPLATE)).toBe(s);
+			hasPluginPrefix(s);
+			stripPrefixBroad(s);
+		}
+		expect(Date.now() - t0).toBeLessThan(1000);
+	});
+
+	it("renumberContent：E37 编号范围内 / E38 超出范围（bareHeading 定点循环）均不吃正文，且幂等", () => {
+		const one = renumberContent(`## 参见 ${link}`, DEFAULT_TEMPLATE);
+		expect(one).toBe(`## ${W}1 ${W}参见 ${link}`);
+		expect(renumberContent(one, DEFAULT_TEMPLATE)).toBe(one);
+		const two = renumberContent(`# 书 ${link}\n## 甲`, DEFAULT_TEMPLATE);
+		expect(two).toBe(`# 书 ${link}\n## ${W}1 ${W}甲`);
+		expect(renumberContent(two, DEFAULT_TEMPLATE)).toBe(two);
 	});
 });
 
