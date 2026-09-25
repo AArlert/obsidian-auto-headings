@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-09-25 把 master 的 stripPrefix 修复合进 M14（1.2.0，交接：claude/m14-virtual-mode）
+
+### 做了什么
+
+- 用户决定 1.1.5 **不单独发版**，修复随 1.2.0 一起发。把 master（`1a84d17`，含 `claude/fix-wj-midtext`）合进 M14 分支。
+- 冲突处理：
+  - `src/cleanup.ts` `hasUnclaimedForeignNumbering`：先走修复加的结构性证据（`CLAIMED_LINE_RE` 行首 WJ +
+    `hasPluginPrefix`），末行用 M14 的 `looksForeignNumbered`；M14 的 `isMostlyForeignNumbered` 原样保留，
+    它按 `!startsWith(WJ)` 判归属，与修复同一口径。
+  - 版本号文件取 1.2.0；`versions.json` **保留 `1.1.5` 条目**（仓库惯例：每次 bump 都登记，没发版的
+    1.0.26–1.0.32 也在列）。
+  - `log.md` / `status.jsonl`：修复周期块 / 概括行插在 M14 各块之上；两份 archive 以 M14 为准（已是超集）。
+  - `release/` 重建。
+- 同类排查：M14 新代码里判 WJ 归属的地方都只认行首 WJ。`computeVirtualNumbers` 的残留区间取自编号引擎
+  剥出的纯文本，合入修复后，E39 形态（尾哨兵被毁 + 标题里有带 WJ 的链接）的残留区间从「一直吞到链接锚点」
+  变成只含残缺前缀，自动受益；阅读视图 `decorateHeading` 只在首个文本节点里找尾哨兵（链接是独立元素），
+  不受影响。
+- `doc/release-notes/1.2.0.md` 补修复条目（中英）。
+- testplan 里 `M18` 有两行重名，合并前三方就都是这样，未动。
+- 本周期派发 1 次（quality-gate × 1）。
+
+### 没做什么
+
+- 没合并 master、没打 tag（发版须用户明确同意）。
+
+### 下一步
+
+- 发版前一轮开发（用户已选定）：H8（清全库 / 固化改走 `batchRewrite`）、「复制编号大纲」「复制当前小节链接」
+  两条命令、**内置大纲面板显示虚拟编号**（原登记为 M14 二期，用户要求提前）。模板同名提示**不做**——用户
+  认为 `default.json` 恒生效、冲突副本被忽略可以接受。
+
+### 验证方式
+
+- 分项跑（quality-gate）：`release` 通过；`npm test` 740 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows
+  既有伪影）；`lint`、`format:check`、`docs --check` 通过；`test:fuzz` 三块记分板通过（31.9s）。
+
+---
+
 ## 2026-09-25 修复标题中间 WJ 被当旧单哨兵致标题开头被吃（1.1.5，交接：claude/fix-wj-midtext）
 
 ### 做了什么

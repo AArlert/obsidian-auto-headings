@@ -41,6 +41,32 @@
 
 ---
 
+## 2026-09-25 manifest 描述去掉「Obsidian」一词并重发 1.2.0（不 bump，交接：fix/manifest-desc-no-obsidian）
+
+### 做了什么
+
+- Community Hub 审核 1.2.0 报 Manifest 错误：description 不得含「Obsidian」一词（目录上下文已隐含，属冗余）。
+  `manifest.json` / `release/manifest.json` 的 `shown only in Obsidian or written into your notes` 改为
+  `display-only or written into your notes`，其余措辞不变。
+- 按用户要求**不 bump**，把 tag `1.2.0` 挪到修复后的 master 提交、强推重发（`release.yml` 先删同名 Release 再建，可重复触发）。
+- 此前面板的「No release matches your manifest version」是 Hub 在首跑 Release 失败的空窗期读到 manifest 所致，
+  点「Check for new releases」即可；GitHub 侧三资产 attestation 均已核实存在。
+- 本周期派发 0 次。
+
+### 没做什么
+
+- `package.json` 的中文 description 不进商店，未动；README 未改（无相关措辞）。
+
+### 下一步
+
+- 重发后在维护者面板点「Check for new releases」，确认 1.2.0 审核通过、公开页 Current version 变为 1.2.0。
+
+### 验证方式
+
+- `grep -n Obsidian manifest.json` 无命中；preflight 全绿；Release 工作流重跑成功且资产中 manifest 描述已更新。
+
+---
+
 ## 2026-09-25 CI 升到 Node 24 + 清理 worktree（1.2.0，纯基础设施不 bump，交接：master）
 
 ### 做了什么
@@ -132,44 +158,6 @@
 - 真机（Oblivion 库 `Claude测试/`，电脑操作）：大纲 V40 / V41（搜索过滤、折叠、最前面插标题、2000 标题长大纲滚到
   末尾）/ V43（设置开关）；命令 R2–R6（仅显示）；H18（两篇分屏，刚粘贴未落盘的链接随改名同步）。测后测试笔记
   逐字节核对还原。
-
----
-
-## 2026-09-25 把 master 的 stripPrefix 修复合进 M14（1.2.0，交接：claude/m14-virtual-mode）
-
-### 做了什么
-
-- 用户决定 1.1.5 **不单独发版**，修复随 1.2.0 一起发。把 master（`1a84d17`，含 `claude/fix-wj-midtext`）合进 M14 分支。
-- 冲突处理：
-  - `src/cleanup.ts` `hasUnclaimedForeignNumbering`：先走修复加的结构性证据（`CLAIMED_LINE_RE` 行首 WJ +
-    `hasPluginPrefix`），末行用 M14 的 `looksForeignNumbered`；M14 的 `isMostlyForeignNumbered` 原样保留，
-    它按 `!startsWith(WJ)` 判归属，与修复同一口径。
-  - 版本号文件取 1.2.0；`versions.json` **保留 `1.1.5` 条目**（仓库惯例：每次 bump 都登记，没发版的
-    1.0.26–1.0.32 也在列）。
-  - `log.md` / `status.jsonl`：修复周期块 / 概括行插在 M14 各块之上；两份 archive 以 M14 为准（已是超集）。
-  - `release/` 重建。
-- 同类排查：M14 新代码里判 WJ 归属的地方都只认行首 WJ。`computeVirtualNumbers` 的残留区间取自编号引擎
-  剥出的纯文本，合入修复后，E39 形态（尾哨兵被毁 + 标题里有带 WJ 的链接）的残留区间从「一直吞到链接锚点」
-  变成只含残缺前缀，自动受益；阅读视图 `decorateHeading` 只在首个文本节点里找尾哨兵（链接是独立元素），
-  不受影响。
-- `doc/release-notes/1.2.0.md` 补修复条目（中英）。
-- testplan 里 `M18` 有两行重名，合并前三方就都是这样，未动。
-- 本周期派发 1 次（quality-gate × 1）。
-
-### 没做什么
-
-- 没合并 master、没打 tag（发版须用户明确同意）。
-
-### 下一步
-
-- 发版前一轮开发（用户已选定）：H8（清全库 / 固化改走 `batchRewrite`）、「复制编号大纲」「复制当前小节链接」
-  两条命令、**内置大纲面板显示虚拟编号**（原登记为 M14 二期，用户要求提前）。模板同名提示**不做**——用户
-  认为 `default.json` 恒生效、冲突副本被忽略可以接受。
-
-### 验证方式
-
-- 分项跑（quality-gate）：`release` 通过；`npm test` 740 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows
-  既有伪影）；`lint`、`format:check`、`docs --check` 通过；`test:fuzz` 三块记分板通过（31.9s）。
 
 ---
 
