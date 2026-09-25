@@ -5,6 +5,74 @@
 
 ---
 
+## 2026-09-25 发版前一轮开发：大纲显示虚拟编号、两条复制命令、H8（1.2.0，交接：claude/m14-virtual-mode）
+
+### 做了什么
+
+- **内置大纲面板显示虚拟编号**（原 M14 二期，用户要求提前；testplan V40–V45）：新增 `src/virtual/outlineView.ts`。
+  动手前从本机 `E:\Obsidian\resources\obsidian.asar` 只读解出 app.js 核对 1.10 的大纲实现，据此推翻了参照竞品
+  Heading Decorator 的思路（扫屏幕 DOM、按层级 + 文本对齐标题）——1.10 的大纲是虚拟滚动，屏幕外条目不在 DOM 里，
+  那样滚动 / 折叠 / 过滤后会错位。现做法：
+  - 遍历视图的条目对象 `cachedHeadingDom`，按 `heading.position.start.line` 取编号并核对级别，写成 `innerEl` 上的
+    `data-ah-number` 属性，CSS `::before` 画出（大纲每次刷新都 `setText` 重写文字，插节点会被冲掉）；
+  - `requestUpdate` 构造时就捕获了原始 `update`，实例打补丁挂不住 → 用 MutationObserver 看 `childList`，合并到
+    微任务里核对全部条目；新开 / 关闭的大纲靠 `layout-change` / `active-leaf-change` 挂摘观察器；
+  - 残留旧编号（WJ 开头）的标题不画；设置「在大纲中显示编号」`showOutlineNumbers` 默认开，关掉后对大纲零接触；
+    结构认不出静默。
+- **两条复制命令**（testplan R1–R6，spec A.11 借鉴；feature-coder 实现、我审）：`src/copycommands.ts` + main.ts
+  `registerCopyCommands`。「复制编号大纲」用 `checkCallback`（阅读视图可用），写入模式取标题所见文本、仅显示取
+  虚拟编号，按全文最浅级别缩进两格；「复制当前小节链接」用 `editorCheckCallback`，锚点保留 WJ（与标题链接建议
+  同口径，否则写入模式解析不到）、别名剥编号，链接由 `generateMarkdownLink` 按用户的链接设置生成。
+- **H8 + H17–H19**（feature-coder 实现、我审）：清全库 / 固化改走 `batchRewrite`（已打开走编辑器事务、未打开走
+  `vault.process`），清全库顺带同步链接（H17）。审方案时发现同一类竞态还在 `syncBacklinksCounted`：已打开的
+  引用方仍走 `vault.process`，批量通道里互相引用的两篇都开着时会读到落盘前的旧内容、冲掉刚做的改写（M18 同源），
+  一并改为走引用方的编辑器（H18，所有同步路径受益）。固化时 `linkAnchor` 剥 WJ 比较，纯去 WJ 不算改名，同步实为
+  空操作，不会多写、不会多弹提示。
+- 模板同名冲突提示：用户认为 `default.json` 恒生效、冲突副本被忽略可以接受，**不做**。
+- 文档：spec §3.22（渲染 / 已知限制 / 代码组织）、§3.10、§3.12、§3.1 命令表、Roadmap M11 / M12 / M14；使用指南中英
+  （两种模式对照表、大纲一条、命令表）；README 中英；1.2.0 发布说明补大纲、两条命令、清全库同步链接；实测样例
+  `tests/user_tests/13-仅显示大纲与复制命令.md`；记忆补「从 asar 查 Obsidian 内部实现」。
+- 两个 feature-coder 都因 API 额度上限中断过一次，用 SendMessage 续跑完成。本周期派发 5 次（feature-coder × 2、
+  quality-gate × 3）。
+
+### 没做什么
+
+- **清全库 / 固化没上真机**（会改动整个库，只有单测）。写入模式下的两条命令、R6 写入模式没上真机；在大纲里拖动
+  小节没单独测（与插入标题同一刷新路径）；停用插件后大纲复原只有单测。
+- M11「清库撤销」（自建快照 / 还原）未做。
+
+### 发版（用户同意后，2026-09-25）
+
+- 合并 master（`873c0df`）+ 打 `1.2.0` tag。**Release 首跑失败在 `npm ci`**，master 的 CI 同样挂：M14 分支从没在
+  CI 上跑过（CI 只盯 master），它的锁文件由本机 npm 11 重算，删掉了 `vite-node` 下的可选 peer 条目
+  （`@types/node@26`、`undici-types`），CI 的 Node 20 自带 npm 10，判定锁文件与 package.json 不同步。日志匿名
+  拉不到（403），靠步骤名 + 锁文件 diff 定位。
+- 修法（`87c8f63`）：以 master（`1a84d17`，CI 通过）的锁文件为底，只套 M14 的本意改动（版本号、两个
+  `@codemirror` 显式开发依赖、去掉 peer 标记）——与原锁文件的差别仅是补回那两个条目。master CI #72 通过后，把
+  `1.2.0` tag 挪到修复提交重推（首个 tag 没生成任何 Release），Release #23 通过：非草稿、三个产物齐全、说明取自
+  `doc/release-notes/1.2.0.md`。
+
+### 下一步
+
+- 看 Community Hub 公开页 `community.obsidian.md/plugins/auto-headings` 的 Current version 是否到 1.2.0；滞后就
+  请用户登录维护者面板点「修复」。
+- 以后改依赖后先用 CI 同版本的 npm（npm 10）生成锁文件，或者先推 master 看 CI 再打 tag；CI 迟早也该升到
+  Node 22/24（Node 20 已停止维护，Actions 已提示弃用）。
+- 1.3.0 候选：M12 内置三套预设模板；`main.ts` 已约 2600 行，改到相关代码时顺手拆。
+- 1.2.0 已在 master，此后在 master 上开新分支。主工作区 `D:/Documents/Code/obsidian-auto-headings` 还停在旧的
+  `claude/m14-virtual-mode`（`6f8e8ff`），`master` 被 `obsidian-auto-headings-wjfix` 那个 worktree 占着且落后于
+  origin——接着干前先在 wjfix 里 `git pull --ff-only`（或删掉该 worktree），主工作区再切到 master。
+
+### 验证方式
+
+- quality-gate（合并后全量）：`release` 通过；`npm test` 787 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows
+  既有伪影）；`lint`、`format:check`、`docs --check` 通过；`test:fuzz` 三块记分板通过（标题索引 34.1s）。
+- 真机（Oblivion 库 `Claude测试/`，电脑操作）：大纲 V40 / V41（搜索过滤、折叠、最前面插标题、2000 标题长大纲滚到
+  末尾）/ V43（设置开关）；命令 R2–R6（仅显示）；H18（两篇分屏，刚粘贴未落盘的链接随改名同步）。测后测试笔记
+  逐字节核对还原。
+
+---
+
 ## 2026-09-25 把 master 的 stripPrefix 修复合进 M14（1.2.0，交接：claude/m14-virtual-mode）
 
 ### 做了什么
