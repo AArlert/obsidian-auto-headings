@@ -48,6 +48,7 @@ import {
 	type HeadingSnapshot,
 } from "./backlinks";
 import { parseHeadings, type Heading } from "./parser";
+import { buildNumberedOutline, sectionHeadingAt, sectionLinkParts } from "./copycommands";
 import {
 	NO_NUMBERING_TEMPLATE,
 	normalizeRuleModes,
@@ -289,6 +290,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 				return true;
 			},
 		});
+
+		// 复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11）：接线在独立方法，纯逻辑在 copycommands.ts。
+		this.registerCopyCommands();
 
 		// 虚拟编号渲染（M14，spec §3.22）：编辑视图用 CM6 装饰，阅读视图用 post-processor，永不写文件。
 		this.registerEditorExtension(virtualNumberingExtension(this));
@@ -1763,6 +1767,88 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		this.runClearForeignNumbering(found.editor, found.ctx);
+	}
+
+	/**
+	 * 注册「复制编号大纲」「复制当前小节链接」两条命令（R 组，spec.md §A.11）。
+	 * 拆成独立方法：纯 addCommand 接线，业务逻辑在 copycommands.ts；也让单测能在不跑完整
+	 * onload() 的前提下单独调用、断言注册结果与回调行为。
+	 */
+	private registerCopyCommands(): void {
+		const t = this.messages();
+		// 阅读视图也要可用，故用 checkCallback 而非要求编辑器焦点的 editorCallback。
+		this.addCommand({
+			id: "copy-numbered-outline",
+			name: t.cmdCopyOutline,
+			checkCallback: (checking) => {
+				const found = this.activeMarkdownContext();
+				const file = found?.ctx.file;
+				if (!found || !file) {
+					return false;
+				}
+				if (!checking) {
+					void this.runCopyNumberedOutline(found.editor, file);
+				}
+				return true;
+			},
+		});
+		// 需要光标位置，用 editorCheckCallback；光标在第一个标题之前（或文件没有标题）时命令
+		// 从命令面板消失（R5）。
+		this.addCommand({
+			id: "copy-section-link",
+			name: t.cmdCopySectionLink,
+			editorCheckCallback: (checking, editor, ctx) => {
+				const file = ctx.file;
+				const heading = file
+					? sectionHeadingAt(editor.getValue(), editor.getCursor().line)
+					: null;
+				if (!file || !heading) {
+					return false;
+				}
+				if (!checking) {
+					void this.runCopySectionLink(file, heading);
+				}
+				return true;
+			},
+		});
+	}
+
+	/**
+	 * 「复制编号大纲」命令的执行体（R1–R3）：写入模式取标题所见文本，仅显示模式取虚拟编号
+	 * （{@link virtualNumberingFor}），拼装逻辑见 {@link buildNumberedOutline}。没有标题时只提示、
+	 * 不碰剪贴板；写剪贴板失败（权限受限等）时提示复制失败，不向上抛错。
+	 */
+	private async runCopyNumberedOutline(editor: Editor, file: TFile): Promise<void> {
+		const content = editor.getValue();
+		const labels = this.virtualNumberingFor(file.path, content);
+		const { text, count } = buildNumberedOutline(content, labels);
+		const m = this.messages();
+		if (count === 0) {
+			new Notice(m.noticeNoHeadings);
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(text);
+			new Notice(m.noticeOutlineCopied(count));
+		} catch {
+			new Notice(m.noticeCopyFailed);
+		}
+	}
+
+	/**
+	 * 「复制当前小节链接」命令的执行体（R4）：链接由 Obsidian 按用户的链接设置生成
+	 * （`generateMarkdownLink`），锚点 / 别名口径见 {@link sectionLinkParts}。
+	 */
+	private async runCopySectionLink(file: TFile, heading: Heading): Promise<void> {
+		const { anchor, alias } = sectionLinkParts(heading);
+		const link = this.app.fileManager.generateMarkdownLink(file, "", "#" + anchor, alias);
+		const m = this.messages();
+		try {
+			await navigator.clipboard.writeText(link);
+			new Notice(m.noticeSectionLinkCopied(alias ?? stripWordJoiners(anchor)));
+		} catch {
+			new Notice(m.noticeCopyFailed);
+		}
 	}
 
 	async loadSettings(): Promise<void> {

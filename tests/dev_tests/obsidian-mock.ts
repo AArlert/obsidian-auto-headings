@@ -133,18 +133,38 @@ export class MarkdownRenderChild {
 	}
 }
 
+/**
+ * `addCommand` 记录用的最小命令形状——只列复制命令（R 组）单测实际要读的字段，
+ * 够用即止，不追求覆盖 Obsidian 完整 `Command` 接口。
+ */
+export interface MockCommand {
+	id: string;
+	name: string;
+	callback?: () => unknown;
+	checkCallback?: (checking: boolean) => boolean | void;
+	editorCallback?: (editor: unknown, ctx: unknown) => unknown;
+	editorCheckCallback?: (checking: boolean, editor: unknown, ctx: unknown) => boolean | void;
+}
+
 /** Plugin 基类替身：提供 app / manifest 与 data 持久化、以及 onload 里调用的注册型空方法。 */
 export class Plugin {
 	app: unknown;
 	manifest: unknown;
 	private _data: unknown = undefined;
+	/**
+	 * 全部经 `addCommand` 注册过的命令，按注册顺序（R 组「复制编号大纲」「复制当前小节链接」的
+	 * 命令层单测据此取出 checkCallback / editorCheckCallback 直接调用断言，见 main.test.ts）。
+	 */
+	readonly commands: MockCommand[] = [];
 
 	constructor(app: unknown, manifest: unknown) {
 		this.app = app;
 		this.manifest = manifest;
 	}
 
-	addCommand(): void {}
+	addCommand(cmd: MockCommand): void {
+		this.commands.push(cmd);
+	}
 	addSettingTab(): void {}
 	registerEvent(): void {}
 	registerDomEvent(): void {}

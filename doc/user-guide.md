@@ -200,6 +200,8 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 | Clear numbering in current file | Strip all numbering prefixes (including hand-written ones)                                   |
 | Clear non-plugin heading numbering | Strip only numbering **not** written by this plugin — use it to take over imported documents |
 | Clear leftover plugin numbering in this file | In a display-only note, strip only numbers this plugin wrote earlier (hand-written numbers stay) |
+| Copy numbered outline | Copy the current note's headings as an indented, numbered outline — works in both write and display-only mode |
+| Copy current section link | Copy a link to the section under the cursor (or the section the cursor is inside) — works in both write and display-only mode |
 
 ## Notes
 
