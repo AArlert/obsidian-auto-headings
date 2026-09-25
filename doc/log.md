@@ -41,6 +41,32 @@
 
 ---
 
+## 2026-09-25 CI 升到 Node 24 + 清理 worktree（1.2.0，纯基础设施不 bump，交接：master）
+
+### 做了什么
+
+- `ci.yml` / `release.yml`：`node-version` 20 → 24，`actions/checkout`、`actions/setup-node` v4 → v5（v4 跑在已弃用的
+  Node 20 运行时上，Actions 每次都告警）。CI 与本机同为 npm 11，1.2.0 那种「本机锁文件 CI 不认」的错位随之消失；
+  现有锁文件（npm 10 兼容版）本机 npm 11 `npm ci` 已验证可用。
+- 清理本机 worktree：两个 feature-coder 的 `agent-*`（已合并）与 `obsidian-auto-headings-wjfix`（占着 master）；
+  删掉已合并的本地分支 `claude/h8-batch-rewrite`、`claude/copy-commands`、`worktree-agent-*`；主工作区切回 master。
+  `obsidian-auto-headings-pr8-review` 有未提交改动，未动。
+- 本周期派发 0 次。
+
+### 没做什么
+
+- 未动 `attest-build-provenance@v2`；未把锁文件改用 npm 11 重算（现版本两边都能用，无需折腾）。
+
+### 下一步
+
+- 同上一块：确认 Community Hub 跟上 1.2.0；1.3.0 候选见上一块。
+
+### 验证方式
+
+- 推 master 后 CI 在 Node 24 下全绿（见本块提交后的 CI 运行）。
+
+---
+
 ## 2026-09-25 发版前一轮开发：大纲显示虚拟编号、两条复制命令、H8（1.2.0，交接：claude/m14-virtual-mode）
 
 ### 做了什么
@@ -144,66 +170,6 @@
 
 - 分项跑（quality-gate）：`release` 通过；`npm test` 740 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows
   既有伪影）；`lint`、`format:check`、`docs --check` 通过；`test:fuzz` 三块记分板通过（31.9s）。
-
----
-
-## 2026-09-25 修复标题中间 WJ 被当旧单哨兵致标题开头被吃（1.1.5，交接：claude/fix-wj-midtext）
-
-### 做了什么
-
-用户实测复现的**数据丢失** bug（1.1.4 已上线即有）：标题**中间**含 WJ 时——典型来源是标题里放了指向
-「已编号标题」的链接，`displayAnchor` 把 WJ 写进锚点 `[[a#⁠1 ⁠概述]]`——编号时标题开头被吃：
-`## 参见 [[a#…]]` → `## ⁠1 ⁠1 ⁠概述]]`；超出编号区间的 H1 更被 `bareHeading` 定点循环蚕食成 `# 概述]]`。
-
-- **根因**：`strip.ts` 的 `stripPrefix` / `stripPrefixBroad` 把「首个 WJ 不在位置 0」一律当旧单哨兵，剥到该 WJ
-  之后。同类第二处：首哨兵在、尾哨兵被毁时，「第二个 WJ」可能是正文链接里的（E14 删后缀操作发生在带链接的
-  标题上），同样整段吃掉。
-- **修法（strip.ts）**：
-  - 新增 `isLegacyPrefixSegment`：首个 WJ 之前那段须**整段匹配**「前缀字面量? + 序号游程（段间必有间隔符）+
-    后缀字面量? + 标题间隔符*」且不含 `[[` / `](` 才当旧单哨兵剥；否则原样返回（宁可不剥）。序号样式恒取
-    全部（旧前缀可能写于另一模板，既有用例 `1.二.1 ⁠` 要求如此），安全性靠整段匹配 + 链接语法排除。
-  - 首哨兵在时，第二个 WJ 之前若有 `[[` / `](` → 视为尾哨兵被毁，走既有有界剥离愈合。
-  - **ReDoS**：初稿 `(?:[类]| )*` 在默认空格间隔符下指数回溯（长空白串实测卡死），改为：序号合成单字符类游程、
-    段间间隔符必选、被字符类覆盖的间隔符字面量不再作分支。加了 5000 字符的回归用例。
-  - 新增导出 `hasPluginPrefix`（只认行首哨兵或旧单哨兵）。
-- **同类排查（cleanup.ts）**：「清理非本插件编号」/ 预览 / 迁移守卫原按 `includes(WJ)` 判归属——手写
-  `## 1. 参见 [[a#…]]` 被当插件的跳过清理；**正文里一条带 WJ 的链接就废掉整份文件的迁移守卫**。改用
-  `hasPluginPrefix` + 「某行以 WJ 哨兵起头」的结构性证据。`cleanDemotedResidue` 只处理 WJ 起头行，靠
-  stripPrefix 修复自动受益；`main.ts` 的 WJ 用法（剪贴板净化、空标题 `endsWith`）无此问题。
-- **Pandoc filter**（`assets/pandoc/strip-autoheadings.lua`）同病：本机 pandoc 实跑，未编号标题
-  `# 参见 [[a#…]]` 导出成 `# 概述]]`。`pickTarget` 改为：行首 WJ 才认双哨兵（前缀属地须纯文本且无链接语法），
-  中间 WJ 仅当前一段全是序号 / 分隔字符才认旧单哨兵；已实跑验证 6 种标题（testplan O5h）。
-- **标记契约 / spec 订正**：契约原称「WJ 不会出现在正文」「未编号标题不含 WJ」与事实不符（链接锚点带 WJ），
-  改为「只有标题首字符的 WJ 才标记前缀」；「剥整前缀」配方从全局 `/…/g` 改为行首锚定（否则会剥掉标题内链接
-  锚点的 WJ 对）。这是事实描述与配方的订正，格式本身未变，不涉主版本迁移。spec §2.5 配套取舍、§A 契约摘要同步。
-- **顺修 fuzz 超时**：`random_sequence.test.ts` 的内联 30s 超时**覆盖** `fuzz.mjs` 的 `--testTimeout`，M13
-  记分板 5000×80 在本机约 25–30s 撞线（与本修复无关，已对照基线同速）。改为内联读 `AAH_FUZZ_TIMEOUT`，
-  `fuzz.mjs` 传 600000。
-- testplan：新增 E37–E41、O5h（先 ❌ 后 ✅），§3.1 已修 bug #15。
-- 本周期派发 2 次（quality-gate × 2）。
-
-### 没做什么
-
-- 基于 master 做（独立 worktree `../obsidian-auto-headings-wjfix`），**未碰 M14 分支**。
-- 未改 M14 的 `clearPluginNumberingContent` / `computeVirtualNumbers`（M14 分支，已刻意只认 WJ 起头）；前者调
-  `stripPrefixBroad`，合并后自动获得「第二个 WJ 属链接」防护。
-- 未打 tag / 未发版。
-
-### 下一步
-
-- 打 1.1.5 tag 发版（Release 工作流需 `doc/release-notes/1.1.5.md`，本周期未写）。
-- **M14 分支合回 master 前先 merge 本修复**：预计冲突 ① `cleanup.ts` `hasUnclaimedForeignNumbering` 末行（M14 改成
-  `looksForeignNumbered`，本修复改了其上方几行）——保留两边：先结构性证据判定，末行用 `looksForeignNumbered`；
-  ② 版本号文件（M14 已 1.2.0，取 1.2.0）；③ log.md / status.jsonl 周期块并存。M14 新增的 `isMostlyForeignNumbered`
-  用 `!startsWith(WJ)` 判归属，与本修复口径一致。
-
-### 验证方式
-
-- `npm test`：657 通过 / 1 失败（whitelist.test.ts:406 ICU 排序，Windows 既有伪影）；`lint`、`format:check` 通过；
-  `npm run test:fuzz` 5000×80 通过（标题索引记分板 ~25.6s）。
-- 回归用例：`numbering.test.ts`「标题中间的 WJ 属于正文」、`known_bugs.test.ts` E37–E41、`cleanup.test.ts`「非本插件
-  判定不看链接锚点里的 WJ」。
-- Pandoc：`pandoc x.md -t markdown -L assets/pandoc/strip-autoheadings.lua`（两种模式）实跑核对 O5h。
 
 ---
 
