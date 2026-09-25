@@ -63,15 +63,40 @@
 
 ### 没做什么
 
-- **没合并 master、没打 tag**：打 tag 会触发 Release 工作流、向所有用户发布，须用户确认；另一个会话正在 master 上修
-  stripPrefix 截断标题的数据丢失 bug（1.1.5），建议等它合并后再合 M14，让 1.2.0 一并带上这个修复。
-- 移动端未测。
+- **没合并 master、没打 tag——用户明确说「先别着急发新版」**，要在 1.2.0 发布前再做一轮开发。打 tag 会触发
+  Release 工作流向所有用户发布，任何时候都须用户明确同意。
+- 另一个会话正在 master 上修 stripPrefix 截断标题的数据丢失 bug（1.1.5，见 `spawn_task` 那条），尚未合并。
+- 移动端（V31）未测；可请用户用手机打开 iCloud 库里的仅显示笔记看一眼。
 
-### 下一步
+### 下一步（交接，2026-09-25 会话因上下文将满在此结束）
 
-- stripPrefix 修复合进 master 后：把 master 合进本分支（版本号保持 1.2.0；`log.md` / `status.jsonl` / `testplan.md` /
-  `release/` 按两边合并、release 重建；release notes 补一句该修复），跑 preflight + fuzz，再按 §5.1 合并 master。
-- 用户确认后打 `1.2.0` tag；Community Hub 索引滞后时去维护者面板点「修复」。
+**接手先跑 `npm run docs -- --handover`。** 分支 `claude/m14-virtual-mode`，相对 master 7 个提交，已推送、未合并；
+用户 Oblivion 库里跑的就是本分支的 1.2.0 构建。
+
+1. **1.2.0 发布前的一轮开发**——已向用户推荐下面三项（都小），**等用户选定再做**（用户倾向先做，但新会话开工前确认一句）：
+   - **H8 修复**：`clearAllVaultNumbering`（`main.ts:1388`，1411 `vault.read` / 1417 `vault.modify`）与
+     `freezeVaultNumbering`（`main.ts:1450`，1466 / 1469）改走周期 3 抽出的 `batchRewrite`（`main.ts:1628`，
+     已打开走编辑器事务、未打开走 `vault.process`），变换函数分别是 `clearNumberingContent` 与 `stripWordJoiners`。
+     **行为变化要先定案**：现在的清全库**不同步其他笔记里的链接**（只刷新快照），指向带编号标题的链接清完会断；
+     走 `batchRewrite` 会顺带同步链接（修掉这个断链，但全库清除会多出链接写入）。固化本来就全文剥 WJ（链接两侧
+     一致），走 `batchRewrite` 时变换函数要保持「全文剥 WJ」而不是只剥标题。保留两者现有的顺序约束：清库先持久关
+     `autoNumber`、全程 `vaultClearInProgress`；固化先落盘 `retired`；结束后 `refreshVirtualViews()`。testplan H8 行改 ✅。
+   - **两条借鉴命令**：「复制编号大纲」「复制当前小节链接」（spec Roadmap M12「迁移向导自动配置 + 两条借鉴命令」，
+     参考见 spec 附录 A.11 对 gurjar1 `commandRegistry.ts` 的记录）。两种模式都要能用：仅显示用
+     `virtualNumberingFor` 的 label，写入模式用标题文本剥 WJ；testplan 先登记新场景。
+   - **模板同名冲突提示**：`TemplateStore.reload`（`src/templates/TemplateStore.ts:63`）对与「默认」同名的其它文件
+     **静默跳过**（`default.json` 恒生效——用户库里的 `default(1).json` 就是 iCloud 冲突副本，被静默忽略），其它
+     同名模板则后读到的覆盖先读到的。改为发现同名时提示一次、说明哪个生效。（本会话曾对用户说「谁生效看加载
+     顺序」，对「默认」而言说错了，已当面更正。）
+   - 之后 1.3.0 的主打：内置大纲面板显示虚拟编号（M14 二期，风险在于改 Obsidian 核心大纲 DOM，要可关、失败静默）、
+     内置三套预设模板（M12）。拆 `main.ts`（约 2400 行）不单独做，改到相关代码时顺手拆。
+2. **stripPrefix 修复合进 master 后**：把 master 合进本分支（版本号保持 1.2.0；`log.md` / `status.jsonl` /
+   `testplan.md` / `release/` 按两边合并、release 重建；`doc/release-notes/1.2.0.md` 补一句该修复），跑 preflight + fuzz。
+3. **发版**（按 §5.1 合并 master + 打 `1.2.0` tag）须用户明确同意；Community Hub 索引滞后时去维护者面板点「修复」。
+4. **用户库里的测试残留**：`Claude测试/` 文件夹（基础 / 残留 / 手写编号 / 嵌入 / 大文件五篇）与路径规则第 4 行
+   `Claude测试/`（仅显示），用户可自行删除；第 3 行 `未命名/`（仅显示）是用户自己的测试规则。
+5. 操作经验已存进记忆：电脑操作实测 Obsidian 的坑（`obsidian-computer-use-testing`）、heredoc 转义坑
+   （`windows-env-quirks` 第 8 条）、部署前先核对库里版本（`deploy-release-to-icloud-vault`）。
 
 ### 验证方式
 
