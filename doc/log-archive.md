@@ -8,6 +8,32 @@
 
 ---
 
+## 2026-09-25 manifest 描述去掉「Obsidian」一词并重发 1.2.0（不 bump，交接：fix/manifest-desc-no-obsidian）
+
+### 做了什么
+
+- Community Hub 审核 1.2.0 报 Manifest 错误：description 不得含「Obsidian」一词（目录上下文已隐含，属冗余）。
+  `manifest.json` / `release/manifest.json` 的 `shown only in Obsidian or written into your notes` 改为
+  `display-only or written into your notes`，其余措辞不变。
+- 按用户要求**不 bump**，把 tag `1.2.0` 挪到修复后的 master 提交、强推重发（`release.yml` 先删同名 Release 再建，可重复触发）。
+- 此前面板的「No release matches your manifest version」是 Hub 在首跑 Release 失败的空窗期读到 manifest 所致，
+  点「Check for new releases」即可；GitHub 侧三资产 attestation 均已核实存在。
+- 本周期派发 0 次。
+
+### 没做什么
+
+- `package.json` 的中文 description 不进商店，未动；README 未改（无相关措辞）。
+
+### 下一步
+
+- 重发后在维护者面板点「Check for new releases」，确认 1.2.0 审核通过、公开页 Current version 变为 1.2.0。
+
+### 验证方式
+
+- `grep -n Obsidian manifest.json` 无命中；preflight 全绿；Release 工作流重跑成功且资产中 manifest 描述已更新。
+
+---
+
 ## 2026-09-25 CI 升到 Node 24 + 清理 worktree（1.2.0，纯基础设施不 bump，交接：master）
 
 ### 做了什么

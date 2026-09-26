@@ -1,6 +1,6 @@
 # V. 虚拟编号模式（M14，1.2.0） — dev + user
 
-> 新功能（规格见 spec.md [3.22](../spec/3.22-虚拟编号模式.md)，排期见 [Roadmap M14](../spec/5-Roadmap.md#milestone-14--虚拟编号模式仅显示不写文件)）：
+> 新功能（规格见 spec.md [3.22](../spec/3.22-虚拟编号模式.md)）：
 > 路径规则可单独选「写入文件」或「仅显示」；仅显示时编号只在编辑视图（CM6 装饰）与阅读视图（post-processor）
 > 里渲染，永不写入文件。模型 / 门控 / 清除 / 切换筛选走 dev 单测（`virtual.test.ts`、`settings` / `pathrules` /
 > `cleanup` / `main` 追加、UVM 新 oracle）；渲染的位置映射在 node 环境直接测 CM6 状态；视觉、输入法、PDF、

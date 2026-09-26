@@ -13,7 +13,8 @@ description: Auto Headings 开发与发版流程的唯一出处：testplan 先�
 4. **质量门槛**：`npm run check`（docs 守卫 + 测试 + lint + 格式，只报问题）。动编号引擎（`numbering.ts`
    家族 / `parser.ts`）后额外跑 `npm run test:fuzz`；修好已登记 bug 后放开 UVM 对应约束（约束表见
    `doc/testplan/4-UVM压测.md`），放开后仍绿才算修彻底。
-5. **回填 testplan**：场景行 🔲/❌ → ✅（+ 根因 / 备注），同步 `doc/testplan/3-已知bug汇总.md`。
+5. **回填 testplan**：场景行 🔲/❌ → ✅，状态格写修复版本 + 一句根因（单一出处）；只有找不到对应场景行的
+   bug（UVM 压测 / 集成层）才登记到 `doc/testplan/3-已知bug汇总.md`。
 6. **写 `doc/log.md` 周期块**（顶部追加）：日期 / 交接人（分支名）、做了什么、没做什么、下一步、验证方式。
 7. **`npm run preflight`**（= `npm run docs` 归档旧块 + `npm run release` 重建 `release/` + `npm run check`）。
    **先写后挪**：脚本只搬旧块，不动刚写的新块。
