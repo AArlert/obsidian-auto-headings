@@ -8,6 +8,31 @@
 
 ---
 
+## 2026-09-26 升 1.2.1 重发（Hub 不给同版本二次审核，交接：chore/release-1.2.1）
+
+### 做了什么
+
+- 上一块挪 tag 重发 1.2.0 后，Community Hub **不对同一版本号做第二次审核**，只能升版本：`npm run bump -- 1.2.1`。
+  代码无改动，与重发后的 1.2.0 仅版本号不同。
+- `scripts/bump.mjs`：`versions.json` 带 UTF-8 BOM（387d2fd 合并时引入，疑为 PowerShell 写入），`JSON.parse` 直接报错、
+  bump 半途退出留下半套改动。`readJson` 改为先 `trimStart()`（U+FEFF 属 JS 空白）；写回不带 BOM，`versions.json` 顺带修好。
+- `doc/release-notes/1.2.1.md`：商店用户从未拿到 1.2.0，故沿用 1.2.0 全文，开头加一句双语说明。
+- 本周期派发 1 次（quality-gate × 1）。
+
+### 没做什么
+
+- 1.2.0 的 tag / Release 保留不动（GitHub 上已是修好描述的版本）。
+
+### 下一步
+
+- 推 tag 1.2.1 后请用户在维护者面板点「Check for new releases」，确认审核通过、公开页 Current version 变为 1.2.1。
+
+### 验证方式
+
+- bump 输出「1.2.0 → 1.2.1」且五处同步；preflight；Release 工作流成功、资产 attestation 查询 200。
+
+---
+
 ## 2026-09-25 manifest 描述去掉「Obsidian」一词并重发 1.2.0（不 bump，交接：fix/manifest-desc-no-obsidian）
 
 ### 做了什么

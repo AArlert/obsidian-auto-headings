@@ -15,6 +15,42 @@
 
 ---
 
+## 2026-09-26 testplan 继续瘦身：长行压缩、导语去重、修 ID 撞号（不 bump，交接：claude/agent-workflow-review-b9lj22）
+
+### 做了什么
+
+- testplan 133KB → 111KB（最初 143KB），场景仍 331 条、状态分布不变（✅294 / ⚠️10 / 🔲27）。
+- **长行压缩**（场景行合计 108.7KB → 约 91KB）：37 条 >600B 的行只留「场景 + 可观察的预期 + 状态（版本、测试位置、
+  修复类一句根因）」；排查叙事、参考实现调研、版本演变链（「初版 → 一度 → 最终」）、实现细节删去——历史在
+  log-archive，设计在 spec。仍 >600B 的 18 行都是逐条列举可观察行为的真值表，保留。
+- **导语去重**：各场景组开头 / 表后的注记改为「范围 + 测试位置 + spec 指针」，删掉与 spec（§2.4 / §2.5 / §3.4 /
+  §3.6 / §3.12）或场景行状态格重复的设计说明；核心理念里的「2024 折中与 WJ 根治」历史叙述改为指向 spec §2.4 / §2.5；
+  已知 bug 文件删与场景行 / spec 重复的两段注记。
+- **修 ID 撞号**：M 组两行都叫 M18（0.7.25 竞态 bug 与「首次说明 Notice」）——后者改名 **M28**（M19 是 1.0.9 退役的
+  旧 ID，不复用）；spec §3.12 / Roadmap 里过期的「testplan M19–M26」改为 M20–M26；spec §3.13 里的「N1 同源」改为
+  TPL-refresh。
+- **spec §3.23 补到现状**：共存规则 1.0.31 起「让路还要求词典联动开着」、Q24 面板隐藏、1.1.0 候选上限只抬不降到 10——
+  此前只写在 testplan 行里。
+- 回答用户：Backlink 同步能否改属性里的链接——纯函数实测已能改（见下一步）；竞品调研完整报告已发给用户审阅。
+
+### 没做什么
+
+- 竞品结论仍未落 A.11：用户先读完报告，再一起定后续开发。
+- 属性链接未补测试、未改反查方式（见下一步）。
+
+### 下一步
+
+- 与用户共同决定后续开发（竞品结论 → A.11 + Roadmap）。
+- 属性（frontmatter）里的标题链接：`rewriteBacklinksInContent` 已会改写 YAML 里的 `[[笔记#标题]]`（实测 4 处全改），
+  但 ① 无单测覆盖；② 只在属性里引用的文件能否被半公开的 `getBacklinksForFile` 报出来须真机确认（可考虑改用公开的
+  `metadataCache.resolvedLinks` 反查）；③ YAML 字符串里的 Markdown 链接语法 Obsidian 不认，但我们也会改写并做 URL 编码。
+
+### 验证方式
+
+- `npm run preflight` 全绿；`release/` 字节不变；场景计数与改前一致；索引 / 链接守卫通过。
+
+---
+
 ## 2026-09-26 仓库与流程瘦身（不 bump，交接：claude/agent-workflow-review-b9lj22）
 
 ### 做了什么
@@ -101,28 +137,3 @@
   `release/` 重建后与提交前字节一致。
 - release.yml 的版本校验脚本本地模拟三种 tag：`1.2.1` 通过且 manifest 字节不变、`1.2.2` 以非零退出、
   `1.3.0-beta.1` 改写产物版本并带 `--prerelease`。
-
----
-
-## 2026-09-26 升 1.2.1 重发（Hub 不给同版本二次审核，交接：chore/release-1.2.1）
-
-### 做了什么
-
-- 上一块挪 tag 重发 1.2.0 后，Community Hub **不对同一版本号做第二次审核**，只能升版本：`npm run bump -- 1.2.1`。
-  代码无改动，与重发后的 1.2.0 仅版本号不同。
-- `scripts/bump.mjs`：`versions.json` 带 UTF-8 BOM（387d2fd 合并时引入，疑为 PowerShell 写入），`JSON.parse` 直接报错、
-  bump 半途退出留下半套改动。`readJson` 改为先 `trimStart()`（U+FEFF 属 JS 空白）；写回不带 BOM，`versions.json` 顺带修好。
-- `doc/release-notes/1.2.1.md`：商店用户从未拿到 1.2.0，故沿用 1.2.0 全文，开头加一句双语说明。
-- 本周期派发 1 次（quality-gate × 1）。
-
-### 没做什么
-
-- 1.2.0 的 tag / Release 保留不动（GitHub 上已是修好描述的版本）。
-
-### 下一步
-
-- 推 tag 1.2.1 后请用户在维护者面板点「Check for new releases」，确认审核通过、公开页 Current version 变为 1.2.1。
-
-### 验证方式
-
-- bump 输出「1.2.0 → 1.2.1」且五处同步；preflight；Release 工作流成功、资产 attestation 查询 200。

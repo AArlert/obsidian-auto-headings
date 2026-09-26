@@ -1,16 +1,7 @@
 # M. Backlink 同步（M7） — dev（纯函数 + 集成）+ user（Obsidian 解析手验）
 
-> 开关 `updateBacklinks` **0.7.11 起默认开**（曝光度决策，见 spec §3.12；内测期曾默认关）。编号 / 清除改写标题文本后，更新别处指向旧标题锚点的内部链接。
-> 见 spec.md §3.12。纯函数核心在 `backlinks.test.ts`，触发接线在 `main.test.ts`，往返不变量纳入 UVM（见 §4）。
->
-> **不依赖编号模板的触发路径（M19–M25，2026-07-10 落地，CR-18，见 spec §3.12「独立于编号模板的触发」，
-> 1.0.9 并入 `updateBacklinks` 单开关全局生效）**：`updateBacklinks` 开启后，文件无可用模板、或全局
-> 自动编号关且未 `fm:true` 强制时，即便 `applyRenumber` 本轮不会跑，只要标题文本对照
-> `headingSnapshots` 快照基线发生了改写，仍复用 `foldSelfBacklinks`/`syncBacklinks` 同步引用链接，
-> **跳过 `renumberContent`**（本路径永不写入编号前缀）。仍尊重文件级 frontmatter 显式 `false`（用户
-> 对该文件的「别碰」表态优先级最高）；清除全库进行中同样压制，避免批量写回期间被放大。1.0.8 曾以
-> 独立开关 `backlinkStandaloneTrigger`（默认关）opt-in 该行为，1.0.9 起随 `updateBacklinks` 默认全局
-> 生效，字段已删除。
+> 开关 `updateBacklinks` 默认开。规格见 [spec §3.12](../spec/3.12-Backlink同步.md)（含「不依赖编号模板的触发路径」，对应 M20–M26）。
+> 纯函数核心在 `backlinks.test.ts`，触发接线在 `main.test.ts`，往返不变量纳入 UVM（见 §4）。
 
 | ID | 操作 | 预期 | 状态 |
 |----|------|------|------|
@@ -31,8 +22,8 @@
 | M15 | 编号与文本**同时**改（改标题正文后防抖编号触发） | 链接同时更新编号段与文本段（一步到位） | ✅（0.7.8，快照口径天然覆盖；`main.test.ts` 白名单改名场景）|
 | M16 | 改名**同轮**还增删了标题 / 改了层级（快照结构不匹配） | **保守回退**「编号前→编号后」口径：编号侧改名仍同步，纯文本改名当轮放弃（避免按序错配） | ⚠️ 设计取舍（0.7.8，`main.test.ts` 回归；下轮编辑结构稳定后文本改名恢复可见）|
 | **M17** | **默认开**（0.7.11 曝光度决策）：新装 / 旧 data.json 缺失字段 | `DEFAULT_SETTINGS.updateBacklinks === true`；缺失字段迁移为开；显式设过 `false` 保留 | ✅（`settings.test.ts`；迁移逻辑 `main.loadSettings`）|
-| **M18** | **用户实测报告的 bug**：文件已格式化，关全局自动 + `fm:false`（编号冻结符合预期），文件正文里有指向自己标题的 `[[#锚点]]`；跑「清除编号」 | 旧版：Notice 提示「已清除编号」但文件实际未变（`vault.process` 读到本文件未落盘的旧内容、写回覆盖掉刚做的清除）——切到别的文件再切回、给足时间落盘后重跑才会成功 | ✅（0.7.25 实修：`foldSelfBacklinks` 把「引用方=本文件自身」直接对内存 `newContent` 重写、随原编号/清除同一个 `editor.transaction` 写回，不再经 `vault.process` 读盘，无竞态；`main.test.ts` 两条回归：自链接原子写回 + 竞态哨兵值不被覆盖）|
-| **M18** | **首次说明 Notice**：首次实际改写引用文件 | 弹一次较长说明（改了什么 / 不在 undo 内 / 在哪关），`backlinksIntroShown` 持久化，此后只弹常规计数 Notice | ✅（0.7.11，`main.test.ts`）|
+| **M18** | 关全局自动 + `fm:false` 的已编号文件，正文里有指向自己标题的 `[[#锚点]]`；跑「清除编号」 | 清除立即生效且与 Notice 一致，自链接随清除同一事务改写，不必切走再切回 | ✅（0.7.25：`foldSelfBacklinks`，设计见 spec §3.12；`main.test.ts` 两例；根因：`vault.process` 读到本文件未落盘的旧内容、写回覆盖了刚做的清除）|
+| **M28** | **首次说明 Notice**：首次实际改写引用文件 | 弹一次较长说明（改了什么 / 不在 undo 内 / 在哪关），`backlinksIntroShown` 持久化，此后只弹常规计数 Notice | ✅（0.7.11，`main.test.ts`）|
 | **M20** | **`updateBacklinks` 开 + 无模板**：文件无可用模板，`## 甲` 改为 `## 甲改`，别处有 `[[a#甲]]` | 不写入任何编号前缀（`renumberContent` 全程未被调用，`ed.txnCount` 反映的仅是自链接折叠）；引用链接同步为 `[[a#甲改]]` | ✅（`main.test.ts`） |
 | **M21** | **全局自动编号关且未 `fm:true`**：文件命中模板但 `autoNumber` 关、无 `fm:true` 强制，标题改名 | 不写编号（仍受全局开关约束）；链接仍同步 | ✅（`main.test.ts`） |
 | **M22** | **frontmatter `false` 优先**：`updateBacklinks` 开，文件 `fm:false`，标题改名 | 不触发（显式关闭覆盖一切自动路径，与 `shouldAutoTrigger` 对 `fm:false` 的处理口径一致） | ✅（`main.test.ts`） |
