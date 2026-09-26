@@ -13,7 +13,7 @@ description: Auto Headings 开发与发版流程的唯一出处：testplan 先�
 4. **质量门槛**：`npm run check`（docs 守卫 + 测试 + lint + 格式，只报问题）。动编号引擎（`numbering.ts`
    家族 / `parser.ts`）后额外跑 `npm run test:fuzz`；修好已登记 bug 后放开 UVM 对应约束（约束表见
    `doc/testplan/4-UVM压测.md`），放开后仍绿才算修彻底。
-5. **回填 testplan**：场景行 🔲/❌ → ✅，状态格写修复版本 + 一句根因（单一出处）；只有找不到对应场景行的
+5. **回填 testplan**：场景行 🔲/❌ → ✅，状态格写「未发版」+ 一句根因（发版时统一换成版本号，单一出处）；只有找不到对应场景行的
    bug（UVM 压测 / 集成层）才登记到 `doc/testplan/3-已知bug汇总.md`。
 6. **写 `doc/log.md` 周期块**（顶部追加）：日期 / 交接人（分支名）、做了什么、没做什么、下一步、验证方式。
 7. **`npm run preflight`**（= `npm run docs` 归档旧块 + `npm run release` 重建 `release/` + `npm run check`）。
@@ -29,7 +29,8 @@ description: Auto Headings 开发与发版流程的唯一出处：testplan 先�
 -   **发版**（只有行为 / 产物变化才发，纯文档改动不发）：
     1. `npm run bump`（补丁位 +1）/ `npm run bump minor` / `npm run bump 1.3.0`：一次同步 `manifest.json` /
        `package.json` / `package-lock.json` / `versions.json` / `release/manifest.json`；
-    2. 写 `doc/release-notes/<版本>.md`（双语，Release 工作流按 tag 取用）；
+    2. 写 `doc/release-notes/<版本>.md`（双语，Release 工作流按 tag 取用）；把 testplan 状态格里的「未发版」
+       换成该版本号（`grep -rln 未发版 doc/testplan/`）；
     3. `npm run preflight` 全绿 → 提交 → 按 §5.1 合并回 master；
     4. 在 master 上打 tag `<版本>`（不带 `v`，须与 manifest 版本一致，工作流会校验）并推送 →
        Release 工作流构建、附产物溯源证明并发布；

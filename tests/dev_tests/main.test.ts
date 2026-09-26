@@ -190,6 +190,12 @@ function makePlugin(
 		 * 目标自身（历史上只测「别的文件」），置 true 时改为**包含**目标自身，用于回归自链接场景。
 		 */
 		selfBacklink?: boolean;
+		/** 收窄 `getBacklinksForFile` 列出的引用方（模拟它漏报只在属性里引用的文件，testplan M32）。 */
+		backlinkSources?: string[];
+		/** 去掉半公开的 `getBacklinksForFile`（模拟该 API 缺失，testplan M32）。 */
+		noBacklinkApi?: boolean;
+		/** 公开 API `metadataCache.resolvedLinks` 的替身：sourcePath → { destPath: 次数 }。 */
+		resolvedLinks?: Record<string, Record<string, number>>;
 	} = {},
 ) {
 	const tplBox = { current: DEFAULT_TEMPLATE };
@@ -253,17 +259,22 @@ function makePlugin(
 			vaultFiles.set(file.path, content);
 		},
 	};
-	// 假 metadataCache：getBacklinksForFile 返回 { data: Map(sourcePath → []) }，
-	// 列出除目标外的全部假文件（rewrite 对不含匹配链接者自然 no-op）。
-	const metadataCache = {
-		getBacklinksForFile: (target: { path: string }) => {
-			const sources = [...vaultFiles.keys()].filter((p) => p !== target.path);
+	// 假 metadataCache：getBacklinksForFile 返回 { data: Map(sourcePath → []) }，默认列出除目标外的
+	// 全部假文件（rewrite 对不含匹配链接者自然 no-op）；resolvedLinks 默认缺省（M32 用例显式给）。
+	const metadataCache: {
+		getBacklinksForFile?: (target: { path: string }) => unknown;
+		resolvedLinks?: Record<string, Record<string, number>>;
+	} = { resolvedLinks: opts.resolvedLinks };
+	if (!opts.noBacklinkApi) {
+		metadataCache.getBacklinksForFile = (target: { path: string }) => {
+			const sources =
+				opts.backlinkSources ?? [...vaultFiles.keys()].filter((p) => p !== target.path);
 			if (opts.selfBacklink) {
 				sources.push(target.path);
 			}
 			return { data: new Map(sources.map((p) => [p, []])) };
-		},
-	};
+		};
+	}
 	// R 组「复制当前小节链接」：真实 Obsidian 按用户的链接设置拼装内部链接，这里只记录调用参数，
 	// 返回值本身不参与断言（命令层只关心「传给它的 file/subpath/alias 对不对」，见 main.test.ts）。
 	const generateMarkdownLink = vi.fn(
@@ -1315,6 +1326,69 @@ describe("Backlink 同步（M7，opt-in，见 spec.md §3.12）", () => {
 		// 岿然不动。若回归到旧实现（把自身也交给 vault.process），这里会被改写、且可能覆盖式地
 		// 把编辑器刚写入的内容冲掉（对应用户报告的「提示已清除但文件不变」）。
 		expect(vaultFiles.get("a.md")).toBe("STALE-ON-DISK-SENTINEL");
+	});
+});
+
+describe("属性里的链接与反查并集（testplan M29 / M32，见 spec.md §3.12）", () => {
+	const withProperty = (link: string) =>
+		["---", `related: "${link}"`, "---", "正文。"].join("\n");
+	const numberedLink = `[[a#${WORD_JOINER}1 ${WORD_JOINER}简介]]`;
+
+	it("只在属性里引用的文件：编号后属性里的链接随之更新（M29 接线）", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: { "b.md": withProperty("[[a#简介]]") },
+		});
+		p.runImmediateRenumber(new FakeEditor("## 简介"), fileInfo("a.md"));
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe(withProperty(numberedLink));
+		expect(Notice.messages).toContain("已更新 1 处内部链接");
+	});
+
+	it("getBacklinksForFile 漏报、公开的 resolvedLinks 列出：仍同步（M32）", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: { "b.md": withProperty("[[a#简介]]") },
+			backlinkSources: [],
+			resolvedLinks: { "b.md": { "a.md": 1 } },
+		});
+		p.runImmediateRenumber(new FakeEditor("## 简介"), fileInfo("a.md"));
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe(withProperty(numberedLink));
+	});
+
+	it("getBacklinksForFile 缺失：靠 resolvedLinks 照样同步（M32）", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			vaultFiles: { "b.md": "见 [[a#简介]]。" },
+			noBacklinkApi: true,
+			resolvedLinks: { "b.md": { "a.md": 1 }, "c.md": { "x.md": 1 } },
+		});
+		p.runImmediateRenumber(new FakeEditor("## 简介"), fileInfo("a.md"));
+		await flushPromises();
+		expect(vaultFiles.get("b.md")).toBe(`见 ${numberedLink}。`);
+		expect(Notice.messages).toContain("已更新 1 处内部链接");
+	});
+
+	it("两路都列出同一文件、也都列出目标自身：各只处理一次，自链接仍随主事务折叠（计数不翻倍）", async () => {
+		const { p, vaultFiles } = makePlugin({
+			updateBacklinks: true,
+			selfBacklink: true,
+			vaultFiles: { "b.md": "见 [[a#简介]]。" },
+			resolvedLinks: { "b.md": { "a.md": 2 }, "a.md": { "a.md": 1 } },
+		});
+		const ed = new FakeEditor(["## 简介", "见 [[#简介]]。"].join("\n"));
+		p.runImmediateRenumber(ed, fileInfo("a.md"));
+		await flushPromises();
+		expect(ed.getValue()).toBe(
+			[
+				`## ${WORD_JOINER}1 ${WORD_JOINER}简介`,
+				`见 [[#${WORD_JOINER}1 ${WORD_JOINER}简介]]。`,
+			].join("\n"),
+		);
+		expect(ed.txnCount).toBe(1);
+		expect(vaultFiles.get("b.md")).toBe(`见 ${numberedLink}。`);
+		expect(Notice.messages).toContain("已更新 2 处内部链接");
 	});
 });
 
