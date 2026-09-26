@@ -1,6 +1,6 @@
 # Q. 标题链接建议 + Various Complements 联动（M13，1.0.26） — dev + user
 
-> 新功能（见 spec.md [Roadmap M13](../spec/5-Roadmap.md#milestone-13--标题交叉引用自动补全--various-complements-联动)）：
+> 新功能（见 spec.md [3.23](../spec/3.23-标题链接建议与VC联动.md)）：
 > 在正文里打出与 vault 内标题原文匹配的文字时弹出建议，接受后替换为指向该标题的链接；联动 Various
 > Complements 把标题索引喂给其自定义词典补全。索引/触发/联动逻辑全部 dev 单测覆盖
 > （`headingindex.test.ts` / `headingtrigger.test.ts` / `vcintegration.test.ts` + `main.test.ts` 追加），

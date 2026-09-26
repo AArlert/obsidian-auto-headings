@@ -58,7 +58,7 @@
    任何下游都能照办**的《标记字符契约》（→ `doc/marker-contract.md`，英文，因为受众是下游开发者）。
    **M13 已部分消解（1.0.27 生效）**：本插件的 Various Complements 联动侧主动规避——喂给 VC 词典的
    `displayed`（匹配/展示）字段是未归一化、不含 WJ 的干净标题文本，WJ 只存在于写入链接的锚点里
-   （供 Obsidian 按字节解析），VC 的精确匹配不再被 WJ 打穿（见 [Milestone 13](./5-Roadmap.md#milestone-13--标题交叉引用自动补全--various-complements-联动)）。
+   （供 Obsidian 按字节解析），VC 的精确匹配不再被 WJ 打穿（见 [Milestone 13](./3.23-标题链接建议与VC联动.md)）。
 2. **WJ 没有命名空间。** 参考来源 gurjar1/auto-heading-obsidian 也用 U+2060。两插件共存（或用户
    从它迁移）时，对方写的 WJ 可能被本插件的 `stripPrefix` 认作自家边界——低概率，但一旦发生就是
    "插件互相吃对方编号"的诡异现象，且用户完全无法诊断。至少登记 testplan 共存场景 + README 提示
