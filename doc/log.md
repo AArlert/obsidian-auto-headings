@@ -1,43 +1,68 @@
 # obsidian-auto-headings 开发日志与协作交接
 
-本文件用于多 agent / 多人协作的**握手交接**：每个开发周期结束时，记录「做了什么、
-没做什么、下一步干嘛」，让接手者无需通读全部代码即可继续。倒序排列（最新在最上）。
+本文件用于多 agent / 多人协作的**握手交接**：每个开发周期结束时，记录「做了什么、没做什么、
+下一步干嘛」，让接手者无需通读全部代码即可继续。倒序排列（最新在最上），当前状态与下一步以
+最新一块为准。
 
-**接手前怎么读**（见根 [`CLAUDE.md`](../CLAUDE.md) §3）：第一条命令跑 **`npm run docs -- --handover`**，
-一次打印「status 首行总览 + 本文件最新块 + testplan 待办摘要」；需要更早来龙去脉时才按需翻
-[`log-archive.md`](./log-archive.md)，**不必从头通读**。
+**接手**：第一条命令跑 **`npm run docs -- --handover`**（见根 [`CLAUDE.md`](../CLAUDE.md) §3），一次打印
+「当前版本 + 本文件最新块 + 近期周期索引 + testplan 待办」；更早的来龙去脉按需翻
+[`log-archive.md`](./log-archive.md)，**不必从头通读**。周期块何时写、写什么，见
+[`dev-cycle` 技能](../.claude/skills/dev-cycle/SKILL.md)（流程的唯一出处）。
 
-> 配套文档：完整需求与功能规格见 [`spec.md`](./spec.md)（含 7 个 Milestone 的 Roadmap）；
-> 面向读者的简介见上一级 [`../README.md`](../README.md)。
->
-> **注**：本日志**历史条目**中出现的「README §X.Y」均指原规格文档——它已更名为 `spec.md`
-> （章节号不变），请按 `spec.md` 对应章节查阅。
+> **注**：历史条目中出现的「README §X.Y」均指原规格文档（已更名为 `spec.md`，章节号不变）；
+> 2026-09-26 起 spec / testplan 拆成「顶层索引 + 分节文件」，此前条目里的 `spec.md#锚点`、
+> `testplan.md` 行号指当时的单文件，请按 § 号 / 场景 ID 查 [`spec.md`](./spec.md)、[`testplan.md`](./testplan.md) 索引。
 
 ---
 
-## ⚠️ 强制规则（所有 Agent 必须遵守）
+## 2026-09-26 仓库重构：spec / testplan 拆分、停用 status、发版才 bump + BRAT beta（不 bump，交接：claude/agent-workflow-review-b9lj22）
 
-1. **每个开发周期都必须产出可供 Obsidian 实测的插件**，放在仓库的 **`release/`** 文件夹。
-   完成代码改动后，**务必运行 `npm run release`**（= `npm run build` + 同步脚本），它会把
-   `main.js` / `manifest.json` / `styles.css` 刷新进 `release/`。**不要只改源码而忘记重新生成
-   `release/`**——用户是直接拿 `release/` 里的文件丢进 `.obsidian/plugins/` 实测的。
-2. **`release/` 必须随提交一起入库**（`.gitignore` 已对 `release/main.js` 设例外放行）。
-   提交前自检：`git status` 应能看到 `release/` 下的文件已更新/已暂存。
-3. 改动若影响行为或版本，**跑 `npm run bump`** 一键同步版本号（`package.json` / `manifest.json` /
-   `package-lock.json` / `versions.json` / `release/manifest.json`），并在本文件**最上方追加一条新的周期记录**。
-4. 写完新周期块后**跑 `npm run docs`**：归档旧周期块进 `log-archive.md`（只保留最新 3 块）、
-   滚动 `status.jsonl`（首行外只留最新 12 行，更旧滚入 `status-archive.jsonl`）、打印 testplan
-   摘要、校验下方「目录结构约定」块与磁盘一致（新增/拆分源码文件必须回填目录树，否则
-   `--check` 拦提交）。**先写新块、后跑脚本**——脚本只搬旧块，不碰你刚写的块。
-5. 合并前的质量门槛：`npm test`、`npm run lint`、`npm run format:check` 全绿。
+### 做了什么
 
-> **省 token 读盘**：接手跑 `npm run docs -- --handover` 一条命令即可（更早历史翻 `log-archive.md`）。
-> 源码已按职责拆分（编号引擎 = `template` / `count` / `render` / `strip` / `whitelist` + `numbering` 编排兼
-> barrel，外部一律从 `./numbering` 导入；设置 GUI = `SettingsTab.ts` 壳 + `settings/tabs/` 七个 TAB，
-> 均可整读）；仍大的 `main.ts`（~2600 行）与 `i18n.ts`（~1100 行）先 `grep` 定位、别整读。
-> UVM 压测框架（`tests/dev_tests/uvm/`）已按职责拆成 9 个文件、均可整读，入口仍是 `framework.ts`。
+- **1.2.1 已过审上架**（用户 2026-09-26 确认）。
+- 流程评审后按用户拍板重构仓库。不 bump，插件行为零改动，`release/` 与提交前字节一致：
+  - **spec 拆分**：`doc/spec.md` 改为顶层索引，正文拆进 `doc/spec/` 37 个分节文件（文件名 = 节号-短名；
+    节号即稳定引用 ID，代码注释里的「spec §3.22」照旧可查）。
+  - **testplan 拆分 + 瘦身**：`doc/testplan.md` 改为顶层索引，场景组 A–V 一组一文件，另有 0/1/3/4 章。
+    删「维护工作流程」章（与 dev-cycle 重复；「写场景的要诀」挪进核心理念）；UVM 章删掉已落地的缺口清单 /
+    设计草图 / 分阶段史（历史在 log-archive），约束表与 `tests/dev_tests/uvm/README.md` 去重——README
+    管「怎么用」，testplan 管「验证了什么」。场景行本身一行未动。
+  - 搬家由一次性脚本完成：逐行比对 spec 2076 行 / testplan 658 行正文零差异；搬家前先修了 9 处本就失效的
+    链接（§3.20 / §3.21 锚点与 GitHub 实际渲染不符、「白名单（3.6）」指错节、使用指南 LICENSE 路径）。
+  - **停用 `status.jsonl` / `status-archive.jsonl`**：版本看 manifest，现状与下一步只写在 log 最新块。
+  - **`scripts/docs.mjs`**：handover 改为「版本 + log 最新块 + 近期周期索引 + testplan 待办」；新增三道守卫——
+    索引 ↔ 分节文件双向一致且节号唯一、文档相对链接与锚点可解析（slug 算法对照 GitHub 渲染的 143 个标题校准）、
+    目录树（已从 log.md 挪到 `doc/spec/4-架构设计.md`）。
+  - **单一来源清理**：log.md 三个常青块迁出（强制规则 → dev-cycle，目录结构 → spec §4，安装说明 → spec §7.2）；
+    竞品下载量集中到 spec A.11「下载量快照」；Roadmap 状态订正（M14、M13 标 ✅）；testplan 节号引用订正
+    （U 组 bug 在 §3.3、WL-int 在 §3.4）；CLAUDE.md §3.1 文档表、repo-scout 过期尺寸、bump.mjs 注释同步。
+  - **流程**：版本号只在发版时 bump；真机（含手机）实测走 BRAT beta——`release.yml` 对 `X.Y.Z-beta.N`
+    tag 只改产物里的 manifest 版本并发 pre-release，正式 tag 与 manifest 版本不一致即失败（spec §7.3、
+    dev-cycle「版本号与发版」）；SubAgent 改为「输出长才派」，不再记派发次数；新增 `npm run check`
+    （docs 守卫 + dot 格式测试 + lint + 格式，只报问题），preflight 改为 docs + release + check。
+- 竞品调研交给 sonnet 子代理，原始报告在本地 `doc/research/2026-09-26-新竞品调研.md`（不入库）：
+  找到约 14 个文档里没有的竞品 / 近邻，结论待与用户讨论后再落 A.11。
+- 子代理使用：quality-gate × 1（门槛计时；实测绿灯路径派发反而更费）、general-purpose/sonnet × 1（竞品调研）。
 
-> 一句话：**改代码 → `npm run bump` → 写本文件新块 + `status.jsonl` → `npm run preflight`（= docs + release + test + lint + format:check）→ 提交（含 `release/`）。**
+### 没做什么
+
+- testplan 更深的瘦身（§3.1 已修 bug 表与场景行合并、行内版本史压缩）改动的是真值表本身，留待用户拍板。
+- 竞品调研结论未落 A.11，Roadmap 未按调研重排（下一周期先讨论）。
+- spec 索引开头的定位导语未改（用户：定位措辞不用管）。
+- 未引入官方 `eslint-plugin-obsidianmd`（需 ESLint 8→9，另起周期）；`main.ts`（2634 行）未拆。
+
+### 下一步
+
+- 与用户讨论竞品调研结论 → 落 A.11 + 重排 Roadmap（候选：Number Headings 迁移向导、信任包小件、
+  官方 lint、拆 `main.ts`）。
+- 下次需要真机实测时首跑 BRAT beta 通道（推 `X.Y.Z-beta.1` tag），验证 release.yml 的预发布分支。
+
+### 验证方式
+
+- `npm run preflight` 全绿：docs 守卫（索引 / 链接 / 目录树）+ 23 个测试文件 788 个用例 + lint + 格式；
+  `release/` 重建后与提交前字节一致。
+- release.yml 的版本校验脚本本地模拟三种 tag：`1.2.1` 通过且 manifest 字节不变、`1.2.2` 以非零退出、
+  `1.3.0-beta.1` 改写产物版本并带 `--prerelease`。
 
 ---
 
@@ -89,122 +114,3 @@
 ### 验证方式
 
 - `grep -n Obsidian manifest.json` 无命中；preflight 全绿；Release 工作流重跑成功且资产中 manifest 描述已更新。
-
----
-
-## 2026-09-25 CI 升到 Node 24 + 清理 worktree（1.2.0，纯基础设施不 bump，交接：master）
-
-### 做了什么
-
-- `ci.yml` / `release.yml`：`node-version` 20 → 24，`actions/checkout`、`actions/setup-node` v4 → v5（v4 跑在已弃用的
-  Node 20 运行时上，Actions 每次都告警）。CI 与本机同为 npm 11，1.2.0 那种「本机锁文件 CI 不认」的错位随之消失；
-  现有锁文件（npm 10 兼容版）本机 npm 11 `npm ci` 已验证可用。
-- 清理本机 worktree：两个 feature-coder 的 `agent-*`（已合并）与 `obsidian-auto-headings-wjfix`（占着 master）；
-  删掉已合并的本地分支 `claude/h8-batch-rewrite`、`claude/copy-commands`、`worktree-agent-*`；主工作区切回 master。
-  `obsidian-auto-headings-pr8-review` 有未提交改动，未动。
-- 本周期派发 0 次。
-
-### 没做什么
-
-- 未动 `attest-build-provenance@v2`；未把锁文件改用 npm 11 重算（现版本两边都能用，无需折腾）。
-
-### 下一步
-
-- 同上一块：确认 Community Hub 跟上 1.2.0；1.3.0 候选见上一块。
-
-### 验证方式
-
-- 推 master 后 CI 在 Node 24 下全绿（见本块提交后的 CI 运行）。
-
----
-
-## 目录结构约定（按职责分类）
-
-```
-obsidian-auto-headings/
-├── src/                  ← 源代码（TypeScript）
-│   ├── main.ts             插件入口：生命周期、命令、防抖、事务写回、Backlink 同步接线
-│   ├── parser.ts           Markdown 标题解析（ATX；跳过区域判定委托 scan.ts）
-│   ├── scan.ts             跳过区域扫描器：围栏代码块 + 注释块（%%…%% / <!-- -->），parser 与 numbering 共用
-│   ├── numbering.ts        编号引擎编排（numberHeadings/renumberContent）+ 对外 barrel（↓四模块经它转发）
-│   ├── template.ts         模板数据模型：类型/默认值/字段规范化
-│   ├── count.ts            计数器状态机 HeadingCounter
-│   ├── render.ts           序号渲染器 + 前缀拼装 buildPrefix + 面板预览
-│   ├── strip.ts            三个剥离器（WJ 边界/清除全样式/清理外来）+ WORD_JOINER + stripWordJoiners
-│   ├── whitelist.ts        白名单归一化/命中判定/面板预览分析
-│   ├── backlinks.ts        Backlink 同步纯函数核心（改名表/锚点归一/链接重写）
-│   ├── cleanup.ts          清除编号命令的内容级封装
-│   ├── clipboard.ts        剪贴板净化纯逻辑（WJ 剥离/换行规范化/净化→原文 LRU，spec §2.8）
-│   ├── headingindex.ts     标题索引（M13：剥前缀原文 → 位置，排序数组 + 二分查找，增量维护）
-│   ├── headingtrigger.ts   标题链接建议的触发边界/上下文屏蔽/排序/链接构造（纯函数，M13）
-│   ├── headingsuggest.ts   标题链接建议 EditorSuggest 薄适配层（M13，DOM/CM6 交互留真机手验）
-│   ├── vcintegration.ts    Various Complements 联动（探测/词典生成/分层防御写入，M13）
-│   ├── pathrules.ts        路径规则 → 模板 / 编号模式解析（纯函数）
-│   ├── frontmatter.ts      单文件开关（obsidian-auto-headings: true/false）读取
-│   ├── i18n.ts             中英双语文案（Messages 接口 + zh/en 两套）
-│   ├── copycommands.ts     「复制编号大纲」「复制当前小节链接」两条命令的纯逻辑（R 组，spec §A.11）
-│   ├── virtual/            虚拟编号模式（M14，只显示不写文件，spec §3.22）
-│   │   ├── compute.ts      纯逻辑：每个标题的显示编号 + 残留前缀区间 + 自动路径门控 resolveNumberingAction
-│   │   ├── editorExtension.ts 编辑视图：CM6 ViewPlugin + 编号 widget + 重算信号（纯函数 buildVirtualDecorations）
-│   │   ├── readingView.ts  阅读视图：markdown post-processor + 缓存 + 兜底匹配
-│   │   ├── outlineView.ts  内置大纲面板：条目上挂属性 + CSS 画编号，MutationObserver 跟大纲刷新（1.2.0）
-│   │   └── modeSwitch.ts   规则变动引起的模式切换：改动前后逐文件比较有效模式（纯函数）
-│   ├── settings/
-│   │   ├── model.ts        设置数据模型（全局开关、防抖延迟、路径规则持久化）
-│   │   ├── SettingsTab.ts  设置 GUI 壳：TAB 栏 + 分发（内容在 tabs/，M7 多 TAB 已拆完）
-│   │   ├── ForeignNumberingCleanupModal.ts 迁移守卫 Notice 点击入口：清理预览确认框（testplan J14）
-│   │   └── tabs/           七个 TAB 的实现 + M13 联动设置区（VcIntegrationSection，挂在 GeneralTab 末尾）
-│   │       ├── GeneralTab.ts      常规设置（全局开关、防抖、语言、Backlink 开关、标题链接建议开关；复制净化 1.0.16 起恒开无开关）
-│   │       ├── TemplatesTab.ts    模板列表（自绘 header：折叠/命名/删除）
-│   │       ├── EditPanel.ts       模板编辑面板（级别格式网格 + 跳级/占位字符）
-│   │       ├── WhitelistEditor.ts 白名单行编辑器（分段控件/行内编辑/命中角标）
-│   │       ├── PathRules.ts       路径规则表（拖拽排序/建议弹窗/根规则/删模板确认）
-│   │       ├── PathSuggest.ts     路径建议弹窗组件（非 TAB，供 PathRules.ts 用，1.0.4）
-│   │       ├── VcIntegrationSection.ts VC 联动三态选择器 + 手动/自动两个确认 Modal（M13）
-│   │       ├── DangerTab.ts       敏感操作（清除全库编号）
-│   │       └── AboutTab.ts        关于/帮助/鸣谢
-│   └── templates/
-│       ├── schema.ts       模板 schema 校验/序列化/文件名安全化
-│       └── TemplateStore.ts 模板文件 CRUD（vault adapter 读写 templates/*.json）
-├── tests/                ← 测试
-│   ├── dev_tests/          自动化单元测试（Vitest，无需 Obsidian 运行时，npm test 跑它）+ uvm/ 压测框架
-│   └── user_tests/         可复制粘贴进 Obsidian 实测的 .md 样例（每个对应 testplan 某场景）
-├── README.md / README.zh.md ← 商店门面（卖点 + 上手 + 命令 + FAQ，技术细节下沉 doc/user-guide*.md）
-├── doc/                  ← 文档（spec/testplan/log/log-archive/status/status-archive + user-guide(.zh).md 面向用户的完整使用指南 + marker-contract 下游契约 + release-notes/ 各版本发布说明（Release 工作流按 tag 取用），见 CLAUDE.md §3.1；grill 方向审查已收编为 spec 附录 A；research/ 本地调研留档、.gitignore 排除不入库，见该目录 README.md）
-├── release/              ← 可分发插件文件（main.js/manifest/styles/README；zip 本地生成不入库）★每周期必更新
-├── scripts/
-│   ├── sync-release.mjs    把构建产物同步到 release/（被 npm run release 调用）
-│   ├── bump.mjs            一键版本号同步（npm run bump）
-│   ├── fuzz.mjs            跨平台跑重型随机压测（npm run test:fuzz [-- --runs=/--ops=/--seed=]）
-│   └── docs.mjs            文档维护：归档/滚动/摘要/守卫/交接（npm run docs [-- --handover|--check]）
-├── .claude/
-│   ├── agents/             SubAgent 定义（quality-gate / repo-scout / mech-editor / feature-coder）
-│   └── skills/dev-cycle/   开发周期完整清单（十步 + 版本号规则；根 CLAUDE.md §4 只留一句话流程 + 指针）
-├── manifest.json         ← 插件清单（Obsidian 约定须在插件根目录）
-├── versions.json         ← 版本 → 最低 Obsidian 版本映射
-├── styles.css            ← 面板样式源（构建时随插件加载，并复制入 release/）
-├── package.json / tsconfig.json / esbuild.config.mjs / vitest.config.ts
-├── .eslintrc.json / .prettierrc.json / .eslintignore / .prettierignore
-└── LICENSE
-```
-
-构建/工具配置文件按惯例留在项目根（Obsidian 与 esbuild/tsc 默认从此处寻找）。
-
----
-
-## 如何安装到 Obsidian 测试
-
-将 `release/` 下的三个文件复制到你的 Vault：
-
-```
-<你的 Vault>/.obsidian/plugins/auto-headings/
-├── main.js
-├── manifest.json
-└── styles.css
-```
-
-然后在 Obsidian：设置 → 第三方插件 → 启用 `Auto Headings`。首次启用会在该插件文件夹下
-自动创建 `templates/default.json`。
-
-> 重新生成产物：在项目根运行 `npm install && npm run release`，脚本会自动把
-> `main.js`、`manifest.json`、`styles.css` 同步进 `release/`。

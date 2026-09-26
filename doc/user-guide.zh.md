@@ -228,4 +228,4 @@ Number Headings 已长期停止维护（约 2.5 年无更新）。迁移到本�
 
 ## 许可
 
-[MIT](LICENSE)
+[MIT](../LICENSE)

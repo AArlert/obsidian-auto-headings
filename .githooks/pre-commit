@@ -1,9 +1,9 @@
 #!/bin/bash
-# pre-commit 钩子：防止 doc/log.md 再次膨胀。
+# pre-commit 钩子：文档守卫。
 #
-# 若 log.md 的周期块数超过保留上限（即写了新块却忘了归档），
-# `node scripts/docs.mjs --check` 以非零退出，拦下本次提交。
-# 修复办法：跑 `npm run docs` 归档旧块，`git add` 后重新提交。
+# `node scripts/docs.mjs --check` 任一项不过即非零退出，拦下本次提交：
+#   - log.md 周期块超过保留上限（写了新块却忘了归档）→ 跑 `npm run docs` 后 `git add` 重提；
+#   - 索引 ↔ 分节文件不一致、相对链接 / 锚点失效、目录树与磁盘不符 → 按报错手动修缮对应文件。
 #
 # 启用方式（已由 .claude/hooks/session-start.sh 在远程会话自动设置）：
 #   git config core.hooksPath .githooks

@@ -8,7 +8,7 @@ set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
-# 启用共享 git 钩子（.githooks/pre-commit：防 doc/log.md 膨胀的文档守卫）。
+# 启用共享 git 钩子（.githooks/pre-commit：文档守卫——log 归档、索引、链接、目录树）。
 # 本地与远程会话都启用——只是设个 git 配置，轻量且安全。
 if [ -d "$PROJECT_DIR/.githooks" ]; then
 	git -C "$PROJECT_DIR" config core.hooksPath .githooks || true
