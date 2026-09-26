@@ -1,11 +1,7 @@
 # P. 继承级数 inheritDepth（1.0.22，社区 PR #7） — dev + user
 
-> 每级新增的**可选**字段：`inherit=true` 时最多往上继承多少个祖先段。缺省 / `null` = 继承到
-> `topLevel`（= 1.0.21 及以前的唯一行为，**全部老模板零迁移**）。截取起点
-> `startLevel = max(topLevel, level - inheritDepth)`——**永不越过 `topLevel`**，深度填多大都只是被夹住。
-> 数值按**物理层级**存储、不随 `topLevel` 改写：改了起始层级再改回来，用户填的深度还在。
-> 与 `inherit=false` 正交：关了继承就整段不看 depth（值仍保留在模板里，重新打开即恢复）。
-> 详见 [`spec.md` §3.6](../spec/3.6-模板系统.md)。全部 dev 断言在 `dev_tests/inherit-depth.test.ts`。
+> 每级可选字段 `inheritDepth`：`inherit=true` 时最多往上继承几个祖先段，永不越过 `topLevel`，缺省 = 继承到 `topLevel`（老模板零迁移）。
+> 规格见 [spec §3.6](../spec/3.6-模板系统.md)；dev 断言全在 `dev_tests/inherit-depth.test.ts`。
 
 | ID | 操作 | 预期 | 状态 |
 |----|------|------|------|
