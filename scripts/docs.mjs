@@ -32,7 +32,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const docDir = join(root, "doc");
 const LOG = join(docDir, "log.md");
 const ARCHIVE = join(docDir, "log-archive.md");
-const TESTPLAN = join(docDir, "testplan.md");
+const TESTPLAN_DIR = join(docDir, "testplan");
 const STATUS = join(docDir, "status.jsonl");
 const STATUS_ARCHIVE = join(docDir, "status-archive.jsonl");
 
@@ -199,60 +199,50 @@ function rollStatus() {
 }
 
 /**
- * 取 testplan「## 2. 场景清单」区间的行（含行号偏移）。
- * 只在该区间统计真值表——§0 图例 / §3 已知 bug / §4 UVM 覆盖表里的 ✅/❌ 是说明或另类登记，
- * 不是场景行，计入会产生误报（曾把 §0.1 读者表的「❌ = 已知 bug…」当成一条待修场景）。
+ * 场景组文件：doc/testplan/ 下以大写字母开头的文件（`A-基础编号.md` …）。
+ * 数字开头的是使用说明 / 核心理念 / 已知 bug / UVM 章——其中的 ✅/❌ 是说明或另类登记，
+ * 不是场景行，计入会产生误报（曾把图例表的「❌ = 已知 bug…」当成一条待修场景）。
  */
-function scenarioSlice(lines) {
-	let start = -1;
-	let end = lines.length;
-	for (let i = 0; i < lines.length; i++) {
-		if (start < 0 && /^## 2\./.test(lines[i])) {
-			start = i;
-			continue;
-		}
-		if (start >= 0 && /^## /.test(lines[i])) {
-			end = i;
-			break;
-		}
-	}
-	if (start < 0) {
-		console.warn(`[testplan] ⚠ 未找到「## 2.」场景清单标题，退回整读全文统计。`);
-		return { offset: 0, lines };
-	}
-	return { offset: start, lines: lines.slice(start, end) };
+function scenarioFiles() {
+	if (!existsSync(TESTPLAN_DIR)) return [];
+	return readdirSync(TESTPLAN_DIR)
+		.filter((f) => /^[A-Z]-.*\.md$/.test(f))
+		.sort();
 }
 
 function reportTestplan() {
-	if (!existsSync(TESTPLAN)) {
-		console.log(`[testplan] 无 ${TESTPLAN}，跳过。`);
+	const files = scenarioFiles();
+	if (files.length === 0) {
+		console.log(`[testplan] ${TESTPLAN_DIR} 下无场景组文件，跳过。`);
 		return;
 	}
-	const all = readFileSync(TESTPLAN, "utf8").split("\n");
-	const { offset, lines } = scenarioSlice(all);
 	const counts = Object.fromEntries(MARKERS.map((m) => [m, 0]));
 	const outstanding = [];
-	lines.forEach((line, i) => {
-		if (!line.startsWith("|")) return;
-		const cells = line.split("|").map((c) => c.trim());
-		const last =
-			cells[cells.length - 1] === "" ? cells[cells.length - 2] : cells[cells.length - 1];
-		if (!last) return;
-		const marker = MARKERS.find((m) => last.startsWith(m));
-		if (!marker) return;
-		// 场景行的首格是 ID（如 A1 / **L25**）；表头、分隔行、说明行都不计。
-		const id = (cells[1] || "").replace(/\*/g, "");
-		if (!/^[A-Za-z][\w-]*\d/.test(id)) return;
-		counts[marker]++;
-		if (marker !== "✅") {
-			outstanding.push(`  L${offset + i + 1} ${marker} ${id}`);
-		}
-	});
+	for (const f of files) {
+		readFileSync(join(TESTPLAN_DIR, f), "utf8")
+			.split("\n")
+			.forEach((line, i) => {
+				if (!line.startsWith("|")) return;
+				const cells = line.split("|").map((c) => c.trim());
+				const last =
+					cells[cells.length - 1] === ""
+						? cells[cells.length - 2]
+						: cells[cells.length - 1];
+				if (!last) return;
+				const marker = MARKERS.find((m) => last.startsWith(m));
+				if (!marker) return;
+				// 场景行的首格是 ID（如 A1 / **L25**）；表头、分隔行、说明行都不计。
+				const id = (cells[1] || "").replace(/\*/g, "");
+				if (!/^[A-Za-z][\w-]*\d/.test(id)) return;
+				counts[marker]++;
+				if (marker !== "✅") outstanding.push(`  ${marker} ${id}  testplan/${f}:${i + 1}`);
+			});
+	}
 	const total = Object.values(counts).reduce((a, b) => a + b, 0);
 	console.log(
-		`[testplan] §2 场景 ${total} 条：` +
+		`[testplan] 场景 ${total} 条（${files.length} 个场景组文件）：` +
 			MARKERS.map((m) => `${m}${counts[m]}`).join(" / ") +
-			"（§3 已知 bug / §4 UVM 覆盖表另行登记，不计入）",
+			"（已知 bug / UVM 覆盖表另行登记，不计入）",
 	);
 	if (outstanding.length) {
 		console.log(
