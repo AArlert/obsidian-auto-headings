@@ -2,11 +2,11 @@
  * 一条命令同步全部版本号文件，消灭「手改 4~5 处」的机械开销。
  *
  * 用法：
- *   node scripts/bump.mjs            # 打磨递增：0.6.7 → 0.6.8（bump `*`）
- *   node scripts/bump.mjs minor      # 进入新 Milestone：0.6.7 → 0.7.0（bump M，`*` 归零）
- *   node scripts/bump.mjs 0.7.3      # 显式指定版本
+ *   node scripts/bump.mjs            # 补丁位 +1：1.2.1 → 1.2.2
+ *   node scripts/bump.mjs minor      # 次版本 +1、补丁位归零：1.2.1 → 1.3.0
+ *   node scripts/bump.mjs 1.3.0      # 显式指定版本
  *
- * 版本号语义见根 CLAUDE.md §4.1：格式 `0.M.*`，M=当前 Milestone，`*` 在里程碑内递增。
+ * 只在发版时跑（开发周期不 bump）；何时发版、beta 怎么发，见 .claude/skills/dev-cycle/SKILL.md「版本号与发版」。
  *
  * 同步以下文件（单一真相源 = manifest.json 的当前版本）：
  *   - package.json            version
@@ -34,7 +34,7 @@ const manifest = readJson("manifest.json");
 const cur = manifest.version;
 const m = cur.match(/^(\d+)\.(\d+)\.(\d+)$/);
 if (!m) {
-	console.error(`manifest.json 版本号格式异常：${cur}（应为 0.M.*）`);
+	console.error(`manifest.json 版本号格式异常：${cur}（应为 X.Y.Z）`);
 	process.exit(1);
 }
 const [major, milestone, patch] = m.slice(1).map(Number);
@@ -48,7 +48,7 @@ if (!arg || arg === "patch") {
 } else if (/^\d+\.\d+\.\d+$/.test(arg)) {
 	next = arg;
 } else {
-	console.error(`无法识别的参数：${arg}（用 patch / minor / 显式版本如 0.7.0）`);
+	console.error(`无法识别的参数：${arg}（用 patch / minor / 显式版本如 1.3.0）`);
 	process.exit(1);
 }
 

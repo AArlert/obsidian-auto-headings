@@ -2,6 +2,35 @@
 
 > 本文件是 `log.md` 滚动出去的**历史周期块**（倒序，新的在上）。平时不必读；
 > 需要某次改动的来龙去脉时再来翻。当前活跃日志见 [`log.md`](./log.md)。
+>
+> 2026-09-26 起 spec / testplan 拆成「顶层索引 + 分节文件」：此前条目里的 `spec.md#锚点`、
+> `testplan.md` 行号指当时的单文件，请按 § 号 / 场景 ID 查 `doc/spec.md`、`doc/testplan.md` 索引。
+
+---
+
+## 2026-09-25 CI 升到 Node 24 + 清理 worktree（1.2.0，纯基础设施不 bump，交接：master）
+
+### 做了什么
+
+- `ci.yml` / `release.yml`：`node-version` 20 → 24，`actions/checkout`、`actions/setup-node` v4 → v5（v4 跑在已弃用的
+  Node 20 运行时上，Actions 每次都告警）。CI 与本机同为 npm 11，1.2.0 那种「本机锁文件 CI 不认」的错位随之消失；
+  现有锁文件（npm 10 兼容版）本机 npm 11 `npm ci` 已验证可用。
+- 清理本机 worktree：两个 feature-coder 的 `agent-*`（已合并）与 `obsidian-auto-headings-wjfix`（占着 master）；
+  删掉已合并的本地分支 `claude/h8-batch-rewrite`、`claude/copy-commands`、`worktree-agent-*`；主工作区切回 master。
+  `obsidian-auto-headings-pr8-review` 有未提交改动，未动。
+- 本周期派发 0 次。
+
+### 没做什么
+
+- 未动 `attest-build-provenance@v2`；未把锁文件改用 npm 11 重算（现版本两边都能用，无需折腾）。
+
+### 下一步
+
+- 同上一块：确认 Community Hub 跟上 1.2.0；1.3.0 候选见上一块。
+
+### 验证方式
+
+- 推 master 后 CI 在 Node 24 下全绿（见本块提交后的 CI 运行）。
 
 ---
 

@@ -1,4 +1,4 @@
-# V. 虚拟编号模式（M14，开发中） — dev + user
+# V. 虚拟编号模式（M14，1.2.0） — dev + user
 
 > 新功能（规格见 spec.md [3.22](../spec/3.22-虚拟编号模式.md)，排期见 [Roadmap M14](../spec/5-Roadmap.md#milestone-14--虚拟编号模式仅显示不写文件)）：
 > 路径规则可单独选「写入文件」或「仅显示」；仅显示时编号只在编辑视图（CM6 装饰）与阅读视图（post-processor）

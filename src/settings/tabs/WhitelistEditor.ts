@@ -254,7 +254,7 @@ export function renderWhitelistEditor(
 	renderRows();
 
 	// —— 模板不一致警示（修复 WL-int：预览用「正在编辑的模板」，但文件实际按路径规则解析到的
-	// 可能是另一个模板；不提示会让「预览说豁免、文件却被编号」显得是 bug，见 testplan §3.3）——
+	// 可能是另一个模板；不提示会让「预览说豁免、文件却被编号」显得是 bug，见 testplan §3.4）——
 	if (headings.length > 0) {
 		const appliedTpl = plugin.getTemplateForFile(plugin.currentFilePath());
 		if (!appliedTpl) {

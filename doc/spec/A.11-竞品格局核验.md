@@ -44,3 +44,12 @@
 对手 gurjar1 桌面端限定，本插件移动端可用（**不可写成"唯一"或"独占"**——2026-08-09 复核：其余四家
 manifest 均为 `isDesktopOnly: false`，此处原文曾误写为"活跃竞品中唯一移动端可用"，属会被当场证伪的
 过度承诺，已订正）；③ Header Enhancer 的反链维护不覆盖用户改名，"改名不断链"仍是独家卖点。
+
+## 下载量快照
+
+竞品下载量的**唯一出处**（`community-plugin-stats.json` 口径，按日期追加，不回改旧行）；其他章节只链接本节、不写数字。
+
+| 日期 | 数据 |
+|------|------|
+| 2026-07-18 | number-headings-obsidian 86,725（停更 2023-10）；header-enhancer 10,604；obsidian-title-serial-number-plugin 7,908；auto-heading（gurjar1）871；auto-numbered-headings 333；本插件 107 |
+| 2026-09-25 | heading-decorator 5,388；auto-heading（gurjar1）2,406；number-suite 355；heading-keeper 54（原载 [3.22](./3.22-虚拟编号模式.md)） |

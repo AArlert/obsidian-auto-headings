@@ -19,7 +19,7 @@ jobs:
                   cache-dependency-path: package-lock.json
             - name: 安装依赖
               run: npm ci
-            - name: 文档守卫（log 归档 / status 校验）
+            - name: 文档守卫（log 归档 / 索引 / 链接 / 目录树）
               run: node scripts/docs.mjs --check
             - name: 单元测试（含 UVM 默认压测）
               run: npm test

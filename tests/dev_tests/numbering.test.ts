@@ -1301,7 +1301,7 @@ describe("结束编号层级 bottomLevel（M6：编号区间下界）", () => {
 	});
 });
 
-describe("U4：标题正文含 WJ 后前导空白时幂等（回归，testplan §3.2）", () => {
+describe("U4：标题正文含 WJ 后前导空白时幂等（回归，testplan §3.3）", () => {
 	// 根因：stripPrefix 按 WJ 精确剥离后，正文带前导空格（来自脏编辑/破坏前缀的残留）。
 	// 白名单/超界分支写出 `${hashes} ${text}`，一个 hashes 后空格 + 前导空格 = 多余空格；
 	// 下次 parser `[ \t]+` 贪婪吞掉这些空格，rawText 不同 → 非幂等。
