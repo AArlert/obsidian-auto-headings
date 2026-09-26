@@ -2474,13 +2474,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 内部链接。**仅在 `updateBacklinks` 开启时工作**（默认开）。改名表由调用方（
 	 * {@link foldSelfBacklinks}）算好传入，本方法只负责反查引用方 + 写回，不重算。
 	 *
-	 * 用 `metadataCache.getBacklinksForFile` 反查引用方 → 每个**别的**引用文件按是否已打开分流
+	 * 用 {@link backlinkSourcePaths} 反查引用方 → 每个**别的**引用文件按是否已打开分流
 	 * 写回（见 {@link syncBacklinksCounted} 的根因说明，testplan H18）——**跳过引用方=本文件自身**
 	 * 的条目：那一支已经在 {@link foldSelfBacklinks} 里随主事务同步处理过，这里重复处理只会重新
 	 * 引入「读盘覆盖未落盘编辑器内容」的竞态（同一份说明）。
 	 *
-	 * 防御性：`getBacklinksForFile` 为半公开 API（返回 `{data}` 包装），缺失 / 异常时**静默降级**——
-	 * 绝不因链接同步失败而打断编号本身。
+	 * 防御性：反查以半公开 `getBacklinksForFile`（返回 `{data}` 包装）与公开 `resolvedLinks` 取并集，
+	 * 前者缺失时靠后者，两者都拿不到时**静默降级**——绝不因链接同步失败而打断编号本身。
 	 */
 	private async syncBacklinks(
 		target: LinkTarget | null | undefined,
@@ -2515,46 +2515,70 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		let total = selfCount;
 		const map = new Map(renames.map((r) => [r.from, r.to]));
+		const vault = this.app.vault;
+		const basename = target.basename ?? linkBasename(target.path);
+		const editors = this.openEditorsByPath();
+		for (const sourcePath of this.backlinkSourcePaths(target)) {
+			if (sourcePath === target.path) {
+				continue; // 本文件自身已由 foldSelfBacklinks 随主事务处理，跳过避免竞态重复写。
+			}
+			const editor = editors.get(sourcePath);
+			if (editor) {
+				// 引用方正被打开：走它的编辑器，不读盘（见本方法上方的根因说明）。
+				const old = editor.getValue();
+				const result = rewriteBacklinksInContent(old, basename, false, map);
+				if (result.count > 0) {
+					this.writeLineDiff(editor, old, result.content);
+				}
+				total += result.count;
+				continue;
+			}
+			const file = vault.getAbstractFileByPath(sourcePath);
+			// 仅处理文件（instanceof 收窄，排除文件夹，商店审核要求勿用 as TFile 断言）。
+			if (!(file instanceof TFile)) {
+				continue;
+			}
+			await vault.process(file, (content) => {
+				const result = rewriteBacklinksInContent(content, basename, false, map);
+				total += result.count;
+				return result.content;
+			});
+		}
+		return total;
+	}
+
+	/**
+	 * 反查链向 `target` 的引用文件（testplan M32，见 spec.md §3.12）：半公开的 `getBacklinksForFile`
+	 * 与公开的 `metadataCache.resolvedLinks` **取并集**。后者覆盖只在属性（frontmatter）里引用的文件，
+	 * 且在前者缺失 / 返回形状变化时照样可用；两者都拿不到时返回空（静默降级，不打断编号）。
+	 */
+	private backlinkSourcePaths(target: LinkTarget): string[] {
 		// 半公开 API：官方类型未声明 getBacklinksForFile，以「可选方法」的结构化形状收窄（非 any）。
 		const mc = this.app.metadataCache as MetadataCache & {
 			getBacklinksForFile?: (file: LinkTarget) => unknown;
 		};
-		const vault = this.app.vault;
+		const sources = new Set<string>();
 		if (typeof mc.getBacklinksForFile === "function") {
-			const raw: unknown = mc.getBacklinksForFile(target);
-			const data = backlinkMap(raw);
-			if (data) {
-				const basename = target.basename ?? linkBasename(target.path);
-				const editors = this.openEditorsByPath();
-				for (const sourcePath of data.keys()) {
-					if (typeof sourcePath !== "string" || sourcePath === target.path) {
-						continue; // 本文件自身已由 foldSelfBacklinks 随主事务处理，跳过避免竞态重复写。
-					}
-					const editor = editors.get(sourcePath);
-					if (editor) {
-						// 引用方正被打开：走它的编辑器，不读盘（见本方法上方的根因说明）。
-						const old = editor.getValue();
-						const result = rewriteBacklinksInContent(old, basename, false, map);
-						if (result.count > 0) {
-							this.writeLineDiff(editor, old, result.content);
-						}
-						total += result.count;
-						continue;
-					}
-					const file = vault.getAbstractFileByPath(sourcePath);
-					// 仅处理文件（instanceof 收窄，排除文件夹，商店审核要求勿用 as TFile 断言）。
-					if (!(file instanceof TFile)) {
-						continue;
-					}
-					await vault.process(file, (content) => {
-						const result = rewriteBacklinksInContent(content, basename, false, map);
-						total += result.count;
-						return result.content;
-					});
+			const data = backlinkMap(mc.getBacklinksForFile(target));
+			for (const sourcePath of data?.keys() ?? []) {
+				if (typeof sourcePath === "string") {
+					sources.add(sourcePath);
 				}
 			}
 		}
-		return total;
+		const resolved: unknown = mc.resolvedLinks;
+		if (resolved && typeof resolved === "object") {
+			for (const [sourcePath, dests] of Object.entries(resolved)) {
+				if (
+					dests &&
+					typeof dests === "object" &&
+					Object.prototype.hasOwnProperty.call(dests, target.path)
+				) {
+					sources.add(sourcePath);
+				}
+			}
+		}
+		return [...sources];
 	}
 
 	/**

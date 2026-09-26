@@ -17,6 +17,7 @@
 import { WORD_JOINER } from "./numbering";
 import { parseHeadings } from "./parser";
 import { scanSkipRegions } from "./scan";
+import { linkCodecLocator } from "./yamlquote";
 
 /** 一条「旧锚点 → 新锚点」改名（均为 {@link linkAnchor} 归一后的形式）。 */
 export interface HeadingRename {
@@ -581,10 +582,15 @@ function rewriteMarkdownBacklinks(
  * - subpath 须存在、非块引用（不以 `^` 起头）、单段（不含二级 `#`，多级锚点保守跳过）；
  * - subpath 经 {@link linkAnchor} 归一后须在 `renames` 中；命中则替换为新锚点，**保留 `|别名` 与 `!` 嵌入前缀**。
  *
+ * 属性（frontmatter）里的 wikilink 按所在 YAML 引号风格读写（testplan M29–M30，见 `yamlquote.ts`）：
+ * 双 / 单引号串里先还原转义再比对、写回时重新转义；裸值等无法转义的位置若新锚点会引入改变 YAML 结构的
+ * 字符，则**保守不改**——链接暂不同步，也绝不写坏该文件的属性。
+ *
  * Markdown inline link / image 另走小型扫描器：支持嵌套 label、平衡括号与 `<destination>`，只替换
  * destination 的 fragment 并 URL 编码新锚点；label、路径、可选 title 与 `!` 原字节保留。外部 URL、
  * 转义语法、块 / 多级 fragment、坏 URL 编码、行内代码、fenced code 与 `%%…%%` / `<!--…-->`
- * 注释区均保守跳过；`[[…]]` wikilink 整段跳过、其后的括号段按字面文本保留。
+ * 注释区均保守跳过；`[[…]]` wikilink 整段跳过、其后的括号段按字面文本保留。URL 编码后的 fragment
+ * 不含任何 YAML 需要转义的字符，属性里的 Markdown 链接同样适用（testplan M31）。
  *
  * @returns 重写后的内容与命中改写的链接数。
  */
@@ -595,22 +601,32 @@ export function rewriteBacklinksInContent(
 	renames: Map<string, string>,
 ): { content: string; count: number } {
 	let count = 0;
-	const wikiOut = content.replace(WIKILINK_RE, (whole, bang: string, inner: string) => {
-		const pipeIdx = inner.indexOf("|");
-		const linkPart = pipeIdx >= 0 ? inner.slice(0, pipeIdx) : inner;
-		const alias = pipeIdx >= 0 ? inner.slice(pipeIdx) : ""; // 含前导 `|`
-		const hashIdx = linkPart.indexOf("#");
-		if (hashIdx < 0) return whole; // 无 subpath，非标题链接。
-		const pathPart = linkPart.slice(0, hashIdx);
-		const subpath = linkPart.slice(hashIdx + 1);
-		if (subpath.startsWith("^")) return whole; // 块引用，跳过。
-		if (subpath.includes("#")) return whole; // 多级锚点，保守跳过。
-		if (!pathMatchesTarget(pathPart, targetBasename, isSameFile)) return whole;
-		const to = renames.get(linkAnchor(subpath));
-		if (to === undefined) return whole;
-		count++;
-		return `${bang}[[${pathPart}#${to}${alias}]]`;
-	});
+	const codecAt = linkCodecLocator(content);
+	const wikiOut = content.replace(
+		WIKILINK_RE,
+		(whole: string, bang: string, inner: string, offset: number) => {
+			const pipeIdx = inner.indexOf("|");
+			const linkPart = pipeIdx >= 0 ? inner.slice(0, pipeIdx) : inner;
+			const alias = pipeIdx >= 0 ? inner.slice(pipeIdx) : ""; // 含前导 `|`
+			const hashIdx = linkPart.indexOf("#");
+			if (hashIdx < 0) return whole; // 无 subpath，非标题链接。
+			const codec = codecAt(offset, offset + whole.length); // 正文原样；属性里按 YAML 引号风格。
+			const pathPart = linkPart.slice(0, hashIdx);
+			const rawSubpath = linkPart.slice(hashIdx + 1);
+			const path = codec.decode(pathPart);
+			const subpath = codec.decode(rawSubpath);
+			if (path === null || subpath === null) return whole; // 不认识的转义：不匹配。
+			if (subpath.startsWith("^")) return whole; // 块引用，跳过。
+			if (subpath.includes("#")) return whole; // 多级锚点，保守跳过。
+			if (!pathMatchesTarget(path, targetBasename, isSameFile)) return whole;
+			const to = renames.get(linkAnchor(subpath));
+			if (to === undefined) return whole;
+			const written = codec.encode(to, rawSubpath);
+			if (written === null) return whole; // 此处写不进（会写坏 YAML）：保守不改。
+			count++;
+			return `${bang}[[${pathPart}#${written}${alias}]]`;
+		},
+	);
 	const markdown = rewriteMarkdownBacklinks(wikiOut, targetBasename, isSameFile, renames);
 	return { content: markdown.content, count: count + markdown.count };
 }

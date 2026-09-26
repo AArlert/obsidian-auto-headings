@@ -207,6 +207,7 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 
 -   **Language**: the plugin UI follows your Obsidian language automatically (English / 简体中文), or can be locked in settings. This guide has a [Chinese version](user-guide.zh.md).
 -   **Backlink sync limits**: Wikilinks and inline Markdown links/images are supported (Markdown fragments are URL-encoded on write). To avoid ambiguous or accidental edits, sync skips duplicate heading names, block references (`^id`), multi-level anchors (`#A#B`), external URLs, and Markdown-looking text inside inline/fenced code. Turning the sync on doesn't retroactively fix links that were already broken before it was enabled. It can also be turned off in **Settings → General**.
+-   **Links in properties**: links inside note properties (frontmatter) are updated too, escaped according to YAML quoting rules. The one exception is an **unquoted** property value: if the new heading would bring in a colon followed by a space, a quote, a backslash, a comma or a brace, that link is left as is — better unsynced than a broken property block (once the YAML breaks, all of that note's properties stop working). Quote such values to get them synced again.
 -   **Undo**: single-file rewrites are one editor transaction — a single `Ctrl/Cmd+Z` undoes them. Backlink updates to _other_ files are not part of that transaction. The vault-wide clear is **not** in the undo history; back up first.
 -   **Mobile**: supported (`isDesktopOnly: false`).
 

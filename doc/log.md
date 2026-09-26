@@ -15,6 +15,54 @@
 
 ---
 
+## 2026-09-26 属性链接：补测试、修 YAML 引号安全、反查并上 resolvedLinks（不 bump，交接：claude/agent-workflow-review-b9lj22）
+
+### 做了什么
+
+- **属性（frontmatter）里的标题链接补测试**（testplan M29–M32）：新 `property-links.test.ts` 13 例、`yamlquote.test.ts`
+  15 例，`main.test.ts` +4 例；真机样例 `tests/user_tests/14-属性里的标题链接.md`。Obsidian 写出的 `"[[a#简介]]"`、列表
+  属性、流式序列、单引号、文本内嵌、裸值，以及属性里的 Markdown 链接，旧代码本来就能改（M29 / M31 在旧实现下即通过）。
+- **测出并修掉 YAML 引号问题**（M30，旧实现下 6 例失败）：锚点含 `"` / `'`（YAML 里写作 `\"` / `''`）时匹配不上，编号后
+  链接断掉；改名新引入引号 / `: ` / 反斜杠时直接写坏 frontmatter（YAML 一坏，Obsidian 丢掉该笔记全部属性）。新模块
+  `src/yamlquote.ts`：扫描 frontmatter 里的引号串（只认节点起点的引号；块标量、注释、多行裸值续行不误判），双 / 单引号串
+  还原转义后比对、写回时再转义；裸值等无法转义处新引入敏感字符则保守不改。随机不变量覆盖 10 种 YAML 形态 × 1500 组含
+  敏感字符的改名：改写后 js-yaml 解析全部合法，引号串里全部正确更新。
+- **反查取并集**（M32）：半公开 `getBacklinksForFile` ∪ 公开 `resolvedLinks`——只在属性里引用的文件也覆盖到，半公开 API
+  缺失时照样同步（以前缺失就整个不同步）。
+- 新增 devDependency `js-yaml`（原已在依赖树里，只给测试做 YAML 合法性断言）。
+- 文档：spec §3.12（流程第 3、4 步与风险条）、§4 目录树加 `yamlquote.ts`、使用指南双语加「属性里的链接」、README 双语补
+  一句；dev-cycle：开发周期的状态格写「未发版」，发版时统一换成版本号。
+- 读 gurjar1/auto-heading 最新 README（v1.5.11，2026-08-26）对出差距初表（见下一步）。
+
+### 没做什么
+
+- M32 未真机验证（Obsidian 的两种反查是否都含「只在属性里引用」）：要用 BRAT beta。
+- 竞品差距清单未落 spec / Roadmap：方向已定，逐项立项留到后续开发。
+
+### 下一步
+
+- **后续开发方向（用户 2026-09-26 定）**：先补 gurjar1/auto-heading 有、我们没有的功能，再吸收调研报告里其他插件的
+  可取之处；逐项立项时按 dev-cycle 先写 spec 节 + testplan 行，Roadmap 排序与用户一起定。gurjar1 v1.5.11 对照差距初表：
+  1. 单篇配置：快速配置对话框 + 「把当前设置存进本篇 frontmatter」+ frontmatter 覆盖起止层级 / 起始编号 / 样式 /
+     分隔符（spec §3.20 已定「frontmatter 落盘、GUI 主入口」）；
+  2. 单标题跳过的一键入口：「切换光标所在标题的跳过」命令 + 标题右键菜单（现在只能手敲 `<!-- skip -->`）；
+  3. 本篇开关命令：切换 / 启用 / 停用本篇编号（现在靠「清除即暂停、重新编号即恢复」间接实现）；
+  4. 自动更新的目录代码块（`toc`，只读渲染；Roadmap 已有「阅读视图 live TOC」）；
+  5. 视觉缩进：按层级缩进成树形，可调缩进量、可选引导线、可按篇覆盖（纯显示）；
+  6. 小节导航条：顶部吸顶面包屑 + 当前小节字数 / 阅读时长；7. 状态栏显示当前小节字数 / 阅读时长；
+  8. 编辑器左边距显示 H1–H6 层级；9. 标题悬浮工具条（升级 / 降级 / 折叠本节）；10. 东阿拉伯数字（٠-٩）序号样式。
+  有意不同：自动接管手写编号不照搬（只进手动清理，Roadmap 已有置信度分级预览）；它只支持桌面端，我们的新功能都要
+  保持移动端可用。其他插件的可取之处（调研报告 §2–§3）：重编号前预览改动（Structure Commander）、编号作用范围（全文 /
+  当前分支 / 选区）、一键修复标题跳级、标题旁显示被引用数并可跳转（Header Backlinks）、真机沙盒 e2e 测试（Heading Linker
+  and Refactor）、「从 Number Headings 迁移」说明段（Section Numbering）。
+- BRAT beta 真机复测 M32（`tests/user_tests/14`）。
+
+### 验证方式
+
+- `npm run preflight` 全绿；同一组测试在旧实现下 M30 6 例失败、新实现通过；随机不变量每种形态有效样本 >200。
+
+---
+
 ## 2026-09-26 testplan 继续瘦身：长行压缩、导语去重、修 ID 撞号（不 bump，交接：claude/agent-workflow-review-b9lj22）
 
 ### 做了什么
@@ -86,54 +134,3 @@
 
 - `npm run preflight` 全绿（索引 / 链接 / 目录树守卫 + 788 测试 + lint + 格式），`release/` 与提交前字节一致；
   spec 索引 ↔ 38 个分节文件一致。
-
----
-
-## 2026-09-26 仓库重构：spec / testplan 拆分、停用 status、发版才 bump + BRAT beta（不 bump，交接：claude/agent-workflow-review-b9lj22）
-
-### 做了什么
-
-- **1.2.1 已过审上架**（用户 2026-09-26 确认）。
-- 流程评审后按用户拍板重构仓库。不 bump，插件行为零改动，`release/` 与提交前字节一致：
-  - **spec 拆分**：`doc/spec.md` 改为顶层索引，正文拆进 `doc/spec/` 37 个分节文件（文件名 = 节号-短名；
-    节号即稳定引用 ID，代码注释里的「spec §3.22」照旧可查）。
-  - **testplan 拆分 + 瘦身**：`doc/testplan.md` 改为顶层索引，场景组 A–V 一组一文件，另有 0/1/3/4 章。
-    删「维护工作流程」章（与 dev-cycle 重复；「写场景的要诀」挪进核心理念）；UVM 章删掉已落地的缺口清单 /
-    设计草图 / 分阶段史（历史在 log-archive），约束表与 `tests/dev_tests/uvm/README.md` 去重——README
-    管「怎么用」，testplan 管「验证了什么」。场景行本身一行未动。
-  - 搬家由一次性脚本完成：逐行比对 spec 2076 行 / testplan 658 行正文零差异；搬家前先修了 9 处本就失效的
-    链接（§3.20 / §3.21 锚点与 GitHub 实际渲染不符、「白名单（3.6）」指错节、使用指南 LICENSE 路径）。
-  - **停用 `status.jsonl` / `status-archive.jsonl`**：版本看 manifest，现状与下一步只写在 log 最新块。
-  - **`scripts/docs.mjs`**：handover 改为「版本 + log 最新块 + 近期周期索引 + testplan 待办」；新增三道守卫——
-    索引 ↔ 分节文件双向一致且节号唯一、文档相对链接与锚点可解析（slug 算法对照 GitHub 渲染的 143 个标题校准）、
-    目录树（已从 log.md 挪到 `doc/spec/4-架构设计.md`）。
-  - **单一来源清理**：log.md 三个常青块迁出（强制规则 → dev-cycle，目录结构 → spec §4，安装说明 → spec §7.2）；
-    竞品下载量集中到 spec A.11「下载量快照」；Roadmap 状态订正（M14、M13 标 ✅）；testplan 节号引用订正
-    （U 组 bug 在 §3.3、WL-int 在 §3.4）；CLAUDE.md §3.1 文档表、repo-scout 过期尺寸、bump.mjs 注释同步。
-  - **流程**：版本号只在发版时 bump；真机（含手机）实测走 BRAT beta——`release.yml` 对 `X.Y.Z-beta.N`
-    tag 只改产物里的 manifest 版本并发 pre-release，正式 tag 与 manifest 版本不一致即失败（spec §7.3、
-    dev-cycle「版本号与发版」）；SubAgent 改为「输出长才派」，不再记派发次数；新增 `npm run check`
-    （docs 守卫 + dot 格式测试 + lint + 格式，只报问题），preflight 改为 docs + release + check。
-- 竞品调研交给 sonnet 子代理，原始报告在本地 `doc/research/2026-09-26-新竞品调研.md`（不入库）：
-  找到约 14 个文档里没有的竞品 / 近邻，结论待与用户讨论后再落 A.11。
-- 子代理使用：quality-gate × 1（门槛计时；实测绿灯路径派发反而更费）、general-purpose/sonnet × 1（竞品调研）。
-
-### 没做什么
-
-- testplan 更深的瘦身（§3.1 已修 bug 表与场景行合并、行内版本史压缩）改动的是真值表本身，留待用户拍板。
-- 竞品调研结论未落 A.11，Roadmap 未按调研重排（下一周期先讨论）。
-- spec 索引开头的定位导语未改（用户：定位措辞不用管）。
-- 未引入官方 `eslint-plugin-obsidianmd`（需 ESLint 8→9，另起周期）；`main.ts`（2634 行）未拆。
-
-### 下一步
-
-- 与用户讨论竞品调研结论 → 落 A.11 + 重排 Roadmap（候选：Number Headings 迁移向导、信任包小件、
-  官方 lint、拆 `main.ts`）。
-- 下次需要真机实测时首跑 BRAT beta 通道（推 `X.Y.Z-beta.1` tag），验证 release.yml 的预发布分支。
-
-### 验证方式
-
-- `npm run preflight` 全绿：docs 守卫（索引 / 链接 / 目录树）+ 23 个测试文件 788 个用例 + lint + 格式；
-  `release/` 重建后与提交前字节一致。
-- release.yml 的版本校验脚本本地模拟三种 tag：`1.2.1` 通过且 manifest 字节不变、`1.2.2` 以非零退出、
-  `1.3.0-beta.1` 改写产物版本并带 `--prerelease`。

@@ -41,7 +41,7 @@ In display-only mode the numbers update live as you type. In write mode, numberi
 [[guide#Getting started]]  →   [[guide#First steps]]
 ```
 
-Change a heading's text and the links to it across your vault update at the same time. This covers both wiki links and Markdown links, and you can turn it off at any time.
+Change a heading's text and the links to it across your vault update at the same time. This covers wiki links and Markdown links, including links in note properties, and you can turn it off at any time.
 
 ### A template for every kind of note
 

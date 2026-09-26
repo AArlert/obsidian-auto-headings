@@ -26,8 +26,9 @@ export const SWITCH_KEY = "obsidian-auto-headings";
  * 定位 frontmatter 区块的闭合行下标（开头恒为第 0 行的 `---`）。
  * 无 frontmatter、或有开头但**未闭合**（畸形）时返回 `-1`——两种情况都按「无 frontmatter」处理，
  * 读取侧跟随全局开关，写入侧则保守地拒绝改写（见 {@link planPauseFileSwitch}）。
+ * 属性链接改写（`yamlquote.ts`）复用同一口径判定哪段是 frontmatter。
  */
-function findFrontmatterEnd(lines: readonly string[]): number {
+export function findFrontmatterEnd(lines: readonly string[]): number {
 	if (lines.length === 0 || lines[0].replace(/\r$/, "").trim() !== "---") {
 		return -1;
 	}
