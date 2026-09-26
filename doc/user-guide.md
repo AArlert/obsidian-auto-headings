@@ -229,4 +229,4 @@ Because the marker lives in the file bytes themselves, even years after uninstal
 
 ## License
 
-[MIT](LICENSE)
+[MIT](../LICENSE)
