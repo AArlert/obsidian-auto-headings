@@ -432,9 +432,21 @@ function checkLinks() {
 
 // ───────────────────────── 5. 目录树守卫 ─────────────────────────
 
-/** 递归收集目录下的 .ts/.mjs 文件名（basename），跳过与源码无关的目录。 */
+/**
+ * 递归收集目录下的 .ts/.mjs 文件名（basename），跳过与源码无关的目录。
+ * `worktrees`（`.claude/worktrees/` 下的另一份检出）也跳过：否则本机残留 worktree 里的旧文件会让
+ * 本地守卫与 CI 判定不一致（1.2.2 发版时 DangerTab.ts 改名就因此本地放行、CI 拦下）。
+ */
 function collectDiskFiles(dir, out) {
-	const SKIP = new Set(["node_modules", "tests", "release", "publish", "doc", ".git"]);
+	const SKIP = new Set([
+		"node_modules",
+		"tests",
+		"release",
+		"publish",
+		"doc",
+		".git",
+		"worktrees",
+	]);
 	for (const ent of readdirSync(dir, { withFileTypes: true })) {
 		if (ent.isDirectory()) {
 			if (!SKIP.has(ent.name)) collectDiskFiles(join(dir, ent.name), out);
