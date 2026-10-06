@@ -37,7 +37,12 @@
 
 ### 下一步
 
-- 等用户实测反馈第一块 → 改 → 第二块。仍不推送、不合并、不 bump（见上一块）。
+- **用户改主意（2026-10-07）：照 Artifact 画布把剩下的全部做完再叫他看**；外壳版本号保留；「在大纲中显示编号」开关已删（已提交）。
+- 第二块进行中：L 组场景 L32–L42 已写（L6 / L10 / L13 / L23 已改写）；纯逻辑 `src/settings/templateView.ts` 已写、**单测未写**
+  （`tests/dev_tests/templateView.test.ts`）。待做：规则表（PathRules.ts，弹窗类拆到新文件）、模板卡片（TemplatesTab.ts）、
+  新建 `TemplateEditorModal.ts` + `TemplatePreview.ts`、EditPanel.ts 改格式页、WhitelistEditor.ts 加图例与 0 角标隐藏、
+  i18n 新键与清理废键、styles.css；画布样稿 Rules / TemplateEditor / Whitelist / MobileRules.dc.html。
+- 第三块（编号维护 / 关于插件 / 外来编号）未动。全部完成后部署 iCloud 库再叫用户。仍不推送、不合并、不 bump。
 
 ### 验证方式
 
