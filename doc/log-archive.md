@@ -8,6 +8,44 @@
 
 ---
 
+## 2026-10-07 设置说明露出 ** 星号；GUI 规划进入用户审稿（不 bump，交接：fix/i18n-literal-asterisks）
+
+### 做了什么
+
+- **修星号**（testplan L26）：`vcCoexistDesc` / `freezeVaultDesc` / `retiredBannerBody` / `freezeVaultModalBody` 四个键的中英
+  文案用 `**` 想加粗，可它们经 `setDesc` / `createEl({ text })` 按纯文本渲染，星号原样露出（实机截图里「常规」页 VC
+  说明、「敏感操作」页固化说明都能看到）。中文直接去掉；英文里加粗的命令名改用弯引号「“Clean foreign numbering”」。
+  `i18n.test.ts` 新用例扫全部纯字符串文案不含 `**`，修复前命中 `zh.vcCoexistDesc` 失败。
+- **文档链接守卫在 Windows 本机误报**（`scripts/docs.mjs`，云端 / CI 不受影响）：① 递归扫 `.claude/` 时扫进了
+  `.claude/worktrees/`（另一份 git worktree 检出，文档停在旧版本），跳过；② 读 Markdown 按 `\n` 切行，CRLF 工作区的行尾
+  `\r` 让围栏正则 `$` 失配，围栏里故意写的库内链接被当真链接（`tests/user_tests/12`），改按 `\r?\n` 切；③ 仓库根只校验
+  已入库（含已暂存）的 `.md`，不入库的本地镜像文件（如 `AGENTS.md`）不再拦预检。
+- 拉取 origin/master 到 `c8b6141`；gurjar1 v1.5.11 差距初表逐项细化（读其源码 + 本机 Obsidian `app.js`），写在本地
+  `doc/research/2026-10-07-gurjar1-差距细化.md`（不入库）。
+- **GUI 重新规划**：实机截图 1.2.1 现状后，在 Claude Artifact 设计画布（私有）出了 18 块样稿：设置四页、模板编辑器
+  （格式 / 白名单）、标题菜单、右键菜单、状态栏「本篇」菜单、选模板框、全库确认框、命令命名、手机端。用户已审一轮，
+  结论见下一步。
+
+### 没做什么
+
+- GUI 规划未落 spec / Roadmap，未动任何 GUI 代码：画布还在按用户意见改第二轮。
+- 未发版（本次只改文案，下次发版带上）。
+
+### 下一步
+
+- **GUI 规划，用户 2026-10-07 已定**：TAB 沿用原生强调色；路径规则保留现表格只微调（去拖拽手柄与行号、按具体度自动
+  排序，`/` 规则仍是普通可删行）；模板编辑器保留按阅读顺序排列的格式表（前缀 → 序号 → 序号间隔符 → 后缀 → 标题间隔符），
+  「继承前级 + 继承级数」合成一列，快速套用加「此模板的历史」，「更多规则」放编号范围之下、表格之上，底部整块放预览；
+  白名单保留 `=` / `≈` / `▸` 符号分段控件、不加文字；全库不可撤销操作要输入确认词；外来编号清理弹窗加「全选」并修对齐。
+  画布第二轮改完、用户定稿后，落 spec §3.13 / §3.15 / §3.21 + Roadmap，再按 dev-cycle 实现。
+
+### 验证方式
+
+- 本机 `npm run preflight`：文档守卫、ESLint、Prettier 全过；vitest 820/821，唯一失败是已知的 Windows ICU 排序假红
+  （`whitelist.test.ts` 过滤 + 排序组合，CI 的 Linux 上为绿）。L26 新用例修复前红、修复后绿。
+
+---
+
 ## 2026-09-26 属性链接：补测试、修 YAML 引号安全、反查并上 resolvedLinks（不 bump，交接：claude/agent-workflow-review-b9lj22）
 
 ### 做了什么
