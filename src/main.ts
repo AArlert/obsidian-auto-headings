@@ -1898,10 +1898,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (merged.headingSuggestWhenVcActive !== "own") {
 			merged.headingSuggestWhenVcActive = "yield";
 		}
-		// 1.2.0：大纲里显示仅显示模式的编号，缺省 / 非法值回退到默认开。
-		if (typeof merged.showOutlineNumbers !== "boolean") {
-			merged.showOutlineNumbers = true;
-		}
+		// 迁移：开关 `showOutlineNumbers`（1.2.0–1.2.1，大纲里显示仅显示模式的编号）自 1.2.2 移除，
+		// 大纲编号固定开启（用户定：仅显示模式本就该处处看得到编号）；旧字段随迁移清理。
+		delete merged.showOutlineNumbers;
 		// 迁移：历史独立开关 `backlinkStandaloneTrigger`（0.7.8–1.0.8，CR-18）已并入 `updateBacklinks`
 		// （1.0.9 起单开关全局生效，与是否命中编号模板无关）；旧字段不再读取，随迁移一并清理。
 		delete merged.backlinkStandaloneTrigger;
@@ -1963,10 +1962,6 @@ export default class AutoHeadingsPlugin extends Plugin {
 		return this.messages().virtualStaleTooltip;
 	}
 
-	/** 设置「在大纲中显示编号」是否开着（1.2.0，供大纲渲染器调用）。 */
-	outlineNumbersEnabled(): boolean {
-		return this.settings.showOutlineNumbers !== false;
-	}
 
 	/** 阅读视图拿不到段落信息时读文件全文（M14 兜底）；不是 Markdown 文件或读失败返回 `null`。 */
 	async readFileContent(path: string): Promise<string | null> {

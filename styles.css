@@ -1,5 +1,13 @@
 /* obsidian-auto-headings 设置面板样式（Milestone 3） */
 
+/* 版本号：面板右上角，弱化呈现但清晰可读 */
+.ah-version {
+	text-align: right;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	margin: 0 0 0.5em;
+}
+
 .ah-section-desc {
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);

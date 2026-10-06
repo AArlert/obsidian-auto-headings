@@ -68,10 +68,6 @@ export interface Messages {
 	debounceDesc: (min: number, max: number, def: number) => string;
 	resetTooltip: (def: number) => string;
 
-	// —— 大纲里显示编号（1.2.0）——
-	outlineNumbersName: string;
-	outlineNumbersDesc: string;
-
 	// —— Backlink 同步 ——
 	updateBacklinksName: string;
 	updateBacklinksDesc: string;
@@ -411,8 +407,6 @@ const zh: Messages = {
 	debounceName: "防抖延迟",
 	debounceDesc: (min, max, def) => `停止输入多久后自动编号（${min}–${max} ms，默认 ${def}）。`,
 	resetTooltip: (def) => `恢复默认 ${def} ms`,
-	outlineNumbersName: "在大纲中显示编号",
-	outlineNumbersDesc: "「仅显示」模式下，大纲面板里也显示编号。",
 
 	updateBacklinksName: "同步内部链接（Backlink）",
 	updateBacklinksDesc: "标题文字改变时，自动更新其他笔记里指向它的链接。",
@@ -736,8 +730,6 @@ const en: Messages = {
 	debounceDesc: (min, max, def) =>
 		`How long after you stop typing to renumber (${min}–${max} ms, default ${def}).`,
 	resetTooltip: (def) => `Reset to default ${def} ms`,
-	outlineNumbersName: "Show numbers in the outline",
-	outlineNumbersDesc: "In display-only mode, also show numbers in the Outline pane.",
 
 	updateBacklinksName: "Sync internal links (backlinks)",
 	updateBacklinksDesc: "When a heading's text changes, update links to it in other notes.",

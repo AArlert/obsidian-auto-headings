@@ -57,8 +57,6 @@ export interface VirtualOutlineHost {
 	virtualNumberingFor(path: string, content: string): VirtualHeadingLabel[] | null;
 	/** 读文件全文（与 metadataCache 解析的是同一份内容）；读不到返回 `null`。 */
 	readFileContent(path: string): Promise<string | null>;
-	/** 设置「在大纲中显示编号」是否开着。 */
-	outlineNumbersEnabled(): boolean;
 }
 
 /** 工作区的最小形状（`app.workspace`）。 */
@@ -187,7 +185,7 @@ export class VirtualOutlineDecorator {
 		if (this.disposed) {
 			return;
 		}
-		const views = this.host.outlineNumbersEnabled() ? this.currentViews() : [];
+		const views = this.currentViews();
 		const alive = new Set(views);
 		for (const view of [...this.tracked.keys()]) {
 			if (!alive.has(view)) {

@@ -71,14 +71,10 @@ async function flush(): Promise<void> {
 
 function makeHost(files: Record<string, string>, virtual: Set<string>) {
 	return {
-		enabled: true,
 		virtualNumberingFor: vi.fn((path: string, content: string) =>
 			virtual.has(path) ? computeVirtualNumbers(content, DEFAULT_TEMPLATE) : null,
 		),
 		readFileContent: vi.fn(async (path: string) => files[path] ?? null),
-		outlineNumbersEnabled() {
-			return this.enabled;
-		},
 	};
 }
 
@@ -204,7 +200,7 @@ describe("VirtualOutlineDecorator：挂载、刷新、设置开关与卸载（te
 		}
 	});
 
-	it("设置关掉 → 编号立即去掉、观察器摘掉；再打开立即恢复；卸载后不留属性（V43）", async () => {
+	it("停用插件 → 编号立即去掉、观察器摘掉、不留属性；之后不再挂任何东西（V43）", async () => {
 		const disconnect = vi.fn();
 		vi.stubGlobal(
 			"MutationObserver",
@@ -221,20 +217,10 @@ describe("VirtualOutlineDecorator：挂载、刷新、设置开关与卸载（te
 			await flush();
 			expect(labelsOf(view)).toEqual(["1 ", "1.1 ", "2 "]);
 
-			host.enabled = false;
-			d.refreshAll();
-			await flush();
+			d.dispose();
 			expect(labelsOf(view)).toEqual([null, null, null]);
 			expect(d.trackedCount).toBe(0);
 			expect(disconnect).toHaveBeenCalledTimes(1);
-
-			host.enabled = true;
-			d.refreshAll();
-			await flush();
-			expect(labelsOf(view)).toEqual(["1 ", "1.1 ", "2 "]);
-
-			d.dispose();
-			expect(labelsOf(view)).toEqual([null, null, null]);
 			d.attachAll(); // 卸载后不再挂任何东西
 			await flush();
 			expect(labelsOf(view)).toEqual([null, null, null]);

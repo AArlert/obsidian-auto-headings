@@ -90,7 +90,6 @@ describe("getMessages 双语", () => {
 		const descKeys = [
 			"languageDesc",
 			"autoNumberDesc",
-			"outlineNumbersDesc",
 			"updateBacklinksDesc",
 			"headingLinkSuggestDesc",
 			"vcCoexistDesc",
