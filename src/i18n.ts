@@ -364,7 +364,7 @@ export interface Messages {
 	editBtn: string;
 	/** 卡片 ⋯ 按钮的 tooltip。 */
 	templateActionsTooltip: string;
-	/** 卡片三行效果预览的示例标题。 */
+	/** 卡片效果预览的示例标题（按 H1–H6 取）。 */
 	cardSampleTitles: string[];
 	/** 编辑弹窗标题区的小字（testplan L35）。 */
 	editorKicker: string;
@@ -712,7 +712,7 @@ const zh: Messages = {
 	templateCardUsage: (rules, whitelist) => `用于 ${rules} 条规则 · 白名单 ${whitelist} 项`,
 	editBtn: "编辑",
 	templateActionsTooltip: "模板操作",
-	cardSampleTitles: ["概述", "背景", "细节"],
+	cardSampleTitles: ["文档标题", "概述", "背景", "细节", "要点", "补充"],
 	editorKicker: "编辑模板",
 	renameTemplateTooltip: "重命名模板",
 	editorTabFormat: "格式",
@@ -1069,7 +1069,7 @@ const en: Messages = {
 		`Used by ${rules} ${rules === 1 ? "rule" : "rules"} · ${whitelist} whitelist ${whitelist === 1 ? "entry" : "entries"}`,
 	editBtn: "Edit",
 	templateActionsTooltip: "Template actions",
-	cardSampleTitles: ["Overview", "Background", "Details"],
+	cardSampleTitles: ["Document title", "Overview", "Background", "Details", "Key point", "Notes"],
 	editorKicker: "Edit template",
 	renameTemplateTooltip: "Rename template",
 	editorTabFormat: "Format",

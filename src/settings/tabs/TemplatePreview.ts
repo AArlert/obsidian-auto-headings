@@ -71,13 +71,16 @@ export function renderTemplatePreview(
 		for (const line of lines) {
 			const el = list.createDiv({ cls: "ah-preview-line" });
 			el.dataset.level = String(line.level);
-			el.setCssStyles({ paddingInlineStart: `${0.5 + line.indent * 1.25}em` });
+			// 每行前标出级别（与卡片预览同款，用户 1.2.2 实测后加）。
+			el.createSpan({ cls: "ah-preview-level", text: `H${line.level}` });
+			const body = el.createSpan({ cls: "ah-preview-body" });
+			body.setCssStyles({ paddingInlineStart: `${line.indent * 1.25}em` });
 			if (line.label === null) {
 				el.addClass("is-faint");
 			} else {
-				el.createSpan({ cls: "ah-preview-num", text: line.label });
+				body.createSpan({ cls: "ah-preview-num", text: line.label });
 			}
-			el.createSpan({ cls: "ah-preview-text", text: line.text });
+			body.createSpan({ cls: "ah-preview-text", text: line.text });
 			if (line.tag) {
 				const tagText =
 					line.tag === "whitelist"
@@ -85,7 +88,7 @@ export function renderTemplatePreview(
 						: line.tag === "skip"
 							? t.previewTagSkip
 							: t.previewTagUnnumbered;
-				el.createSpan({ cls: "ah-preview-tag", text: tagText });
+				body.createSpan({ cls: "ah-preview-tag", text: tagText });
 			}
 			if (line.level === highlighted) {
 				el.addClass("is-highlight");

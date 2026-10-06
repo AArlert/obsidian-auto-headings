@@ -487,7 +487,8 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 
 /* 规则表下方的灰字说明（L32） */
 .ah-path-hint {
-	margin: 6px 0 0 38px;
+	/* 与路径框左缘对齐：手柄 18px + 圆点 10px + 两个列间距 10px */
+	margin: 6px 0 0 48px;
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
 }
@@ -770,6 +771,27 @@ button.ah-danger-text {
 	margin: 0;
 	accent-color: var(--interactive-accent);
 	cursor: pointer;
+}
+
+/* 「全选」半选态（部分勾选，J23）：Obsidian 的复选框样式只画勾选态，这里补一条横杠 */
+.ah-foreign-guard-checkbox:indeterminate {
+	position: relative;
+	background-color: var(--checkbox-color, var(--interactive-accent));
+	border-color: var(--checkbox-color, var(--interactive-accent));
+}
+
+.ah-foreign-guard-checkbox:indeterminate::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 55%;
+	height: 2px;
+	border-radius: 1px;
+	background-color: var(--checkbox-marker-color, var(--text-on-accent));
+	transform: translate(-50%, -50%);
+	-webkit-mask-image: none;
+	mask-image: none;
 }
 
 /* 首行（红）：上内边距 5px + 一行 1.5em，中线在 5px + 0.75em 处 */
@@ -1130,6 +1152,11 @@ button.ah-danger-text {
 	color: var(--text-muted);
 }
 
+/* 不在编号范围内的层级：浅色、不带编号（L34） */
+.ah-template-card-line.is-faint .ah-template-card-word {
+	color: var(--text-faint);
+}
+
 .ah-template-card-usage {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
@@ -1394,11 +1421,24 @@ button.ah-preview-toggle.is-active {
 	line-height: 1.35;
 }
 
+/* 每行：级别标签 | 标题（按层级缩进），L40 */
 .ah-preview-line {
-	padding-top: 4px;
-	padding-bottom: 4px;
-	padding-right: 6px;
+	display: grid;
+	grid-template-columns: 26px minmax(0, 1fr);
+	align-items: baseline;
+	padding: 4px 6px;
 	border-radius: var(--radius-s);
+}
+
+.ah-preview-level {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ah-preview-body {
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .ah-preview-line.is-faint {

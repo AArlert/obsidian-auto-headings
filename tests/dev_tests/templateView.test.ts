@@ -74,17 +74,16 @@ describe("空格可视化（L38）", () => {
 });
 
 describe("卡片三行预览（L34）", () => {
-	it("默认模板：从起始层级起三级，各取第一个序号", () => {
-		const lines = cardPreviewLines(tpl({ topLevel: 2, bottomLevel: 6 }));
+	it("H1–H6 全部列出：范围内取第一个序号，范围外不带编号", () => {
+		const lines = cardPreviewLines(tpl({ topLevel: 2, bottomLevel: 4 }));
 		expect(lines.map((l) => [l.level, l.label, l.indent])).toEqual([
-			[2, "1 ", 0],
-			[3, "1.1 ", 1],
-			[4, "1.1.1 ", 2],
+			[1, null, 0],
+			[2, "1 ", 1],
+			[3, "1.1 ", 2],
+			[4, "1.1.1 ", 3],
+			[5, null, 4],
+			[6, null, 5],
 		]);
-	});
-
-	it("范围不足三级时有几级给几级", () => {
-		expect(cardPreviewLines(tpl({ topLevel: 5, bottomLevel: 6 }))).toHaveLength(2);
 	});
 });
 

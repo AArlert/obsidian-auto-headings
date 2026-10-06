@@ -15,7 +15,7 @@ const DELETE_RULES_SENTINEL = " __delete_rules__";
  * 「路径模板」TAB（M7 多 TAB 重构）：上为**路径规则**分区（`PathRules.ts`），下为**模板**分区。
  *
  * 1.2.2 视觉更新（testplan L34）：「新增模板」挪到「模板」标题行右侧（普通按钮，新建后直接打开编辑
- * 弹窗）；每个模板一张卡片——名称（默认模板带「内置」灰标）+ 三行效果预览 +「用于 N 条规则 · 白名单
+ * 弹窗）；每个模板一张卡片——名称（默认模板带「内置」灰标）+ H1–H6 效果预览 +「用于 N 条规则 · 白名单
  * M 项」+「编辑」+ ⋯ 菜单（删除，红字；默认模板不可删，没有 ⋯）。编辑在弹窗里（`TemplateEditorModal.ts`）。
  */
 export function renderTemplatesTab(tab: AutoHeadingsSettingTab, containerEl: HTMLElement): void {
@@ -78,18 +78,22 @@ function renderTemplateCard(
 		});
 	}
 
-	// —— 三行效果预览：级别 + 编号 + 示例标题 ——
+	// —— H1–H6 效果预览：级别 + 编号 + 示例标题；不编号的层级浅色、不带编号 ——
 	const preview = card.createDiv({ cls: "ah-template-card-preview" });
-	cardPreviewLines(template).forEach((line, i) => {
+	for (const line of cardPreviewLines(template)) {
 		preview.createSpan({ cls: "ah-template-card-level", text: `H${line.level}` });
-		const text = preview.createSpan({ cls: "ah-template-card-line" });
-		text.setCssStyles({ paddingInlineStart: `${line.indent}em` });
-		text.createSpan({ text: line.label });
+		const text = preview.createSpan({
+			cls: line.label === null ? "ah-template-card-line is-faint" : "ah-template-card-line",
+		});
+		text.setCssStyles({ paddingInlineStart: `${line.indent * 0.9}em` });
+		if (line.label !== null) {
+			text.createSpan({ text: line.label });
+		}
 		text.createSpan({
 			cls: "ah-template-card-word",
-			text: t.cardSampleTitles[i] ?? t.previewHeadingWord,
+			text: t.cardSampleTitles[line.level - 1] ?? t.previewHeadingWord,
 		});
-	});
+	}
 
 	// —— 底部：用量 … 编辑 ——
 	const foot = card.createDiv({ cls: "ah-template-card-foot" });

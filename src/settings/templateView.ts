@@ -71,27 +71,27 @@ export function showSpaces(value: string): string {
 
 // ───────────────────────── 模板卡片（testplan L34）─────────────────────────
 
-/** 卡片上一行效果预览：级别 + 编号（已去 WJ）+ 相对缩进档位。 */
+/** 卡片上一行效果预览：级别 + 编号（已去 WJ；不编号的层级为 `null`）+ 缩进档位。 */
 export interface CardPreviewLine {
 	level: number;
-	label: string;
-	/** 相对起始层级的缩进档位（0 起）。 */
+	label: string | null;
+	/** 缩进档位（H1 为 0，逐级加一）。 */
 	indent: number;
 }
 
 /**
- * 卡片三行效果预览：取编号范围内从起始层级起的前三级，每级第一个序号（如「一、」「1.1 」「1.1.1 」）。
- * 范围不足三级时有几级给几级。
+ * 卡片效果预览：H1–H6 全部层级各一行（用户 1.2.2 实测后定，一眼看清整套样式），编号范围内的
+ * 取该级第一个序号（如「一、」「1.1 」「1.1.1 」），范围外的 `label` 为 `null`（渲染成浅色、不带编号）。
  */
-export function cardPreviewLines(template: Template, max = 3): CardPreviewLine[] {
-	const top = normalizeTopLevel(template.topLevel);
-	const bottom = normalizeBottomLevel(template.bottomLevel);
+export function cardPreviewLines(template: Template): CardPreviewLine[] {
 	const out: CardPreviewLine[] = [];
-	for (let level = top; level <= bottom && out.length < max; level++) {
+	for (let level = 1; level <= 6; level++) {
 		const [first] = previewLevel(template, level, 1);
-		if (first !== undefined) {
-			out.push({ level, label: stripWordJoiners(first), indent: level - top });
-		}
+		out.push({
+			level,
+			label: first === undefined ? null : stripWordJoiners(first),
+			indent: level - 1,
+		});
 	}
 	return out;
 }
