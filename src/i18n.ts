@@ -302,6 +302,43 @@ export interface Messages {
 	cmdCopyOutline: string;
 	/** 「复制当前小节链接」命令名（R 组；光标在第一个标题之前时不出现在命令面板）。 */
 	cmdCopySectionLink: string;
+
+	// —— 笔记内入口（M16，spec §3.24）——
+	cmdToggleHeadingSkip: string;
+	cmdPromoteSection: string;
+	cmdDemoteSection: string;
+	cmdChooseNoteTemplate: string;
+	cmdToggleNoteAuto: string;
+	/** 右键菜单 / 标题手柄菜单项。 */
+	menuToggleSkip: string;
+	menuCopySectionLink: string;
+	menuPromoteSection: string;
+	menuDemoteSection: string;
+	menuNoteSettings: string;
+	/** 标题手柄菜单标签行：编号 标题 · 级别。 */
+	menuHandleLabel: (text: string, level: number) => string;
+	noticeSectionShiftOutOfRange: string;
+	noticeNoteTemplateNoRule: string;
+	noticeNoteTemplateSet: (name: string) => string;
+	noticeNoteAutoOn: string;
+	noticeNoteAutoOff: string;
+	noticeNoTemplates: string;
+	chooseTemplatePlaceholder: string;
+	/** 状态栏「本篇」标签与菜单。 */
+	statusModeWrite: string;
+	statusModeVirtual: string;
+	statusNoNumbering: string;
+	statusPausedByNote: string;
+	statusLabel: (mode: string, template: string) => string;
+	statusMenuRule: (path: string) => string;
+	statusMenuNoRule: string;
+	statusMenuAutoFollow: string;
+	statusMenuAutoOn: string;
+	statusMenuAutoOff: string;
+	statusMenuChangeTemplate: string;
+	statusMenuRenumber: string;
+	statusMenuCopyOutline: string;
+	statusMenuClearStale: string;
 	/** 清除残留编号成功 / 没有残留时的提示（M14）。 */
 	noticeStaleCleared: string;
 	noticeNoStaleNumbering: string;
@@ -658,13 +695,45 @@ const zh: Messages = {
 	foreignGuardSearchPlaceholder: "搜索标题…",
 	foreignGuardSearchEmpty: "没有匹配的标题",
 
-	cmdToggle: "切换全局自动编号（全局）",
-	cmdRenumber: "立即重新编号（当前文件）",
-	cmdClear: "清除当前文件编号",
-	cmdClearForeign: "清理非本插件的标题编号（当前文件）",
-	cmdClearStale: "清除本文件残留的插件编号（仅显示模式）",
+	cmdToggle: "切换全局自动编号",
+	cmdRenumber: "重新编号当前笔记",
+	cmdClear: "清除当前笔记的编号",
+	cmdClearForeign: "清理当前笔记中的非本插件编号",
+	cmdClearStale: "清除当前笔记的残留编号（仅显示模式）",
 	cmdCopyOutline: "复制编号大纲",
 	cmdCopySectionLink: "复制当前小节链接",
+	cmdToggleHeadingSkip: "跳过 / 恢复光标处标题的编号",
+	cmdPromoteSection: "升级当前小节",
+	cmdDemoteSection: "降级当前小节",
+	cmdChooseNoteTemplate: "为当前笔记选择模板…",
+	cmdToggleNoteAuto: "开关当前笔记的自动编号",
+	menuToggleSkip: "跳过此标题的编号",
+	menuCopySectionLink: "复制本节链接",
+	menuPromoteSection: "升级本节",
+	menuDemoteSection: "降级本节",
+	menuNoteSettings: "本篇编号设置…",
+	menuHandleLabel: (text, level) => `${text} · H${level}`,
+	noticeSectionShiftOutOfRange: "本节里有标题会超出 1–6 级，未做任何修改",
+	noticeNoteTemplateNoRule: "这篇笔记所在路径没有启用编号，请先到设置里添加路径规则",
+	noticeNoteTemplateSet: (name) => `这篇笔记改用模板「${name}」`,
+	noticeNoteAutoOn: "这篇笔记已设为始终自动编号",
+	noticeNoteAutoOff: "这篇笔记已设为不自动编号",
+	noticeNoTemplates: "没有可选的模板",
+	chooseTemplatePlaceholder: "选择这篇笔记使用的模板…",
+	statusModeWrite: "写入",
+	statusModeVirtual: "仅显示",
+	statusNoNumbering: "本篇不编号",
+	statusPausedByNote: "本篇已暂停",
+	statusLabel: (mode, template) => `${mode} · ${template}`,
+	statusMenuRule: (path) => `命中规则：${path}`,
+	statusMenuNoRule: "未命中任何路径规则",
+	statusMenuAutoFollow: "自动编号：跟随全局",
+	statusMenuAutoOn: "自动编号：这篇始终编号",
+	statusMenuAutoOff: "自动编号：这篇不编号",
+	statusMenuChangeTemplate: "换个模板…",
+	statusMenuRenumber: "立即重新编号",
+	statusMenuCopyOutline: "复制编号大纲",
+	statusMenuClearStale: "清除残留编号",
 	noticeStaleCleared: "已清除本插件写入的旧编号，手写编号保持不动",
 	noticeNoStaleNumbering: "本文件没有本插件写入的旧编号",
 	virtualStaleTooltip:
@@ -1010,13 +1079,47 @@ const en: Messages = {
 	foreignGuardSearchPlaceholder: "Search headings…",
 	foreignGuardSearchEmpty: "No matching headings",
 
-	cmdToggle: "Toggle global auto-numbering (global)",
-	cmdRenumber: "Renumber now (current file)",
-	cmdClear: "Clear numbering in current file",
-	cmdClearForeign: "Clear non-plugin heading numbering (current file)",
-	cmdClearStale: "Clear leftover plugin numbering in this file (display-only mode)",
+	cmdToggle: "Toggle global auto-numbering",
+	cmdRenumber: "Renumber current note",
+	cmdClear: "Clear numbering in current note",
+	cmdClearForeign: "Clear non-plugin heading numbering in current note",
+	cmdClearStale: "Clear leftover numbering in current note (display-only mode)",
 	cmdCopyOutline: "Copy numbered outline",
 	cmdCopySectionLink: "Copy current section link",
+	cmdToggleHeadingSkip: "Skip / restore numbering for heading at cursor",
+	cmdPromoteSection: "Promote current section",
+	cmdDemoteSection: "Demote current section",
+	cmdChooseNoteTemplate: "Choose template for current note…",
+	cmdToggleNoteAuto: "Toggle auto-numbering for current note",
+	menuToggleSkip: "Skip numbering for this heading",
+	menuCopySectionLink: "Copy section link",
+	menuPromoteSection: "Promote section",
+	menuDemoteSection: "Demote section",
+	menuNoteSettings: "Numbering settings for this note…",
+	menuHandleLabel: (text, level) => `${text} · H${level}`,
+	noticeSectionShiftOutOfRange:
+		"A heading in this section would leave levels 1–6; nothing changed",
+	noticeNoteTemplateNoRule:
+		"No numbering is enabled for this note's path; add a path rule in settings first",
+	noticeNoteTemplateSet: (name) => `This note now uses template "${name}"`,
+	noticeNoteAutoOn: "This note is set to always auto-number",
+	noticeNoteAutoOff: "This note is set to not auto-number",
+	noticeNoTemplates: "No templates available",
+	chooseTemplatePlaceholder: "Choose a template for this note…",
+	statusModeWrite: "Write",
+	statusModeVirtual: "Display only",
+	statusNoNumbering: "Not numbered",
+	statusPausedByNote: "Paused for note",
+	statusLabel: (mode, template) => `${mode} · ${template}`,
+	statusMenuRule: (path) => `Matching rule: ${path}`,
+	statusMenuNoRule: "No path rule matches",
+	statusMenuAutoFollow: "Auto-numbering: follow global",
+	statusMenuAutoOn: "Auto-numbering: always for this note",
+	statusMenuAutoOff: "Auto-numbering: never for this note",
+	statusMenuChangeTemplate: "Change template…",
+	statusMenuRenumber: "Renumber now",
+	statusMenuCopyOutline: "Copy numbered outline",
+	statusMenuClearStale: "Clear leftover numbering",
 	noticeStaleCleared:
 		"Removed the old numbers this plugin had written; hand-written numbers were left alone",
 	noticeNoStaleNumbering: "This file has no numbers written by this plugin",

@@ -32,6 +32,7 @@
 -   [P. 继承级数 inheritDepth（1.0.22，社区 PR #7） — dev + user](./testplan/P-继承级数.md)
 -   [Q. 标题链接建议 + Various Complements 联动（M13，1.0.26） — dev + user](./testplan/Q-标题链接建议与VC联动.md)
 -   [R. 复制命令：编号大纲 / 当前小节链接（1.2.0） — dev + user](./testplan/R-复制命令.md)
+-   [S. 笔记内入口与命令（M16，1.3.0） — dev + user](./testplan/S-笔记内入口.md)
 -   [V. 虚拟编号模式（M14，1.2.0） — dev + user](./testplan/V-虚拟编号模式.md)
 
 ## [3. 已知 bug 汇总](./testplan/3-已知bug汇总.md)

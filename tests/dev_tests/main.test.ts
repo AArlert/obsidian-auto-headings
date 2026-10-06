@@ -14,6 +14,8 @@ import AutoHeadingsPlugin from "../../src/main";
 import { DEFAULT_TEMPLATE, WORD_JOINER, type Template } from "../../src/numbering";
 import { NO_NUMBERING_TEMPLATE, type PathRule } from "../../src/pathrules";
 import { HeadingIndex } from "../../src/headingindex";
+import { NoteEntry } from "../../src/noteentry";
+import { TEMPLATE_KEY } from "../../src/frontmatter";
 import { Modal, Notice, TFile as MockTFile, type MockCommand } from "./obsidian-mock";
 
 /** 编辑器坐标。 */
@@ -49,6 +51,10 @@ class FakeEditor {
 
 	getCursor(): Pos {
 		return this.cursor;
+	}
+
+	getLine(n: number): string {
+		return this.lines[n];
 	}
 
 	/** 把光标放到某行（J11：模拟「用户正停在这一行敲字」）。 */
@@ -3011,5 +3017,72 @@ describe("编号维护 TAB「清理非本插件编号」先弹预览（1.2.2，t
 		p.reviewActiveFileForeignNumbering();
 		expect(Modal.instances).toHaveLength(0);
 		expect(Notice.messages.at(-1)).toContain("外来编号");
+	});
+});
+
+describe("S 组：笔记内入口（M16，spec §3.24）", () => {
+	const entryOf = (p: unknown) => new NoteEntry(p as never);
+
+	it("S1/S2：toggleSkip 补 / 去行尾标记，一次事务（一次撤销）", () => {
+		const { p } = makePlugin();
+		const editor = new FakeEditor("# A\n## 临时讨论");
+		entryOf(p).toggleSkip(editor as never, 1);
+		expect(editor.getValue()).toBe("# A\n## 临时讨论 <!-- skip -->");
+		expect(editor.txnCount).toBe(1);
+		entryOf(p).toggleSkip(editor as never, 1);
+		expect(editor.getValue()).toBe("# A\n## 临时讨论");
+		expect(editor.txnCount).toBe(2);
+	});
+
+	it("S4/S5：shiftSection 一次事务改整节；S6 越界整体拒绝并提示", () => {
+		const { p } = makePlugin();
+		const editor = new FakeEditor("# A\n## B\n### C\n## D");
+		entryOf(p).shiftSection(editor as never, 1, 1);
+		expect(editor.getValue()).toBe("# A\n### B\n#### C\n## D");
+		expect(editor.txnCount).toBe(1);
+		const before = editor.getValue();
+		entryOf(p).shiftSection(editor as never, 0, -1);
+		expect(editor.getValue()).toBe(before);
+		expect(editor.txnCount).toBe(1);
+		expect(Notice.messages.at(-1)).toContain("1–6");
+	});
+
+	it("S9/S10：frontmatter 指向存在的模板则覆盖规则模板；不存在则回退", () => {
+		const alt: Template = { ...DEFAULT_TEMPLATE, name: "学术" };
+		const { p } = makePlugin({ allTemplates: [DEFAULT_TEMPLATE, alt] });
+		let name: unknown = "学术";
+		(
+			p as unknown as { app: { metadataCache: Record<string, unknown> } }
+		).app.metadataCache.getCache = () => ({ frontmatter: { [TEMPLATE_KEY]: name } });
+		expect(p.getTemplateForFile("a.md")?.name).toBe("学术");
+		name = "不存在的模板";
+		expect(p.getTemplateForFile("a.md")?.name).toBe(DEFAULT_TEMPLATE.name);
+		name = 42;
+		expect(p.getTemplateForFile("a.md")?.name).toBe(DEFAULT_TEMPLATE.name);
+	});
+
+	it("S11：路径为「不编号」时选模板只提示、不弹选择器", () => {
+		const { p } = makePlugin({
+			pathRules: [{ pattern: "/", template: NO_NUMBERING_TEMPLATE }],
+		});
+		entryOf(p).chooseTemplate({ path: "a.md", extension: "md" } as never);
+		expect(Notice.messages.at(-1)).toContain("路径规则");
+	});
+
+	it("S14：状态栏文本——非 md 隐藏，写入 / 仅显示 / 不编号三态", () => {
+		const { p } = makePlugin({
+			pathRules: [
+				{ pattern: "/", template: "默认" },
+				{ pattern: "V/", template: "默认", mode: "virtual" },
+				{ pattern: "N/", template: NO_NUMBERING_TEMPLATE },
+			],
+		});
+		const e = entryOf(p);
+		const f = (path: string) =>
+			({ path, extension: path.endsWith(".md") ? "md" : "png" }) as never;
+		expect(e.statusText(f("x.png"))).toBeNull();
+		expect(e.statusText(f("a.md"))).toBe("写入 · 默认");
+		expect(e.statusText(f("V/a.md"))).toBe("仅显示 · 默认");
+		expect(e.statusText(f("N/a.md"))).toBe("本篇不编号");
 	});
 });

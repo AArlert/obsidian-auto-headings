@@ -1478,3 +1478,29 @@ button.ah-preview-toggle.is-active {
 		min-width: 640px;
 	}
 }
+
+/* 标题手柄（M16，spec §3.24）：挂在 .cm-scroller 里的单个浮层，悬停标题行时显示 */
+.ah-heading-handle {
+	position: absolute;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	border-radius: var(--radius-s);
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+	letter-spacing: -2px;
+	cursor: pointer;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.12s ease;
+}
+.ah-heading-handle.is-visible {
+	opacity: 1;
+	pointer-events: auto;
+}
+.ah-heading-handle:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}

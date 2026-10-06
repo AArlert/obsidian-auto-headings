@@ -25,6 +25,7 @@ import {
 	planResumeFileSwitch,
 	readFileSwitch,
 	SWITCH_KEY,
+	TEMPLATE_KEY,
 	type SwitchEdit,
 } from "./frontmatter";
 import { renumberContent, WORD_JOINER, type Template } from "./numbering";
@@ -70,6 +71,7 @@ import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
 import { summarizeTemplateUsage, type TemplateUsage } from "./settings/templateView";
 import { HeadingIndex } from "./headingindex";
+import { NoteEntry } from "./noteentry";
 import { HeadingLinkSuggest } from "./headingsuggest";
 import {
 	buildVcDictionaryJson,
@@ -291,6 +293,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 				return true;
 			},
 		});
+
+		// 笔记内入口（M16，spec §3.24）：跳过标记 / 整节升降级 / 单篇模板 / 右键菜单 / 状态栏。
+		new NoteEntry(this).register();
 
 		// 复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11）：接线在独立方法，纯逻辑在 copycommands.ts。
 		this.registerCopyCommands();
@@ -569,14 +574,25 @@ export default class AutoHeadingsPlugin extends Plugin {
 			// `false`。伪模板参与具体度解析并可胜出，故能压过更泛的根规则；已有编号冻结不动。
 			return null;
 		}
-		return this.templateStore.get(rule.template) ?? null;
+		// 单篇模板（M16，spec §3.24）：frontmatter 指向存在的模板则覆盖规则模板；指向不存在的忽略。
+		const override = this.noteTemplateName(filePath);
+		const overridden = override ? this.templateStore.get(override) : undefined;
+		return overridden ?? this.templateStore.get(rule.template) ?? null;
+	}
+
+	/** 读某文件 frontmatter 里的单篇模板名（走元数据缓存，同步；缺省 / 非字符串返回 `null`）。 */
+	noteTemplateName(filePath: string): string | null {
+		const cache = this.app.metadataCache as Partial<MetadataCache> | undefined;
+		const fm = cache?.getCache?.(filePath)?.frontmatter as Record<string, unknown> | undefined;
+		const v = fm?.[TEMPLATE_KEY];
+		return typeof v === "string" && v.trim() ? v.trim() : null;
 	}
 
 	/**
 	 * 某文件解析出的规则是否为「不编号」伪模板（M12，testplan K15）。
 	 * 供手动命令区分「路径设为不编号」与「未匹配任何规则」两种无模板情形，给出不误导的提示。
 	 */
-	private resolvesToNoNumbering(filePath: string | undefined | null): boolean {
+	resolvesToNoNumbering(filePath: string | undefined | null): boolean {
 		if (!filePath) {
 			return false;
 		}
@@ -592,7 +608,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/** 某文件是否为「仅显示」模式（M14）：所有编号写入路径据此跳过它。 */
-	private isVirtualFile(filePath: string | undefined | null): boolean {
+	isVirtualFile(filePath: string | undefined | null): boolean {
 		return this.numberingModeFor(filePath) === "virtual";
 	}
 
@@ -639,7 +655,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 注意：本判定仅决定「是否够格自动触发」，是否真正写入还取决于能否命中模板（见
 	 * {@link getTemplateForFile}）。手动命令不走此判定。
 	 */
-	private shouldAutoTrigger(content: string): boolean {
+	shouldAutoTrigger(content: string): boolean {
 		// 已交还所有权（M12「固化编号并交还所有权」）：**硬闸，必须在 frontmatter 判断之前**。
 		// `fm:true` 的文件本就绕开全局开关，若让它在此闸之后被检查，固化后一编辑就会在已成
 		// 普通文本的编号上再叠一层新前缀 → 双重编号。想恢复接管走设置面板的「恢复接管」。
@@ -1324,7 +1340,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * （{@link clearPluginNumberingContent}），手写编号不动、不写 `fm:false`；以单一事务写回，
 	 * 并像其他清除一样同步别处指向这些标题的链接。
 	 */
-	private runClearStaleNumbering(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
+	runClearStaleNumbering(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
 		const { prefixes, suffixes } = this.strippableAffixes();
 		const oldContent = editor.getValue();
 		let newContent = clearPluginNumberingContent(oldContent, {
@@ -1749,7 +1765,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 故回退到「按 `getActiveFile()` 在打开的 markdown 叶子里找同路径视图」（{@link markdownContextForPath}）。
 	 * 找不到返回 `null`。
 	 */
-	private activeMarkdownContext(): { editor: Editor; ctx: MarkdownFileInfo } | null {
+	activeMarkdownContext(): { editor: Editor; ctx: MarkdownFileInfo } | null {
 		const direct = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (direct?.editor) {
 			return { editor: direct.editor, ctx: direct };
@@ -1878,7 +1894,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * （{@link virtualNumberingFor}），拼装逻辑见 {@link buildNumberedOutline}。没有标题时只提示、
 	 * 不碰剪贴板；写剪贴板失败（权限受限等）时提示复制失败，不向上抛错。
 	 */
-	private async runCopyNumberedOutline(editor: Editor, file: TFile): Promise<void> {
+	async runCopyNumberedOutline(editor: Editor, file: TFile): Promise<void> {
 		const content = editor.getValue();
 		const labels = this.virtualNumberingFor(file.path, content);
 		const { text, count } = buildNumberedOutline(content, labels);
@@ -1899,7 +1915,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 「复制当前小节链接」命令的执行体（R4）：链接由 Obsidian 按用户的链接设置生成
 	 * （`generateMarkdownLink`），锚点 / 别名口径见 {@link sectionLinkParts}。
 	 */
-	private async runCopySectionLink(file: TFile, heading: Heading): Promise<void> {
+	async runCopySectionLink(file: TFile, heading: Heading): Promise<void> {
 		const { anchor, alias } = sectionLinkParts(heading);
 		const link = this.app.fileManager.generateMarkdownLink(file, "", "#" + anchor, alias);
 		const m = this.messages();
@@ -2173,7 +2189,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * `false`，本命令在同一事务里把它移除——与「清除当前文件编号」的暂停构成对称闭环。只认
 	 * `false`，`true`（文件级强制 opt-in）不在本命令管辖范围内。
 	 */
-	private runImmediateRenumber(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
+	runImmediateRenumber(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
 		// 若有待处理的实时更新，先取消，避免随后重复触发。
 		const path = ctx.file?.path;
 		if (path) {
@@ -2263,7 +2279,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 切开会产生半个码位的坐标。故两端切点各回退一格避开。文本内容本身不受影响：无论切在哪，
 	 * 「公共前缀 + 中段 + 公共后缀」拼回来都逐字节等于新行。
 	 */
-	private lineChange(line: number, oldLine: string, newLine: string): EditorChange {
+	lineChange(line: number, oldLine: string, newLine: string): EditorChange {
 		const max = Math.min(oldLine.length, newLine.length);
 		let head = 0;
 		while (head < max && oldLine[head] === newLine[head]) {
