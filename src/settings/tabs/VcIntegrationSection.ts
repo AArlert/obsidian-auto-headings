@@ -8,7 +8,7 @@
  *
  * 选中非「不联动」时额外渲染一行「词典文件路径 + 一键复制」。
  *
- * 两个确认 Modal 的结构照抄 DangerTab.ts 的 ClearVaultModal/FreezeVaultModal 惯例
+ * 两个确认 Modal 的结构照抄 MaintenanceTab.ts 的 VaultConfirmModal 惯例
  * （Modal 子类 + onOpen 里 createEl + 取消/确认按钮，确认后 this.close() 再 await 业务方法）。
  */
 
@@ -107,7 +107,7 @@ class VcManualModeConfirmModal extends Modal {
 		const t = this.plugin.messages();
 		const path = this.plugin.vcDictionaryFilePath();
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t.vcManualConfirmTitle });
+		this.setTitle(t.vcManualConfirmTitle);
 		contentEl.createEl("p", { text: t.vcManualConfirmBody });
 		new Setting(contentEl)
 			.setName(t.vcDictionaryPathLabel)
@@ -156,7 +156,7 @@ class VcAutoModeConfirmModal extends Modal {
 		const { contentEl } = this;
 		const t = this.plugin.messages();
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t.vcAutoConfirmTitle });
+		this.setTitle(t.vcAutoConfirmTitle);
 		// 1.0.27：长段 ①②③ 文案改为「短总述 + 要点列表」，确认框整洁可扫读。
 		contentEl.createEl("p", { text: t.vcAutoConfirmBody });
 		const ul = contentEl.createEl("ul");

@@ -1,4 +1,4 @@
-import { Modal, Notice, Setting, setIcon, type App } from "obsidian";
+import { Menu, Notice, Setting, setIcon } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import type { Messages } from "../../i18n";
 import {
@@ -6,13 +6,15 @@ import {
 	findDuplicatePatternIndex,
 	hasRootRule,
 	NO_NUMBERING_TEMPLATE,
+	resolvePathRule,
 	ruleMode,
 	type PathCandidate,
 	type PathRule,
 } from "../../pathrules";
-import { cloneRules, isQuietTransition, type ModeTransition } from "../../virtual/modeSwitch";
+import { cloneRules, isQuietTransition } from "../../virtual/modeSwitch";
 import { DEFAULT_TEMPLATE_NAME } from "../../templates/schema";
 import { closeAllPathSuggestPopups, type PathSuggestLabels, PathSuggestPopup } from "./PathSuggest";
+import { BatchRenumberModal, ModeTransitionModal } from "./PathRuleModals";
 
 /** 分层浏览模式的提示文案，从当前语言的 `t` 里挑出对应键（见 `PathSuggest.ts` `PathSuggestLabels`）。 */
 function suggestLabelsOf(t: Messages): PathSuggestLabels {
@@ -25,9 +27,28 @@ function suggestLabelsOf(t: Messages): PathSuggestLabels {
 }
 
 /**
- * 「路径与模板」TAB 的**路径规则**分区（见 spec.md §3.8）：可视化表格（路径模式 → 模板），
- * 可增删、可拖拽排序、可滚动（移动端横向滚动）；顶部在「无 `/` 根规则且全局自动编号=开」时
- * 显示兜底缺失提示条与快捷添加按钮。
+ * 把设置项标题行右侧的按钮渲染成「图标 + 文字」（1.2.2：「添加规则」「新增模板」挪到各自标题行右侧，
+ * 普通按钮，见 testplan L32 / L34）。
+ */
+export function decorateHeadingButton(
+	buttonEl: HTMLButtonElement,
+	icon: string,
+	text: string,
+): void {
+	buttonEl.empty();
+	buttonEl.addClass("ah-heading-btn");
+	setIcon(buttonEl.createSpan({ cls: "ah-heading-btn-icon" }), icon);
+	buttonEl.createSpan({ text });
+}
+
+/**
+ * 「路径模板」TAB 的**路径规则**分区（见 spec.md §3.8）：可视化表格（路径模式 → 模板 → 模式），
+ * 可增删、可拖拽排序、可纵向滚动；顶部在「无 `/` 根规则且全局自动编号=开」时显示兜底缺失提示条与
+ * 快捷添加按钮。
+ *
+ * 1.2.2 视觉更新（testplan L32 / L33 / L13）：去掉行号列，原位置放「当前笔记圆点」（活动笔记实际
+ * 解析到的那条规则）；「添加规则」挪到标题行右侧；表下一行灰字说明未命中的笔记不编号；窄屏
+ * （≤ 480px）每条规则两行，批量重编号与删除收进 ⋯ 菜单（布局由 styles.css 的媒体查询切换）。
  *
  * 路径输入接建议弹窗（`PathSuggest.ts`，testplan K13/K14，参考 numeroflip/obsidian-auto-template-trigger
  * 的文件夹建议交互）：输入框为空时分层浏览（从根逐层点击文件夹下钻），有输入时模糊匹配 vault 内
@@ -43,11 +64,24 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 	const plugin = tab.plugin;
 	const rules = plugin.settings.pathRules;
 
-	// 节头挂强化类：左侧强调色竖条 + 加大字号，与「模板」分区一眼可分（testplan L20）。
 	new Setting(containerEl)
 		.setName(t.pathRulesHeading)
 		.setHeading()
-		.settingEl.addClass("ah-section-head");
+		.addButton((btn) => {
+			decorateHeadingButton(btn.buttonEl, "plus", t.addRule);
+			btn.onClick(async () => {
+				// 新规则的模式跟随根规则（M14）：新装用户根规则是「仅显示」，新加的文件夹规则若默认写入，
+				// 一填路径就会开始往文件里写编号，违背他们没做过的选择。路径为空时不匹配任何文件，直接存。
+				const root = rules.find((r) => r.pattern.trim() === "/");
+				rules.push({
+					pattern: "",
+					template: DEFAULT_TEMPLATE_NAME,
+					...(root && ruleMode(root) === "virtual" ? { mode: "virtual" as const } : {}),
+				});
+				await plugin.saveSettings();
+				tab.display();
+			});
+		});
 	containerEl.createEl("p", { cls: "ah-section-desc", text: t.pathRulesDesc });
 
 	// —— 兜底缺失提示条 ——
@@ -67,43 +101,44 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 		);
 	}
 
-	new Setting(containerEl).addButton((btn) =>
-		btn.setButtonText(t.addRule).onClick(async () => {
-			// 新规则的模式跟随根规则（M14）：新装用户根规则是「仅显示」，新加的文件夹规则若默认写入，
-			// 一填路径就会开始往文件里写编号，违背他们没做过的选择。路径为空时不匹配任何文件，直接存。
-			const root = rules.find((r) => r.pattern.trim() === "/");
-			rules.push({
-				pattern: "",
-				template: DEFAULT_TEMPLATE_NAME,
-				...(root && ruleMode(root) === "virtual" ? { mode: "virtual" as const } : {}),
-			});
-			await plugin.saveSettings();
-			tab.display();
-		}),
-	);
-
-	// —— 规则表格（可滚动；表头 sticky）——
+	// —— 规则表格（可滚动；表头 sticky、无底色，只留浅色列名）——
 	const table = containerEl.createDiv({ cls: "ah-path-table" });
 	const head = table.createDiv({ cls: "ah-path-row ah-path-head" });
-	for (const label of ["", "#", t.pathColPattern, t.pathColTemplate, t.pathColMode, "", ""]) {
-		head.createDiv({ cls: "ah-path-cell", text: label });
+	for (const [label, cls] of [
+		["", "ah-path-c-handle"],
+		["", "ah-path-c-dot"],
+		[t.pathColPattern, "ah-path-c-pattern"],
+		[t.pathColTemplate, "ah-path-c-template"],
+		[t.pathColMode, "ah-path-c-mode"],
+		["", "ah-path-c-actions"],
+	]) {
+		head.createDiv({ cls: `ah-path-cell ${cls}`, text: label });
 	}
 
 	if (rules.length === 0) {
 		table.createEl("p", { cls: "ah-section-desc", text: t.pathEmpty });
 	}
 
+	// 当前笔记实际解析到的规则（与编号判定同一口径），在它那一行画圆点。
+	const activePath = plugin.activeNotePath();
+	const activeRule = activePath ? resolvePathRule(rules, activePath) : null;
 	rules.forEach((rule, index) => {
-		renderPathRuleRow(tab, table, rule, index);
+		renderPathRuleRow(tab, table, rule, index, rule === activeRule);
 	});
+
+	containerEl.createEl("p", { cls: "ah-path-hint", text: t.pathNoMatchHint });
 }
 
-/** 渲染单条路径规则行（拖拽手柄 + 行号 + 路径输入[含清空] + 模板下拉 + 删除）。 */
+/**
+ * 渲染单条路径规则行：拖拽手柄 + 当前笔记圆点 + 路径输入（含清空）+ 模板下拉 + 模式下拉 +
+ * 行尾操作（桌面：批量重编号 / 删除；窄屏：⋯ 菜单）。
+ */
 function renderPathRuleRow(
 	tab: AutoHeadingsSettingTab,
 	table: HTMLElement,
 	rule: PathRule,
 	index: number,
+	isActive: boolean,
 ): void {
 	const t = tab.t;
 	const plugin = tab.plugin;
@@ -111,15 +146,24 @@ function renderPathRuleRow(
 	const row = table.createDiv({ cls: "ah-path-row" });
 
 	// 拖拽手柄（**仅手柄可发起拖拽**，整行不再 draggable——否则会妨碍路径输入框的文本选择）。
-	const handle = row.createDiv({ cls: "ah-path-cell ah-path-handle", text: "⠿" });
+	const handle = row.createDiv({ cls: "ah-path-cell ah-path-c-handle ah-path-handle" });
+	setIcon(handle, "grip-vertical");
 	handle.setAttr("draggable", "true");
+	handle.setAttr("aria-label", t.dragHandleTooltip);
 	handle.title = t.dragHandleTooltip;
 
-	// 行号。
-	row.createDiv({ cls: "ah-path-cell ah-path-index", text: String(index + 1) });
+	// 当前笔记圆点（取代原行号列，testplan L32）。
+	const dotCell = row.createDiv({ cls: "ah-path-cell ah-path-c-dot" });
+	if (isActive) {
+		const dot = dotCell.createSpan({ cls: "ah-path-dot" });
+		dot.setAttr("aria-label", t.activeRuleTooltip);
+		dot.title = t.activeRuleTooltip;
+	}
 
 	// 路径模式输入（接建议弹窗 + 行内清空按钮）。
-	const patternCell = row.createDiv({ cls: "ah-path-cell ah-path-pattern-cell" });
+	const patternCell = row.createDiv({
+		cls: "ah-path-cell ah-path-c-pattern ah-path-pattern-cell",
+	});
 	const input = patternCell.createEl("input", { type: "text", cls: "ah-text-input" });
 	input.value = rule.pattern;
 	input.placeholder = t.pathInputPlaceholder;
@@ -171,20 +215,21 @@ function renderPathRuleRow(
 	});
 	input.addEventListener("blur", () => void commitPattern());
 
-	// 清空此路径的小按钮（只清空输入框文本，不删除整条规则）。
-	const clearBtn = patternCell.createEl("span", {
-		cls: "ah-input-clear",
-		text: "✕",
-	});
+	// 清空此路径的小按钮（只清空输入框文本，不删除整条规则）。桌面端悬停 / 聚焦时才出现，
+	// 触屏常显（styles.css，testplan L6）。
+	const clearBtn = patternCell.createEl("span", { cls: "ah-input-clear" });
+	setIcon(clearBtn, "x");
 	clearBtn.setAttr("aria-label", t.clearInputTooltip);
 	clearBtn.title = t.clearInputTooltip;
+	// mousedown 先于输入框 blur：阻止默认行为，免得点 ✕ 时输入框先失焦把旧值提交一遍。
+	clearBtn.addEventListener("mousedown", (e) => e.preventDefault());
 	clearBtn.addEventListener("click", () => {
 		input.value = "";
 		input.focus();
 	});
 
 	// 模板下拉（默认模板显示名随语言，存储值仍为固定名「默认」）。
-	const tplCell = row.createDiv({ cls: "ah-path-cell" });
+	const tplCell = row.createDiv({ cls: "ah-path-cell ah-path-c-template" });
 	const select = tplCell.createEl("select", { cls: "dropdown" });
 	for (const tpl of plugin.templateStore.all()) {
 		const opt = select.createEl("option", {
@@ -220,7 +265,7 @@ function renderPathRuleRow(
 	});
 
 	// 编号模式下拉（M14，spec §3.22）：写入文件 / 仅显示。「不编号」规则没有编号可言，置灰。
-	const modeCell = row.createDiv({ cls: "ah-path-cell" });
+	const modeCell = row.createDiv({ cls: "ah-path-cell ah-path-c-mode" });
 	const modeSelect = modeCell.createEl("select", { cls: "dropdown" });
 	modeSelect.title = t.pathModeTooltip;
 	const modeOptions: Array<[string, string]> = [
@@ -240,43 +285,65 @@ function renderPathRuleRow(
 		void commitRules(tab, after);
 	});
 
-	// 批量重编号入口（M12，testplan K16）：确认对话框后对该规则命中的全部文件生效；
-	// 「不编号」规则无可批量编号的内容，置灰。
-	const batchCell = row.createDiv({ cls: "ah-path-cell" });
-	const batch = batchCell.createEl("span", { cls: "ah-path-batch" });
-	setIcon(batch, "list-ordered");
-	if (rule.template === NO_NUMBERING_TEMPLATE || ruleMode(rule) === "virtual") {
-		const tip =
-			rule.template === NO_NUMBERING_TEMPLATE
-				? t.batchRenumberNoneTooltip
-				: t.batchRenumberVirtualTooltip;
-		batch.addClass("ah-path-batch-disabled");
-		batch.setAttr("aria-label", tip);
-		batch.title = tip;
-	} else {
-		batch.setAttr("aria-label", t.batchRenumberTooltip);
-		batch.title = t.batchRenumberTooltip;
-		batch.addEventListener("click", () => {
-			const count = plugin.matchedMarkdownFiles(rule).length;
-			if (count === 0) {
-				new Notice(t.noticeBatchNoMatch);
-				return;
-			}
-			new BatchRenumberModal(plugin.app, t, rule.pattern, count, () => {
-				void plugin.batchRenumberRule(rule);
-			}).open();
-		});
-	}
-
-	// 删除整条规则（无背景的 ✕，不再是被椭圆按钮包住的样式）。
-	const delCell = row.createDiv({ cls: "ah-path-cell" });
-	const del = delCell.createEl("span", { cls: "ah-path-del", text: "✕" });
-	del.setAttr("aria-label", t.deleteRuleTooltip);
-	del.title = t.deleteRuleTooltip;
-	del.addEventListener("click", () => {
+	// —— 行尾操作 ——
+	// 批量重编号（M12，testplan K16）：确认对话框后对该规则命中的全部文件生效；「不编号」/
+	// 「仅显示」规则没有要写进文件的编号，置灰并说明原因。
+	const batchBlocked =
+		rule.template === NO_NUMBERING_TEMPLATE
+			? t.batchRenumberNoneTooltip
+			: ruleMode(rule) === "virtual"
+				? t.batchRenumberVirtualTooltip
+				: null;
+	const runBatch = () => {
+		const count = plugin.matchedMarkdownFiles(rule).length;
+		if (count === 0) {
+			new Notice(t.noticeBatchNoMatch);
+			return;
+		}
+		new BatchRenumberModal(plugin.app, t, rule.pattern, count, () => {
+			void plugin.batchRenumberRule(rule);
+		}).open();
+	};
+	const deleteRule = () => {
 		const after = cloneRules(rules);
 		after.splice(index, 1);
 		void commitRules(tab, after);
+	};
+
+	const actions = row.createDiv({ cls: "ah-path-cell ah-path-c-actions" });
+	// 桌面：两个图标按钮常驻。
+	const batch = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-batch" });
+	setIcon(batch, "list-ordered");
+	if (batchBlocked) {
+		batch.addClass("ah-path-batch-disabled");
+		batch.setAttr("aria-label", batchBlocked);
+		batch.title = batchBlocked;
+	} else {
+		batch.setAttr("aria-label", t.batchRenumberTooltip);
+		batch.title = t.batchRenumberTooltip;
+		batch.addEventListener("click", runBatch);
+	}
+	const del = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-del" });
+	setIcon(del, "x");
+	del.setAttr("aria-label", t.deleteRuleTooltip);
+	del.title = t.deleteRuleTooltip;
+	del.addEventListener("click", deleteRule);
+	// 窄屏：同样两项收进 ⋯ 菜单（testplan L33；显隐由 styles.css 媒体查询切换）。
+	const more = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-more" });
+	setIcon(more, "more-horizontal");
+	more.setAttr("aria-label", t.moreActionsTooltip);
+	more.addEventListener("click", (e) => {
+		const menu = new Menu();
+		menu.addItem((item) => {
+			item.setTitle(batchBlocked ?? t.batchRenumberTooltip)
+				.setIcon("list-ordered")
+				.setDisabled(batchBlocked !== null)
+				.onClick(runBatch);
+		});
+		menu.addItem((item) => {
+			item.setTitle(t.deleteRuleTooltip).setIcon("x").setWarning(true).onClick(deleteRule);
+		});
+		menu.showAtMouseEvent(e);
 	});
 
 	// —— 拖拽排序 ——
@@ -305,17 +372,6 @@ function renderPathRuleRow(
 	});
 }
 
-/**
- * 收集 vault 内全部文件夹 / 文件，转成建议弹窗用的候选列表：输入框有内容时交给
- * `filterPathCandidates` 扁平模糊过滤 + 排序（参考 numeroflip/obsidian-auto-template-trigger 的
- * `FolderSuggest`），输入框为空时交给 `listImmediateChildren` 做分层浏览（testplan K14）。
- *
- * **不注入合成根候选**：参考实现 `FolderSuggest.getSuggestions` 用 `folder.path &&` 显式排除根
- * 目录——本插件早先手动 `push({path:"",isFolder:true})` 意图是让「/」可从下拉一键选中，但一旦
- * 该候选的路径恰好提交为 `/` 后再次聚焦，`filterPathCandidates` 的子串匹配会把它自己排除掉、
- * 转而只剩「路径字面含 `/`」的深层嵌套项，观感诡异（testplan K14）。根规则改由分层浏览模式的
- * 顶部 header（可点击选中当前层，根层即「/」）承接，不再经过扁平模糊匹配这条路径。
- */
 /**
  * 提交一次路径规则变动（M14，spec §3.22「切换模式」）：先算出哪些文件会换模式，需要时弹切换确认框，
  * 确认后才替换设置、落盘，再按用户勾选清除 / 写入编号；取消则规则原样不动（重绘把界面还原）。
@@ -348,108 +404,16 @@ async function commitRules(tab: AutoHeadingsSettingTab, after: PathRule[]): Prom
 }
 
 /**
- * 模式切换确认框（M14）：说明有多少文件离开写入 / 进入写入，各给一个开关。
- * - 「清除本插件写入的编号」：只有改为仅显示的文件时默认勾选；涉及「不编号」时默认不勾（沿用
- *   §3.10 的老语义：不编号 = 冻结现状）。
- * - 「立即写入编号」：默认不勾，等下次编辑再写。
- * 点取消或按 Esc 关闭 = 规则不变。
+ * 收集 vault 内全部文件夹 / 文件，转成建议弹窗用的候选列表：输入框有内容时交给
+ * `filterPathCandidates` 扁平模糊过滤 + 排序（参考 numeroflip/obsidian-auto-template-trigger 的
+ * `FolderSuggest`），输入框为空时交给 `listImmediateChildren` 做分层浏览（testplan K14）。
+ *
+ * **不注入合成根候选**：参考实现 `FolderSuggest.getSuggestions` 用 `folder.path &&` 显式排除根
+ * 目录——本插件早先手动 `push({path:"",isFolder:true})` 意图是让「/」可从下拉一键选中，但一旦
+ * 该候选的路径恰好提交为 `/` 后再次聚焦，`filterPathCandidates` 的子串匹配会把它自己排除掉、
+ * 转而只剩「路径字面含 `/`」的深层嵌套项，观感诡异（testplan K14）。根规则改由分层浏览模式的
+ * 顶部 header（可点击选中当前层，根层即「/」）承接，不再经过扁平模糊匹配这条路径。
  */
-class ModeTransitionModal extends Modal {
-	private confirmed = false;
-
-	constructor(
-		app: App,
-		private readonly t: Messages,
-		private readonly plan: ModeTransition,
-		private readonly onConfirm: (opts: { clear: boolean; write: boolean }) => void,
-		private readonly onCancel: () => void,
-	) {
-		super(app);
-	}
-
-	onOpen(): void {
-		const { contentEl, plan, t } = this;
-		contentEl.empty();
-		contentEl.createEl("h3", { text: t.modeModalTitle });
-		const leaving = plan.toVirtual.length + plan.toNone.length;
-		const opts = { clear: leaving > 0 && plan.toNone.length === 0, write: false };
-		if (leaving > 0) {
-			contentEl.createEl("p", {
-				text: t.modeModalLeaving(leaving, plan.toVirtual.length, plan.toNone.length),
-			});
-			new Setting(contentEl)
-				.setDesc(t.modeModalClearLabel)
-				.addToggle((tg) => tg.setValue(opts.clear).onChange((v) => (opts.clear = v)));
-		}
-		if (plan.toWrite.length > 0) {
-			contentEl.createEl("p", { text: t.modeModalEntering(plan.toWrite.length) });
-			new Setting(contentEl)
-				.setDesc(t.modeModalWriteLabel)
-				.addToggle((tg) => tg.setValue(opts.write).onChange((v) => (opts.write = v)));
-		}
-		new Setting(contentEl)
-			.addButton((btn) => btn.setButtonText(t.batchModalCancel).onClick(() => this.close()))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t.modeModalConfirm)
-					.setCta()
-					.onClick(() => {
-						this.confirmed = true;
-						this.close();
-						this.onConfirm(opts);
-					}),
-			);
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-		if (!this.confirmed) {
-			this.onCancel();
-		}
-	}
-}
-
-/**
- * 批量重编号确认对话框（M12，testplan K16）：展示规则路径与命中文件数，确认后才执行
- * （`batchRenumberRule` 见 main.ts——跳过 frontmatter `false`/外来编号守卫/「不编号」，
- * 已打开文件可撤销、未打开文件直接改写）。
- */
-class BatchRenumberModal extends Modal {
-	constructor(
-		app: App,
-		private readonly t: Messages,
-		private readonly pattern: string,
-		private readonly count: number,
-		private readonly onConfirm: () => void,
-	) {
-		super(app);
-	}
-
-	onOpen(): void {
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.createEl("h3", { text: this.t.batchModalTitle });
-		contentEl.createEl("p", { text: this.t.batchModalBody(this.pattern, this.count) });
-		new Setting(contentEl)
-			.addButton((btn) =>
-				btn.setButtonText(this.t.batchModalCancel).onClick(() => this.close()),
-			)
-			.addButton((btn) =>
-				btn
-					.setButtonText(this.t.batchModalConfirm)
-					.setCta()
-					.onClick(() => {
-						this.close();
-						this.onConfirm();
-					}),
-			);
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}
-
 function collectPathCandidates(tab: AutoHeadingsSettingTab): PathCandidate[] {
 	const vault = tab.plugin.app.vault as unknown as {
 		getAllLoadedFiles?: () => Array<{ path: string; children?: unknown }>;

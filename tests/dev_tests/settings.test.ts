@@ -5,6 +5,7 @@ import AutoHeadingsPlugin from "../../src/main";
 import {
 	DEFAULT_SETTINGS,
 	clampDebounceDelay,
+	confirmWordMatches,
 	defaultPathRules,
 	freshInstallPathRules,
 } from "../../src/settings/model";
@@ -134,5 +135,19 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		expect(load).toBeGreaterThan(-1);
 		expect(init).toBeGreaterThan(-1);
 		expect(load).toBeLessThan(init);
+	});
+});
+
+describe("全库操作确认词（1.2.2，testplan L44）", () => {
+	it("忽略首尾空白与大小写", () => {
+		expect(confirmWordMatches("清除", "清除")).toBe(true);
+		expect(confirmWordMatches("  Clear ", "clear")).toBe(true);
+		expect(confirmWordMatches("FREEZE", "freeze")).toBe(true);
+	});
+
+	it("留空或输错不通过", () => {
+		expect(confirmWordMatches("", "清除")).toBe(false);
+		expect(confirmWordMatches("清", "清除")).toBe(false);
+		expect(confirmWordMatches("固化", "清除")).toBe(false);
 	});
 });

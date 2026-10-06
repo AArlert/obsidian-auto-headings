@@ -83,7 +83,7 @@ Not in display-only mode. In write mode, one thing: each number carries an invis
 No. The plugin makes no network requests and collects no data. When it starts, it reads the headings in your vault once, locally, for "link to any heading as you type" (you can turn that off in settings); after that, numbering only touches the note you're editing. Memory use is capped: at most 50,000 indexed headings and about 2 MB of clipboard cache.
 
 **Can I stop using it later?**
-Yes. Display-only mode never changed your files, so you can simply uninstall. If you used write mode, **Settings → Sensitive actions** lets you either remove all numbering or keep the numbers as plain text. Both work across the whole vault.
+Yes. Display-only mode never changed your files, so you can simply uninstall. If you used write mode, **Settings → Maintenance** lets you either remove all numbering or keep the numbers as plain text. Both work across the whole vault.
 
 **I'm coming from Number Headings.**
 Disable it, enable Auto Headings, then run **Clear non-plugin heading numbering** on your old notes. Folder exclusion and skipping headings inside comments both work out of the box.

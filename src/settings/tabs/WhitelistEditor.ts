@@ -1,5 +1,4 @@
-import { Setting } from "obsidian";
-import type { AutoHeadingsSettingTab } from "../SettingsTab";
+import { setIcon } from "obsidian";
 import type { Messages } from "../../i18n";
 import {
 	analyzeWhitelist,
@@ -8,6 +7,7 @@ import {
 	type WhitelistEntry,
 	type WhitelistSortMode,
 } from "../../numbering";
+import type { TemplateEditorHost } from "./TemplateEditorModal";
 
 /** 白名单匹配方式分段控件的固定遍历顺序。 */
 const MATCH_ORDER: WhitelistEntry["match"][] = ["exact", "partial", "subtree"];
@@ -35,7 +35,8 @@ function matchLabel(match: WhitelistEntry["match"], t: Messages): string {
 }
 
 /**
- * 渲染某模板的白名单编辑器（模板级配置，见 spec.md §3.7）。
+ * 渲染某模板的白名单编辑器（模板级配置，见 spec.md §3.7）。1.2.2 起是模板编辑弹窗的「白名单」页
+ * （testplan L42）：顶部一行图例说明 `=` / `≈` / `▸`，分段控件本身不加文字；命中数为 0 时不显示角标。
  *
  * - 顶部输入框：键入词语后按 Enter 添加为一枚条目（默认「全部匹配」）；完全相同的 (词语, 匹配方式)
  *   自动去重。
@@ -48,19 +49,30 @@ function matchLabel(match: WhitelistEntry["match"], t: Messages): string {
  * - 底部针对**当前活动文件**实时列出「本白名单将豁免的标题」（命中数 + 标题清单）。
  */
 export function renderWhitelistEditor(
-	tab: AutoHeadingsSettingTab,
+	host: TemplateEditorHost,
 	panel: HTMLElement,
 	template: Template,
 ): void {
-	const t = tab.t;
-	const plugin = tab.plugin;
+	const t = host.t;
+	const plugin = host.plugin;
 	const section = panel.createDiv({ cls: "ah-whitelist" });
 
-	new Setting(section).setName(t.whitelistName).setDesc(t.whitelistDesc);
+	// —— 图例：一行说明三个符号的含义（L42）——
+	const legend = section.createDiv({ cls: "ah-wl-legend" });
+	legend.createSpan({ text: t.wlLegendIntro });
+	for (const [match, label] of [
+		["exact", t.wlLegendExact],
+		["partial", t.wlLegendPartial],
+		["subtree", t.wlLegendSubtree],
+	] as const) {
+		const item = legend.createSpan({ cls: "ah-wl-legend-item" });
+		item.createEl("b", { text: MATCH_ICON[match] });
+		item.createSpan({ text: label });
+	}
 
 	// —— 添加输入框 ——
 	const inputRow = section.createDiv({ cls: "ah-wl-input-row" });
-	const input = inputRow.createEl("input", { type: "text", cls: "ah-wl-input" });
+	const input = inputRow.createEl("input", { type: "text", cls: "ah-wl-input ah-wl-add" });
 	input.placeholder = t.wlInputPlaceholder;
 	const addEntry = async () => {
 		const text = input.value.trim();
@@ -75,7 +87,8 @@ export function renderWhitelistEditor(
 			plugin.renumberActiveFile();
 		}
 		input.value = "";
-		tab.display();
+		host.pendingFocus = ".ah-wl-add"; // 重绘后光标留在添加框，便于连续添加。
+		host.rerender();
 	};
 	input.addEventListener("keydown", (e) => {
 		// IME 组合中的 Enter 是「确认候选词」，不是提交（testplan L25）。
@@ -102,7 +115,7 @@ export function renderWhitelistEditor(
 	const commit = async () => {
 		await plugin.templateStore.save(template);
 		plugin.renumberActiveFile();
-		tab.display();
+		host.rerender();
 	};
 
 	/** 按当前搜索 / 排序（纯视图，携带原始下标）重绘行区域。 */
@@ -112,7 +125,7 @@ export function renderWhitelistEditor(
 			rowsEl.createEl("span", { cls: "ah-section-desc", text: t.wlEmpty });
 			return;
 		}
-		const views = filterSortWhitelist(template.whitelist, tab.wlFilter, tab.wlSort);
+		const views = filterSortWhitelist(template.whitelist, host.wlFilter, host.wlSort);
 		if (views.length === 0) {
 			rowsEl.createEl("span", { cls: "ah-section-desc", text: t.wlFilterNoMatch });
 			return;
@@ -147,7 +160,7 @@ export function renderWhitelistEditor(
 						(e, i) => i !== index && e.text === next && e.match === entry.match,
 					);
 					if (next === "" || next === entry.text || dup) {
-						tab.display();
+						host.rerender();
 						return;
 					}
 					entry.text = next;
@@ -161,8 +174,9 @@ export function renderWhitelistEditor(
 						edit.blur();
 					} else if (e.key === "Escape") {
 						e.preventDefault();
+						e.stopPropagation(); // 只退出编辑，不关弹窗
 						done = true;
-						tab.display();
+						host.rerender();
 					}
 				});
 			});
@@ -184,10 +198,12 @@ export function renderWhitelistEditor(
 				});
 			});
 
-			// 命中数角标（tooltip 列出命中标题，超过上限截断加计数，testplan L19）。
+			// 命中数角标（tooltip 列出命中标题，超过上限截断加计数，testplan L19）；命中 0 时不显示
+			// （L42），留空位保持各行对齐。
+			const hitCount = hit?.count ?? 0;
 			const count = row.createEl("span", {
-				cls: "ah-wl-row-count",
-				text: String(hit?.count ?? 0),
+				cls: hitCount > 0 ? "ah-wl-row-count" : "ah-wl-row-count is-empty",
+				text: hitCount > 0 ? String(hitCount) : "",
 			});
 			const matches = hit?.matches ?? [];
 			if (matches.length > 0) {
@@ -203,7 +219,9 @@ export function renderWhitelistEditor(
 			}
 
 			// ✕ 删除（按原始下标写回存储数组，过滤 / 排序视图下也删对条目）。
-			const del = row.createEl("span", { cls: "ah-wl-row-del", text: "✕" });
+			const del = row.createEl("span", { cls: "ah-wl-row-del" });
+			setIcon(del, "x");
+			del.setAttr("aria-label", t.deleteBtn);
 			del.title = t.deleteBtn;
 			del.addEventListener("click", () => {
 				template.whitelist.splice(index, 1);
@@ -219,18 +237,18 @@ export function renderWhitelistEditor(
 			cls: "ah-wl-input ah-wl-filter",
 		});
 		filterInput.placeholder = t.wlFilterPlaceholder;
-		filterInput.value = tab.wlFilter;
+		filterInput.value = host.wlFilter;
 		filterInput.addEventListener("input", (e) => {
 			// IME 组合中的半截拼音不参与过滤（避免行列表闪烁，L25）；上屏后再过滤一次。
 			// isComposing 用 in 收窄读取：不依赖全局 InputEvent 构造器身份，弹出窗口下同样成立。
 			if ("isComposing" in e && e.isComposing === true) {
 				return;
 			}
-			tab.wlFilter = filterInput.value;
+			host.wlFilter = filterInput.value;
 			renderRows();
 		});
 		filterInput.addEventListener("compositionend", () => {
-			tab.wlFilter = filterInput.value;
+			host.wlFilter = filterInput.value;
 			renderRows();
 		});
 		const sortSelect = toolbarEl.createEl("select", { cls: "dropdown ah-wl-sort" });
@@ -241,12 +259,12 @@ export function renderWhitelistEditor(
 		];
 		sortOptions.forEach(([mode, label]) => {
 			const opt = sortSelect.createEl("option", { value: mode, text: label });
-			if (mode === tab.wlSort) {
+			if (mode === host.wlSort) {
 				opt.selected = true;
 			}
 		});
 		sortSelect.addEventListener("change", () => {
-			tab.wlSort = sortSelect.value as WhitelistSortMode;
+			host.wlSort = sortSelect.value as WhitelistSortMode;
 			renderRows();
 		});
 	}
@@ -265,7 +283,7 @@ export function renderWhitelistEditor(
 		} else if (appliedTpl.name !== template.name) {
 			section.createEl("p", {
 				cls: "ah-section-desc ah-wl-mismatch",
-				text: t.wlPreviewOtherTemplate(tab.templateDisplayName(appliedTpl.name)),
+				text: t.wlPreviewOtherTemplate(host.templateDisplayName(appliedTpl.name)),
 			});
 		}
 	}

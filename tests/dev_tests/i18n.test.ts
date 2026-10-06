@@ -86,6 +86,37 @@ describe("getMessages 双语", () => {
 		}
 	});
 
+	it("设置说明一行化：中文 ≤ 32 字、英文 ≤ 90 字符（testplan L28 / L43）", () => {
+		const descKeys = [
+			"languageDesc",
+			"autoNumberDesc",
+			"updateBacklinksDesc",
+			"headingLinkSuggestDesc",
+			"vcCoexistDesc",
+			"vcCoexistFallbackHint",
+			"vcModeDesc",
+			// 编号维护 TAB（1.2.2，testplan L43）
+			"renumberNowDesc",
+			"clearFileDesc",
+			"clearForeignDesc",
+			"clearStaleDesc",
+			"clearVaultDesc",
+			"freezeVaultDesc",
+		] as const;
+		const zh = getMessages("zh");
+		const en = getMessages("en");
+		const cases: Array<[string, string, string]> = descKeys.map((k) => [k, zh[k], en[k]]);
+		cases.push([
+			"debounceDesc",
+			zh.debounceDesc(50, 2000, 300),
+			en.debounceDesc(50, 2000, 300),
+		]);
+		for (const [key, zhText, enText] of cases) {
+			expect(Array.from(zhText).length, `zh.${key}`).toBeLessThanOrEqual(32);
+			expect(enText.length, `en.${key}`).toBeLessThanOrEqual(90);
+		}
+	});
+
 	it("插值文案：防抖范围 / 计数 / 模板名正确代入", () => {
 		const zh = getMessages("zh");
 		expect(zh.debounceDesc(50, 2000, 300)).toContain("50");

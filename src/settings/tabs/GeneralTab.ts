@@ -9,9 +9,9 @@ import { detectVcStatus } from "../../vcintegration";
  *
  * 1.0.29 起按**功能区**分节（用户反馈「全局设置该按功能区划分」）：语言（不挂节头，面板打开
  * 第一眼就是它）→「自动编号」（全局开关 + 防抖延迟）→「链接维护」（Backlink 同步）→
- * 「标题链接建议」（建议开关 + VC 共存策略 + VC 词典联动）。节头沿用 PathRules 的既有惯例
- * `setHeading() + .ah-section-head`（左侧强调色竖条），而不是插一条 `<hr>`——分区**带标题**
- * 才能说明每组是干什么的，光有分隔线只是把设置切碎。
+ * 「标题链接建议」（建议开关 + VC 共存策略 + VC 词典联动）。节头用原生 `setHeading()`（1.2.2 起去掉
+ * 自绘的强调色竖条，与 Obsidian 自带设置页一致），而不是插一条 `<hr>`——分区**带标题**才能说明每组
+ * 是干什么的，光有分隔线只是把设置切碎。说明文字一律一行，长解释在使用指南（testplan L28）。
  *
  * Backlink 开关的曝光度决策（0.7.11）不变：默认开 + 首次实际同步弹说明 Notice，见 spec.md §3.12。
  * 1.0.9 起原「独立触发」开关并入本开关：开启后全局生效，与是否命中编号模板 / 是否实际写入编号无关。
@@ -53,10 +53,7 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 		});
 
 	// ==== 分区：自动编号 ====
-	new Setting(containerEl)
-		.setName(t.sectionNumbering)
-		.setHeading()
-		.settingEl.addClass("ah-section-head");
+	new Setting(containerEl).setName(t.sectionNumbering).setHeading();
 
 	// —— 全局自动编号开关（两层开关的「面板层」，见 spec.md §3.1）——
 	new Setting(containerEl)
@@ -69,19 +66,28 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 		);
 
 	// —— 防抖延迟（滑块，M6，见 spec.md §3.9）——
-	new Setting(containerEl)
+	// 1.2.2：滑块左侧常显当前值（testplan L29）。拖动中经 `input` 事件实时刷新数字，
+	// 保存仍走 onChange（与旧行为一致）。
+	let debounceValueEl: HTMLElement | null = null;
+	const showDebounce = (ms: number): void => {
+		debounceValueEl?.setText(`${ms} ms`);
+	};
+	const debounceSetting = new Setting(containerEl)
 		.setName(t.debounceName)
 		.setDesc(t.debounceDesc(DEBOUNCE_MIN, DEBOUNCE_MAX, DEBOUNCE_DEFAULT))
-		.addSlider((slider) =>
+		.addSlider((slider) => {
 			slider
 				.setLimits(DEBOUNCE_MIN, DEBOUNCE_MAX, 50)
 				.setValue(plugin.settings.debounceDelay)
-				.setDynamicTooltip()
 				.onChange(async (value) => {
+					showDebounce(value);
 					plugin.settings.debounceDelay = clampDebounceDelay(value);
 					await plugin.saveSettings();
-				}),
-		)
+				});
+			slider.sliderEl.addEventListener("input", () =>
+				showDebounce(Number(slider.sliderEl.value)),
+			);
+		})
 		.addExtraButton((btn) =>
 			btn
 				.setIcon("reset")
@@ -92,23 +98,12 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 					tab.display();
 				}),
 		);
-
-	// —— 大纲里显示仅显示模式的编号（1.2.0，默认开，见 virtual/outlineView.ts）——
-	new Setting(containerEl)
-		.setName(t.outlineNumbersName)
-		.setDesc(t.outlineNumbersDesc)
-		.addToggle((toggle) =>
-			toggle.setValue(plugin.settings.showOutlineNumbers).onChange(async (value) => {
-				plugin.settings.showOutlineNumbers = value;
-				await plugin.saveSettings(); // saveSettings 会刷新全部视图，大纲编号随即出现 / 消失。
-			}),
-		);
+	debounceValueEl = debounceSetting.controlEl.createSpan({ cls: "ah-slider-value" });
+	debounceSetting.controlEl.prepend(debounceValueEl);
+	showDebounce(plugin.settings.debounceDelay);
 
 	// ==== 分区：链接维护 ====
-	new Setting(containerEl)
-		.setName(t.sectionLinking)
-		.setHeading()
-		.settingEl.addClass("ah-section-head");
+	new Setting(containerEl).setName(t.sectionLinking).setHeading();
 
 	// —— Backlink 同步开关（默认开，全局生效，见 spec.md §3.12）——
 	new Setting(containerEl)
@@ -122,13 +117,7 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 		);
 
 	// ==== 分区：标题链接建议（M13）====
-	new Setting(containerEl)
-		.setName(t.sectionSuggest)
-		.setHeading()
-		.settingEl.addClass("ah-section-head");
-	// 分区导语（1.0.30）：先讲清「本功能自带、不依赖别的插件」，再说下面两项只有装了 VC 才
-	// 需要关心——否则用户容易把「VC 联动」误读成本功能的前置条件（沿用 PathRules 的 p.ah-section-desc）。
-	containerEl.createEl("p", { cls: "ah-section-desc", text: t.sectionSuggestDesc });
+	new Setting(containerEl).setName(t.sectionSuggest).setHeading();
 
 	// —— 标题链接建议开关（默认开，见 spec.md Roadmap M13）——
 	new Setting(containerEl)
@@ -140,11 +129,20 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 			}),
 		);
 
-	// —— 与 Various Complements 的共存策略（1.0.29）——
-	// 只在 VC **已安装**时渲染：没装 VC 的用户不存在这个取舍，多一项只是噪音。
+	// —— Various Complements 相关的三行（1.2.2，testplan L30）——
+	// 缩进挂在「标题链接建议」开关之下（`.ah-sub-settings`）。只在 VC **已启用**时显示：没装 / 没开
+	// VC 的用户不存在这个取舍，多几行只是噪音（只影响显示，设置值不变）。例外：词典联动已经开着时
+	// 无论 VC 状态都显示——否则会留下「还在写词典、用户却看不见也关不掉」的隐身状态。
 	const vcStatus = detectVcStatus(plugin.app);
+	const vcIntegrationOn = plugin.settings.vcIntegrationMode !== "off";
+	if (vcStatus !== "enabled" && !vcIntegrationOn) {
+		return;
+	}
+	const subEl = containerEl.createDiv({ cls: "ah-sub-settings" });
+
+	// 共存策略（1.0.29）：VC 已安装才有意义（联动开着、VC 已卸载时不渲染）。
 	if (vcStatus !== "not-installed") {
-		new Setting(containerEl)
+		new Setting(subEl)
 			.setName(t.vcCoexistName)
 			.setDesc(t.vcCoexistDesc)
 			.addDropdown((dd) => {
@@ -153,35 +151,25 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 				dd.setValue(plugin.settings.headingSuggestWhenVcActive).onChange(async (value) => {
 					plugin.settings.headingSuggestWhenVcActive = value === "own" ? "own" : "yield";
 					await plugin.saveSettings();
-					tab.display(); // 重绘：下面那条「无处出现」警告的显隐取决于本项
+					tab.display(); // 重绘：下面的接管提示与联动区显隐取决于本项
 				});
 			});
 
 		// 选了让路、但词典联动还没开：此时**不会真的让路**（见 shouldYieldSuggestToVc），
-		// 由本插件的建议框接管。1.0.30 及以前这里是一条「标题建议将无处出现」的警告——
-		// 那个死角已在判定层消灭，现在只需如实告知当前谁在接管，不必再吓唬用户。
+		// 由本插件的建议框接管——如实告知当前谁在接管。
 		const yieldPending =
 			plugin.settings.headingLinkSuggestEnabled &&
 			plugin.settings.headingSuggestWhenVcActive === "yield" &&
 			vcStatus === "enabled" &&
-			plugin.settings.vcIntegrationMode === "off";
+			!vcIntegrationOn;
 		if (yieldPending) {
-			containerEl
-				.createEl("p", { cls: "ah-section-desc" })
-				.createSpan({ text: t.vcCoexistFallbackHint });
+			subEl.createEl("p", { cls: "ah-section-desc", text: t.vcCoexistFallbackHint });
 		}
 	}
 
-	// —— Various Complements 词典联动（M13，见 spec.md Roadmap M13）——
-	// 「本插件优先」且联动本就关着时**整块不渲染**（用户要求：这时 VC 的相关配置纯属噪音）。
-	// 两条例外：① 联动已经开着照常显示——否则会留下「还在写词典、用户却看不见也关不掉」的
-	// 隐身状态；② 没装 VC 时共存下拉根本不渲染，此时不该受它的历史值影响（手动联动本就允许
-	// 在未装 VC 的情况下先生成词典，见 testplan Q10）。
-	const hideVcSection =
-		vcStatus !== "not-installed" &&
-		plugin.settings.headingSuggestWhenVcActive === "own" &&
-		plugin.settings.vcIntegrationMode === "off";
+	// 词典联动（M13）：「本插件优先」且联动本就关着时不渲染（这时 VC 的相关配置纯属噪音，testplan Q24）。
+	const hideVcSection = plugin.settings.headingSuggestWhenVcActive === "own" && !vcIntegrationOn;
 	if (!hideVcSection) {
-		renderVcIntegrationSection(tab, containerEl);
+		renderVcIntegrationSection(tab, subEl);
 	}
 }

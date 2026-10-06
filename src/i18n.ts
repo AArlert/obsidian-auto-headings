@@ -48,7 +48,7 @@ export interface Messages {
 	// —— 设置页 TAB（M7 多 TAB 重构）——
 	tabGeneral: string;
 	tabTemplates: string;
-	tabDanger: string;
+	tabMaintenance: string;
 	tabAbout: string;
 
 	// —— 语言设置 ——
@@ -67,10 +67,6 @@ export interface Messages {
 	debounceName: string;
 	debounceDesc: (min: number, max: number, def: number) => string;
 	resetTooltip: (def: number) => string;
-
-	// —— 大纲里显示编号（1.2.0）——
-	outlineNumbersName: string;
-	outlineNumbersDesc: string;
 
 	// —— Backlink 同步 ——
 	updateBacklinksName: string;
@@ -96,7 +92,6 @@ export interface Messages {
 	sectionLinking: string;
 	sectionSuggest: string;
 	/** 「标题链接建议」分区的一句话导语：先说独立可用，再说什么时候才需要关心 VC 那两项。 */
-	sectionSuggestDesc: string;
 
 	// —— Various Complements 联动（M13）——
 	vcModeName: string;
@@ -178,28 +173,13 @@ export interface Messages {
 	templatesHeading: string;
 	templatesDesc: string;
 	addTemplate: string;
-	defaultTemplateDesc: string;
-	collapseTooltip: string;
-	editTooltip: string;
 	deleteBtn: string;
-	defaultCannotDelete: string;
 
-	// —— 模板编辑面板 ——
-	templateNameName: string;
-	templateNameDesc: string;
+	// —— 模板编辑弹窗（1.2.2 起；原行内编辑面板）——
 	topLevelName: string;
-	topLevelDesc: string;
 	bottomLevelName: string;
-	bottomLevelDesc: string;
-	startIndexName: string;
-	startIndexDesc: string;
-	ancestorName: string;
-	ancestorDesc: string;
 	ancestorSelf: string;
 	ancestorArabic: string;
-
-	/** 级别格式子框标题（0.7.17，H1–H6 网格容器）。 */
-	levelFormatHeading: string;
 
 	// 网格表头与占位符
 	colLevel: string;
@@ -208,25 +188,14 @@ export interface Messages {
 	colNumberSep: string;
 	colSuffix: string;
 	colTitleSep: string;
-	colInherit: string;
-	colInheritDepth: string;
 	colPreview: string;
 	inheritDepthAll: string;
-	inheritDepthTooltip: string;
-	phPrefix: string;
-	phSuffix: string;
-	phSpace: string;
-	previewInactive: string;
 	previewHeadingWord: string;
 
 	// 跳级占位
-	skipFillName: string;
-	skipFillDesc: string;
 	skipFillFill: string;
 	skipFillDrop: string;
 	skipFillNone: string;
-	placeholderName: string;
-	placeholderDesc: string;
 
 	// 序号样式下拉（值 → 标签）
 	numeralArabic: string;
@@ -243,8 +212,6 @@ export interface Messages {
 	matchSubtree: string;
 
 	// 白名单编辑器
-	whitelistName: string;
-	whitelistDesc: string;
 	wlInputPlaceholder: string;
 	wlFilterPlaceholder: string;
 	wlSortAdded: string;
@@ -262,10 +229,7 @@ export interface Messages {
 	wlPreviewOtherTemplate: (appliedName: string) => string;
 	wlPreviewNoTemplate: string;
 
-	// —— 敏感操作（M7 多 TAB：三个清除入口 + ⚠ 说明）——
-	dangerHeading: string;
-	dangerExpandHint: string;
-	dangerIntro: string;
+	// —— 编号维护 TAB（原「敏感操作」，1.2.2 改名重排）——
 	clearFileName: string;
 	clearFileDesc: string;
 	clearFileBtn: string;
@@ -275,7 +239,7 @@ export interface Messages {
 	clearVaultName: string;
 	clearVaultDesc: string;
 	clearVaultBtn: string;
-	/** 固化编号并交还所有权（M12，敏感操作 TAB 第 4 项）。 */
+	/** 固化编号并交还所有权（M12，编号维护 TAB「整个仓库」组）。 */
 	freezeVaultName: string;
 	freezeVaultDesc: string;
 	freezeVaultBtn: string;
@@ -285,7 +249,6 @@ export interface Messages {
 	resumeBtn: string;
 
 	// —— 关于 ——
-	aboutVersionLabel: string;
 	aboutLinkRepo: string;
 	aboutLinkIssues: string;
 
@@ -321,7 +284,6 @@ export interface Messages {
 	// 疑似外来编号清理预览对话框（迁移守卫 Notice 点击入口，testplan J14）
 	foreignGuardModalTitle: string;
 	foreignGuardModalBody: (count: number) => string;
-	foreignGuardModalConfirm: string;
 	/** 逐条勾选框的 aria-label，携带该标题现状文本以便读屏区分（J17）。 */
 	foreignGuardItemToggle: (before: string) => string;
 	/** 顶部搜索框占位符（J17）。 */
@@ -383,66 +345,132 @@ export interface Messages {
 	noticeCopyFailed: string;
 	/** 「复制当前小节链接」复制成功的提示，参数为链接别名（无别名时为剥 WJ 的锚点，R4）。 */
 	noticeSectionLinkCopied: (label: string) => string;
-	noticeForeignNumberingGuard: string;
-	/** 仅显示文件过半标题带手写编号、不显示虚拟编号时的提示（M14）。 */
-	noticeForeignNumberingGuardVirtual: string;
 	/** 迁移守卫 Notice 里的可点击文案（点击打开清理预览确认框，J14）。 */
 	noticeForeignNumberingGuardAction: string;
 	/** 点击迁移守卫 Notice 时，该文件已不在任何已打开的标签页中。 */
 	noticeForeignGuardFileNotOpen: string;
+	// —— 1.2.2 视觉更新：路径规则表 / 模板卡片 / 模板编辑弹窗（spec Roadmap M15）——
+	/** 规则表下方的灰字说明（testplan L32）。 */
+	pathNoMatchHint: string;
+	/** 当前笔记圆点的 tooltip。 */
+	activeRuleTooltip: string;
+	/** 窄屏规则行 ⋯ 按钮的 tooltip（testplan L33）。 */
+	moreActionsTooltip: string;
+	/** 默认模板卡片上的「内置」灰标（testplan L34）。 */
+	templateBuiltinTag: string;
+	/** 卡片底部用量：「用于 N 条规则 · 白名单 M 项」。 */
+	templateCardUsage: (rules: number, whitelist: number) => string;
+	/** 卡片「编辑」按钮。 */
+	editBtn: string;
+	/** 卡片 ⋯ 按钮的 tooltip。 */
+	templateActionsTooltip: string;
+	/** 卡片效果预览的示例标题（按 H1–H6 取）。 */
+	cardSampleTitles: string[];
+	/** 编辑弹窗标题区的小字（testplan L35）。 */
+	editorKicker: string;
+	renameTemplateTooltip: string;
+	editorTabFormat: string;
+	editorTabWhitelist: string;
+	/** 格式页上方两行（testplan L36）。 */
+	rangeLabel: string;
+	rangeTo: string;
+	startIndexLabel: string;
+	startIndexHint: string;
+	moreRulesLabel: string;
+	ancestorLabel: string;
+	skipLabel: string;
+	placeholderLabel: string;
+	/** 「上级编号」合并列（testplan L37）。 */
+	colParents: string;
+	inheritNone: string;
+	inheritLevels: (n: number) => string;
+	/** 不在编号范围内的级别（testplan L39）。 */
+	outOfRangeBefore: (top: number) => string;
+	outOfRangeAfter: (bottom: number) => string;
+	/** 底部预览（testplan L40）。 */
+	previewTitle: string;
+	previewSample: string;
+	previewCurrent: string;
+	previewNoHeadings: string;
+	previewTagWhitelist: string;
+	previewTagSkip: string;
+	previewTagUnnumbered: string;
+	/** 示例笔记的标题词：[文档标题, 概述, 背景, 动机, 细节, 补充, 方法, 结论]。 */
+	previewSampleWords: string[];
+	/** 弹窗底部说明（testplan L41）。 */
+	footerImpact: (rules: number, notes: number, writeNotes: number) => string;
+	footerUnused: string;
+	footerWhitelist: string;
+	doneBtn: string;
+	/** 白名单页顶部图例（testplan L42）。 */
+	wlLegendIntro: string;
+	wlLegendExact: string;
+	wlLegendPartial: string;
+	wlLegendSubtree: string;
+	maintCurrentHeading: string;
+	maintCurrentMeta: (file: string) => string;
+	maintNoNote: string;
+	maintVaultHeading: string;
+	maintVaultMeta: string;
+	renumberNowName: string;
+	renumberNowDesc: string;
+	renumberNowBtn: string;
+	clearStaleName: string;
+	clearStaleDesc: string;
+	clearStaleBtn: string;
+	noticeStaleNotVirtual: string;
+	confirmWordPrompt: (word: string) => string;
+	clearVaultWord: string;
+	freezeVaultWord: string;
+	aboutDescription: string;
+	foreignGuardSelectAll: string;
+	foreignGuardSelected: (selected: number, total: number) => string;
+	foreignGuardUndoHint: string;
+	foreignGuardConfirmCount: (count: number) => string;
+	noticeForeignGuardCount: (count: number, virtual: boolean) => string;
 }
 
 /** 简体中文文案。 */
 const zh: Messages = {
 	tabGeneral: "全局设置",
 	tabTemplates: "路径模板",
-	tabDanger: "敏感操作",
-	tabAbout: "关于",
+	tabMaintenance: "编号维护",
+	tabAbout: "关于插件",
 
 	languageName: "语言",
-	languageDesc: "设置面板与命令的显示语言。「自动」跟随 Obsidian 界面语言。",
+	languageDesc: "设置面板与命令的显示语言。",
 	langAuto: "自动（跟随 Obsidian）",
 	langZh: "中文",
 	langEn: "English",
 	languageChangeHint: "命令名在重载插件后更新为新语言。",
 
 	autoNumberName: "全局自动编号",
-	autoNumberDesc:
-		"编辑文件时自动为标题编号。关闭后可用「立即重新编号」命令手动触发（或经 frontmatter 按文件强制开启）。",
+	autoNumberDesc: "编辑时自动为标题编号；关闭后可用「立即重新编号」手动触发。",
 
 	debounceName: "防抖延迟",
-	debounceDesc: (min, max, def) => `编辑停顿 ${min}–${max} ms 后触发自动编号（默认 ${def} ms）。`,
+	debounceDesc: (min, max, def) => `停止输入多久后自动编号（${min}–${max} ms，默认 ${def}）。`,
 	resetTooltip: (def) => `恢复默认 ${def} ms`,
-	outlineNumbersName: "在大纲中显示编号",
-	outlineNumbersDesc: "「仅显示」模式下，Obsidian 自带的大纲面板里也显示编号。",
 
 	updateBacklinksName: "同步内部链接（Backlink）",
-	updateBacklinksDesc:
-		"标题文字改动时，自动更新其它文件里指向它的 Wikilink 与 Markdown 链接（如 [[文件#标题]]、[说明](文件.md#标题)），避免断链。与编号无关、全局生效；改动不在引用文件的撤销历史内。",
+	updateBacklinksDesc: "标题文字改变时，自动更新其他笔记里指向它的链接。",
 
 	headingLinkSuggestName: "标题链接建议",
-	headingLinkSuggestDesc:
-		"打字匹配库内标题即弹建议，接受后替换为指向该标题的链接。完全自带、默认开启；关闭后不构建标题索引，内存/CPU 成本归零。",
+	headingLinkSuggestDesc: "打字时弹出匹配的标题，选中即插入指向它的链接。",
 	headingSuggestThisFile: "（本文件）",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`vault 过大，标题索引未完整构建（已索引 ${indexed} 个）；建议功能在已索引范围内可用。`,
 	vcCoexistName: "Various Complements 启用时",
-	vcCoexistDesc:
-		"两插件共用同一个建议框，只能留一个。默认让路给 VC：配合词典联动，两边候选同框可见（最完整）。仅当词典联动开启时才真让路，否则仍由本插件接管。VC 未安装/未启用时本项无效。",
+	vcCoexistDesc: "两个插件共用一个建议框，只能留一个。",
 	vcCoexistYield: "让路给 Various Complements（推荐）",
 	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
-	vcCoexistFallbackHint:
-		"当前仍由本插件接管：词典联动未开启，VC 词典里没有标题，让路会什么都看不到。开启联动后即真让路。",
+	vcCoexistFallbackHint: "词典联动未开启，目前仍由本插件接管建议框。",
 
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
 	sectionSuggest: "标题链接建议",
-	sectionSuggestDesc:
-		"打字即出标题链接，不依赖其它插件。只有装了 Various Complements 才需要关心下面两项。",
 
 	vcModeName: "Various Complements 联动",
-	vcModeDesc:
-		"把标题索引导出为 VC 自定义词典，让标题候选出现在 VC 的建议框里（合并两边候选的唯一官方入口）。没装 VC 用不上；默认关闭、开启需显式确认、关闭时零写入。",
+	vcModeDesc: "把标题索引导出为 VC 的自定义词典。",
 	vcModeOff: "不联动",
 	vcModeManual: "手动配置",
 	vcModeAuto: "自动配置",
@@ -465,8 +493,7 @@ const zh: Messages = {
 		"VC「建议框最多显示条数」抬到至少 10（全局项，只抬不降）",
 		"写入后自动重载 VC 词典（失败会另行提示）",
 	],
-	vcDescriptionOffHint:
-		"VC 的「Description on suggestion」为 None，候选下方的来源路径行不显示（同名标题仍可凭括号里的文件名区分）。VC 全局显示偏好，本插件不代改。",
+	vcDescriptionOffHint: "VC 关闭了候选来源行（Description on suggestion 为 None）。",
 	vcAutoConfirmButton: "确认并自动配置",
 	noticeVcAutoWriteSuccess: "已自动配置 Various Complements 联动。",
 	noticeVcAutoWriteInvalidShape:
@@ -483,7 +510,7 @@ const zh: Messages = {
 		"把路径映射到模板：文件夹规则以「/」结尾、「/」根规则即全局默认，最具体的规则优先。",
 	pathNoRootWarn: "⚠ 无根路径规则（/），「全局自动编号」开启时不命中任何规则的文件将不被编号。",
 	addRootRule: "+ 添加 / 根规则",
-	addRule: "+ 添加规则",
+	addRule: "添加规则",
 	pathColPattern: "路径模式",
 	pathColTemplate: "模板",
 	pathEmpty: "（暂无规则；添加一条「/」根规则即对全库生效）",
@@ -527,54 +554,27 @@ const zh: Messages = {
 
 	templatesHeading: "模板",
 	templatesDesc: "定义各级标题的编号格式与白名单；哪个文件用哪个模板由上方「路径规则」决定。",
-	addTemplate: "+ 新增模板",
-	defaultTemplateDesc: "内置默认模板，不可删除；可编辑。",
-	collapseTooltip: "折叠",
-	editTooltip: "编辑",
+	addTemplate: "新增模板",
 	deleteBtn: "删除",
-	defaultCannotDelete: "默认模板不可删除",
 
-	templateNameName: "模板名称",
-	templateNameDesc: "重命名后将自动更新对应的模板文件与引用它的路径规则。",
 	topLevelName: "起始编号层级",
-	topLevelDesc: "从这一级开始编号，更浅的标题不动（默认 H2，H1 作标题/分节）。",
 	bottomLevelName: "结束编号层级",
-	bottomLevelDesc:
-		"编号到这一级为止，更深的标题不动；须 ≥ 起始层级（两者配合可只编号 H2–H4 区间）。",
-	startIndexName: "起始编号数字",
-	startIndexDesc: "首个编号标题从该数字起，仅作用于首段（默认 1，设 0 得 0.1.1）。",
-	ancestorName: "祖先序号渲染",
-	ancestorDesc:
-		"继承时祖先段的样式：「各自样式」每个祖先套自身样式；「统一阿拉伯」祖先一律阿拉伯、仅当前级套自身样式（适合中文书）。",
 	ancestorSelf: "各自样式（1.a.①）",
 	ancestorArabic: "统一阿拉伯（一 / 1.1）",
 
-	levelFormatHeading: "级别格式",
 	colLevel: "级别",
 	colPrefix: "前缀",
 	colNumeral: "序号",
 	colNumberSep: "序号间隔符",
 	colSuffix: "后缀",
 	colTitleSep: "标题间隔符",
-	colInherit: "继承前级",
-	colInheritDepth: "继承级数",
 	colPreview: "预览",
 	inheritDepthAll: "全部",
-	inheritDepthTooltip: "最多继承多少个前级；不会越过起始编号层级。",
-	phPrefix: "前缀",
-	phSuffix: "后缀",
-	phSpace: "空格",
-	previewInactive: "（不编号）",
 	previewHeadingWord: "标题",
 
-	skipFillName: "跳级缺失层级",
-	skipFillDesc: "标题跳级（如 H3 后跟 H5）时：补占位符、省略缺失段、或该标题不编号（保持原样）。",
 	skipFillFill: "补位",
 	skipFillDrop: "不补位（省略该段）",
 	skipFillNone: "不编号（保持原样）",
-	placeholderName: "占位字符",
-	placeholderDesc:
-		"补位时填入缺失段的数字（如 0 得 1.1.0.1）；仅限数字、留空按 0，确保编号可干净剥离。",
 
 	numeralArabic: "1, 2, 3",
 	numeralCjk: "一, 二, 三",
@@ -588,9 +588,6 @@ const zh: Messages = {
 	matchPartial: "部分",
 	matchSubtree: "子树",
 
-	whitelistName: "白名单",
-	whitelistDesc:
-		"命中的标题不编号、不占号：「全部」完全相等、「部分」包含该词、「子树」整块豁免且之后编号重新开始。",
 	wlInputPlaceholder: "输入词语后按 Enter 添加…",
 	wlFilterPlaceholder: "搜索条目…",
 	wlSortAdded: "按添加顺序",
@@ -608,41 +605,31 @@ const zh: Messages = {
 		`⚠ 当前文件实际使用模板「${appliedName}」，不是正在编辑的这个；下方预览仅为假设。`,
 	wlPreviewNoTemplate: "⚠ 当前文件未命中任何路径规则，不会被自动编号；下方预览仅为假设。",
 
-	dangerHeading: "危险区域",
-	dangerExpandHint: "（点击展开）",
-	dangerIntro:
-		"⚠ 以下操作会改写文件内容，其中「清除全库」不在 Obsidian 撤销历史内——操作前请确认或先备份。",
 	clearFileName: "清除当前文件编号",
-	clearFileDesc: "剥离当前文件所有标题的编号前缀（含手写样式），与同名命令等价。",
-	clearFileBtn: "清除当前文件",
+	clearFileDesc: "移除这篇笔记所有标题的编号（含手写的）。",
+	clearFileBtn: "清除",
 	clearForeignName: "清理非本插件编号",
-	clearForeignDesc: "只剥当前文件里非本插件写入的手写 / 外来编号，保留本插件的编号。",
-	clearForeignBtn: "清理外来编号",
+	clearForeignDesc: "移除手写或其他插件留下的编号，先逐条确认。",
+	clearForeignBtn: "检查…",
 	clearVaultName: "清除全库编号",
-	clearVaultDesc:
-		"剥离全库中本插件写入的编号前缀（不在撤销历史内，建议先备份）；确认后先关闭「全局自动编号」再清除，避免清完又被编回去（「同步内部链接（Backlink）」开着时链接一并更新）。",
+	clearVaultDesc: "移除全部笔记中本插件写入的编号，并关闭全局自动编号。",
 	clearVaultBtn: "清除全库编号…",
-	freezeVaultName: "固化编号并交还所有权（全库）",
-	freezeVaultDesc:
-		"保留现有编号、只移除不可见标记，此后插件停止一切自动编号。适合「想留住编号但不想再被管」或准备卸载；不可逆、不在撤销历史内，建议先备份。注意：「仅显示」模式的编号本来就不在文件里，固化后会随之消失。",
-	freezeVaultBtn: "固化编号并交还所有权…",
+	freezeVaultName: "固化编号并交还所有权",
+	freezeVaultDesc: "保留现有编号、去掉隐形标记，此后不再自动编号。",
+	freezeVaultBtn: "固化编号…",
 	retiredBannerTitle: "插件已交还编号所有权",
 	retiredBannerBody:
 		"编号已保留为普通文本，插件当前不做任何自动编号。恢复接管：点下面按钮，再对相关文件跑「清理非本插件的标题编号」；否则现有编号会被当外来编号，叠成双重编号。",
 	resumeBtn: "恢复接管",
 
-	aboutVersionLabel: "版本",
 	aboutLinkRepo: "GitHub 仓库",
-	aboutLinkIssues: "反馈问题（Issues）",
+	aboutLinkIssues: "反馈问题",
 
 	aboutCreditsHeading: "鸣谢",
-	aboutCreditsIntro: "开发过程中参考了以下开源插件的实现思路，在此致谢：",
-	aboutCreditPathSuggest:
-		"路径输入的文件夹/文件建议弹窗与匹配思路；本插件补充了「文件级精确规则」与漏打尾斜杠时的自动补全。",
-	aboutCreditBacklinks:
-		"Backlink 同步的最初参考（反查引用方 + 重写锚点）；本插件补充 Wikilink 别名/嵌入与 Markdown 链接，升级为编号与文本全覆盖同步。",
-	aboutCreditWordJoiner:
-		"用不可见 Word Joiner 标记编号边界的最初参考；本插件升级为「首尾双哨兵」，可自愈残缺前缀。",
+	aboutCreditsIntro: "开发过程中参考了以下开源插件的实现思路，在此致谢。",
+	aboutCreditPathSuggest: "路径输入的文件夹 / 文件建议与匹配思路",
+	aboutCreditBacklinks: "Backlink 同步的最初参考",
+	aboutCreditWordJoiner: "用不可见字符标记编号边界的最初参考",
 
 	defaultTemplateDisplay: "默认",
 
@@ -659,7 +646,7 @@ const zh: Messages = {
 		"将先关闭「全局自动编号」，再从全库剥离本插件写入的编号前缀，还原为裸标题（「同步内部链接（Backlink）」开着时链接一并更新）。不在撤销历史内，建议先备份。确认继续？",
 	confirmClearVault: "确认清除全库",
 
-	freezeVaultModalTitle: "固化编号并交还所有权（全库）",
+	freezeVaultModalTitle: "固化编号并交还所有权",
 	freezeVaultModalBody:
 		"确认后：① 全库编号原样保留为普通文本；② 移除全部不可见标记（含链接锚点内的，[[笔记#标题]] 仍可解析）；③ 插件停止一切自动编号（凌驾于 frontmatter 开关）；④ 不在撤销历史内，建议先备份；⑤ 恢复接管前须先跑「清理非本插件的标题编号」，否则会叠成双重编号。确认继续？",
 	confirmFreezeVault: "确认固化并交还",
@@ -667,7 +654,6 @@ const zh: Messages = {
 	foreignGuardModalTitle: "疑似非本插件的编号",
 	foreignGuardModalBody: (count) =>
 		`以下 ${count} 处标题看起来带编号，但无法确认是否你手写（如「API 设计」「TODO 清单」可能误判）。默认全勾清理；取消勾选则保留原文，插件仍会按模板加上自己的编号：`,
-	foreignGuardModalConfirm: "确认清理",
 	foreignGuardItemToggle: (before) => `清理「${before}」的外来编号`,
 	foreignGuardSearchPlaceholder: "搜索标题…",
 	foreignGuardSearchEmpty: "没有匹配的标题",
@@ -717,67 +703,118 @@ const zh: Messages = {
 	noticeOutlineCopied: (count) => `已复制编号大纲（${count} 个标题）`,
 	noticeCopyFailed: "复制到剪贴板失败",
 	noticeSectionLinkCopied: (label) => `已复制链接：${label}`,
-	noticeForeignNumberingGuard:
-		"这些标题看起来带编号，但插件不确定是不是你自己写的，已跳过本次自动编号。",
-	noticeForeignNumberingGuardAction: "点击查看并清理",
-	noticeForeignNumberingGuardVirtual:
-		"这篇笔记的标题大多已经带着编号，插件不确定是不是你自己写的，为免出现两套数字，暂不显示编号。",
+	noticeForeignNumberingGuardAction: "查看并清理",
 	noticeForeignGuardFileNotOpen: "该文件已不在任何标签页中，请重新打开后再清理",
+	pathNoMatchHint: "没有任何规则命中的笔记不编号。",
+	activeRuleTooltip: "当前笔记使用这条规则",
+	moreActionsTooltip: "更多操作",
+	templateBuiltinTag: "内置",
+	templateCardUsage: (rules, whitelist) => `用于 ${rules} 条规则 · 白名单 ${whitelist} 项`,
+	editBtn: "编辑",
+	templateActionsTooltip: "模板操作",
+	cardSampleTitles: ["文档标题", "概述", "背景", "细节", "要点", "补充"],
+	editorKicker: "编辑模板",
+	renameTemplateTooltip: "重命名模板",
+	editorTabFormat: "格式",
+	editorTabWhitelist: "白名单",
+	rangeLabel: "编号范围",
+	rangeTo: "至",
+	startIndexLabel: "起始编号数字",
+	startIndexHint: "设为 0 可得 0.1、0.2……",
+	moreRulesLabel: "更多规则",
+	ancestorLabel: "上级编号的写法",
+	skipLabel: "标题跳级时",
+	placeholderLabel: "占位字符",
+	colParents: "上级编号",
+	inheritNone: "不带",
+	inheritLevels: (n) => `${n} 级`,
+	outOfRangeBefore: (top) => `不在编号范围内（编号从 H${top} 开始）`,
+	outOfRangeAfter: (bottom) => `不在编号范围内（编号到 H${bottom} 为止）`,
+	previewTitle: "预览",
+	previewSample: "示例",
+	previewCurrent: "当前笔记",
+	previewNoHeadings: "这篇笔记还没有标题。",
+	previewTagWhitelist: "白名单",
+	previewTagSkip: "跳过",
+	previewTagUnnumbered: "不编号",
+	previewSampleWords: ["文档标题", "概述", "背景", "动机", "细节", "补充", "方法", "结论"],
+	footerImpact: (rules, notes, writeNotes) =>
+		`修改即时生效 · 影响 ${rules} 条规则下的 ${notes} 篇笔记，其中 ${writeNotes} 篇写入文件。`,
+	footerUnused: "修改即时生效 · 还没有路径规则使用这个模板。",
+	footerWhitelist: "修改即时生效 · 单击词语即可改写。",
+	doneBtn: "完成",
+	wlLegendIntro: "命中的标题不编号、不占序号：",
+	wlLegendExact: "完全相同",
+	wlLegendPartial: "包含该词",
+	wlLegendSubtree: "整节豁免，之后重新编号",
+	maintCurrentHeading: "当前笔记",
+	maintCurrentMeta: (file) => `${file} · 可用 Ctrl+Z 撤销`,
+	maintNoNote: "没有打开的笔记",
+	maintVaultHeading: "整个仓库",
+	maintVaultMeta: "不可撤销，操作前建议备份",
+	renumberNowName: "立即重新编号",
+	renumberNowDesc: "按规则重排这篇笔记的编号（同名命令）。",
+	renumberNowBtn: "重新编号",
+	clearStaleName: "清除残留编号",
+	clearStaleDesc: "移除「仅显示」笔记里早先写进文件的旧编号。",
+	clearStaleBtn: "清除",
+	noticeStaleNotVirtual: "这篇笔记不是「仅显示」模式，没有残留编号可清。",
+	confirmWordPrompt: (word) => `输入「${word}」以确认`,
+	clearVaultWord: "清除",
+	freezeVaultWord: "固化",
+	aboutDescription:
+		"按模板为标题自动编号。可以只显示，也可以写进笔记；标题改名时，指向它的链接自动跟随。",
+	foreignGuardSelectAll: "全选",
+	foreignGuardSelected: (selected, total) => `已选 ${selected} / ${total}`,
+	foreignGuardUndoHint: "本篇的改动可用 Ctrl+Z 撤销",
+	foreignGuardConfirmCount: (count) => `确认清理 ${count} 处`,
+	noticeForeignGuardCount: (count, virtual) =>
+		`这篇有 ${count} 处标题像是手写编号，本次没有${virtual ? "显示" : "自动"}编号。`,
 };
 
 /** English copy. */
 const en: Messages = {
 	tabGeneral: "General",
 	tabTemplates: "Paths & templates",
-	tabDanger: "Sensitive actions",
+	tabMaintenance: "Maintenance",
 	tabAbout: "About",
 
 	languageName: "Language",
-	languageDesc:
-		'Display language for the settings panel and commands. "Auto" follows Obsidian\'s UI language.',
+	languageDesc: "Display language for the settings panel and commands.",
 	langAuto: "Auto (follow Obsidian)",
 	langZh: "中文",
 	langEn: "English",
 	languageChangeHint: "Command names update after the plugin is reloaded.",
 
 	autoNumberName: "Global auto-numbering",
-	autoNumberDesc:
-		'Headings are numbered automatically as you edit. When off, trigger manually with "Renumber now" (or force files on via frontmatter).',
+	autoNumberDesc: 'Number headings as you edit; when off, use "Renumber now" instead.',
 
 	debounceName: "Debounce delay",
 	debounceDesc: (min, max, def) =>
-		`Auto-numbering runs ${min}–${max} ms after you stop typing (default ${def} ms).`,
+		`How long after you stop typing to renumber (${min}–${max} ms, default ${def}).`,
 	resetTooltip: (def) => `Reset to default ${def} ms`,
-	outlineNumbersName: "Show numbers in the outline",
-	outlineNumbersDesc: "In display-only mode, also show the numbers in Obsidian's Outline pane.",
 
 	updateBacklinksName: "Sync internal links (backlinks)",
-	updateBacklinksDesc:
-		"When a heading's text changes, update Wikilinks and Markdown links to it in other files (e.g. [[file#heading]] or [label](file.md#heading)) so they don't break. Global and independent of numbering; edits land outside the referencing files' undo history.",
+	updateBacklinksDesc: "When a heading's text changes, update links to it in other notes.",
 
 	headingLinkSuggestName: "Heading link suggestions",
-	headingLinkSuggestDesc:
-		"Typing a heading's text suggests matching vault headings; accept to replace your text with a link to it. Self-contained and on by default; when off, no heading index is built and memory/CPU cost drops to zero.",
+	headingLinkSuggestDesc: "Suggest matching headings as you type; pick one to insert a link.",
 	headingSuggestThisFile: "(this file)",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`Vault too large: heading index built partially (${indexed} headings indexed); suggestions work within the indexed range.`,
 	vcCoexistName: "When Various Complements is enabled",
-	vcCoexistDesc:
-		"Both plugins share the single suggestion popup, so only one can win. Default: yield to VC — with the dictionary integration below, both sides' candidates appear in one popup (the most complete setup). Yielding only takes effect while the dictionary integration is on; otherwise this plugin keeps serving. No effect when VC is not installed or not enabled.",
+	vcCoexistDesc: "Both plugins share one suggestion popup, so only one can show it.",
 	vcCoexistYield: "Yield to Various Complements (recommended)",
 	vcCoexistOwn: "This plugin wins (hides VC's popup)",
 	vcCoexistFallbackHint:
-		"This plugin is still serving: the dictionary integration is off, so VC's dictionary holds no headings and yielding would leave you with nothing.",
+		"Dictionary integration is off, so this plugin still serves suggestions.",
 
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",
 	sectionSuggest: "Heading link suggestions",
-	sectionSuggestDesc:
-		"Heading links as you type, no other plugin required. The two settings below only matter if Various Complements is installed.",
 
 	vcModeName: "Various Complements integration",
-	vcModeDesc:
-		"Export the heading index as a VC custom dictionary so heading candidates appear in VC's popup — the only official way to merge both sides. Not needed without VC; off by default, enabling requires explicit confirmation, and nothing is written while off.",
+	vcModeDesc: "Export the heading index as a VC custom dictionary.",
 	vcModeOff: "Off",
 	vcModeManual: "Manual",
 	vcModeAuto: "Automatic",
@@ -800,8 +837,7 @@ const en: Messages = {
 		'Raise VC\'s "Max number of suggestions" to at least 10 (global; only raised, never lowered)',
 		"Reload VC dictionaries after writing (failure is reported separately)",
 	],
-	vcDescriptionOffHint:
-		"VC's \"Description on suggestion\" is None, so the source-path line under candidates is hidden (same-named headings can still be told apart by the file name in parentheses). Global VC display preference; this plugin won't change it.",
+	vcDescriptionOffHint: "VC hides the candidate source line (Description on suggestion: None).",
 	vcAutoConfirmButton: "Confirm & configure",
 	noticeVcAutoWriteSuccess: "Various Complements integration configured automatically.",
 	noticeVcAutoWriteInvalidShape:
@@ -819,7 +855,7 @@ const en: Messages = {
 	pathNoRootWarn:
 		'⚠ No root path rule (/). With "Global auto-numbering" on, files that match no rule will not be numbered.',
 	addRootRule: "+ Add / root rule",
-	addRule: "+ Add rule",
+	addRule: "Add rule",
 	pathColPattern: "Path pattern",
 	pathColTemplate: "Template",
 	pathEmpty: '(No rules yet; add a "/" root rule to cover the whole vault.)',
@@ -867,59 +903,27 @@ const en: Messages = {
 	templatesHeading: "Templates",
 	templatesDesc:
 		"Define the numbering format and whitelist per heading level; which file uses which template is decided by the Path rules above.",
-	addTemplate: "+ New template",
-	defaultTemplateDesc: "Built-in default template; cannot be deleted, but can be edited.",
-	collapseTooltip: "Collapse",
-	editTooltip: "Edit",
+	addTemplate: "New template",
 	deleteBtn: "Delete",
-	defaultCannotDelete: "The default template cannot be deleted",
 
-	templateNameName: "Template name",
-	templateNameDesc:
-		"Renaming automatically updates the matching template file and any path rules that reference it.",
 	topLevelName: "Start level",
-	topLevelDesc:
-		"The shallowest level to number; shallower headings are left alone (default H2, so H1 acts as the title/section).",
 	bottomLevelName: "End level",
-	bottomLevelDesc:
-		"The deepest level to number; deeper headings are left alone (must be ≥ Start level; combine both to number a range like H2–H4).",
-	startIndexName: "Start number",
-	startIndexDesc:
-		"The number the first numbered heading starts from; first segment only (default 1; 0 gives 0.1.1).",
-	ancestorName: "Ancestor numeral rendering",
-	ancestorDesc:
-		'How ancestor segments render when inheriting: "Own style" uses each ancestor\'s own style; "All Arabic" renders ancestors as Arabic, only the current level in its own style.',
 	ancestorSelf: "Own style (1.a.①)",
 	ancestorArabic: "All Arabic (一 / 1.1)",
 
-	levelFormatHeading: "Level formats",
 	colLevel: "Level",
 	colPrefix: "Prefix",
 	colNumeral: "Numeral",
 	colNumberSep: "Number sep.",
 	colSuffix: "Suffix",
 	colTitleSep: "Title sep.",
-	colInherit: "Inherit",
-	colInheritDepth: "Inherit depth",
 	colPreview: "Preview",
 	inheritDepthAll: "All",
-	inheritDepthTooltip:
-		"The maximum number of preceding levels to inherit; never goes above the start level.",
-	phPrefix: "Prefix",
-	phSuffix: "Suffix",
-	phSpace: "Space",
-	previewInactive: "(not numbered)",
 	previewHeadingWord: "Heading",
 
-	skipFillName: "Skipped levels",
-	skipFillDesc:
-		"When headings skip a level (e.g. H5 right after H3): fill the missing segment, drop it, or leave the heading unnumbered.",
 	skipFillFill: "Fill",
 	skipFillDrop: "Drop (omit the segment)",
 	skipFillNone: "Don't number (leave as-is)",
-	placeholderName: "Placeholder",
-	placeholderDesc:
-		"The digit filling a missing level (e.g. 0 gives 1.1.0.1); digits-only keeps numbering cleanly strippable, empty = 0.",
 
 	numeralArabic: "1, 2, 3",
 	numeralCjk: "一, 二, 三",
@@ -933,9 +937,6 @@ const en: Messages = {
 	matchPartial: "Partial",
 	matchSubtree: "Subtree",
 
-	whitelistName: "Whitelist",
-	whitelistDesc:
-		"Matched headings are not numbered and take no counter slot: Exact = fully equal, Partial = contains the word, Subtree = whole block exempt, numbering restarts after it.",
 	wlInputPlaceholder: "Type a word and press Enter to add…",
 	wlFilterPlaceholder: "Filter entries…",
 	wlSortAdded: "By added order",
@@ -956,43 +957,31 @@ const en: Messages = {
 	wlPreviewNoTemplate:
 		"⚠ The current file matches no path rule and won't be auto-numbered; the preview below is hypothetical.",
 
-	dangerHeading: "Danger zone",
-	dangerExpandHint: "(click to expand)",
-	dangerIntro:
-		"⚠ The actions below rewrite file contents, and the vault-wide clear is NOT in Obsidian's undo history — confirm or back up first.",
 	clearFileName: "Clear numbering in current file",
-	clearFileDesc:
-		"Strip all heading numbering prefixes (including hand-written styles) from the current file; same as the command of the same name.",
-	clearFileBtn: "Clear current file",
+	clearFileDesc: "Remove numbering from every heading in this note, hand-written included.",
+	clearFileBtn: "Clear",
 	clearForeignName: "Clear non-plugin numbering",
-	clearForeignDesc:
-		"Strip only hand-written / foreign numbering in the current file, keeping the numbering this plugin wrote.",
-	clearForeignBtn: "Clear foreign numbering",
+	clearForeignDesc: "Remove hand-written or other plugins' numbering, reviewing each first.",
+	clearForeignBtn: "Review…",
 	clearVaultName: "Clear numbering in the whole vault",
-	clearVaultDesc:
-		"Strip the prefixes this plugin wrote from every Markdown file (NOT in undo history — back up first). Confirming first turns OFF global auto-numbering so cleared files don't get re-numbered (links update too when “Sync internal links (backlinks)” is on).",
+	clearVaultDesc: "Remove this plugin's numbering from every note and turn off auto-numbering.",
 	clearVaultBtn: "Clear vault numbering…",
-	freezeVaultName: "Freeze numbering and release ownership (entire vault)",
-	freezeVaultDesc:
-		"Keeps your numbers and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For “keep the numbers, drop the plugin” (e.g. before uninstalling). Irreversible and NOT in undo history — back up first. Note: numbers in display-only mode were never in the files, so they disappear after freezing.",
-	freezeVaultBtn: "Freeze numbering and release ownership…",
+	freezeVaultName: "Freeze numbering and release ownership",
+	freezeVaultDesc: "Keep the numbers, drop the invisible markers, stop auto-numbering.",
+	freezeVaultBtn: "Freeze numbering…",
 	retiredBannerTitle: "The plugin has released ownership of your numbering",
 	retiredBannerBody:
 		"Your numbers remain as ordinary text and the plugin is currently doing no automatic numbering. To hand control back: press the button below, then run “Clean foreign numbering” on the affected files, or existing numbers get stacked with a fresh prefix.",
 	resumeBtn: "Resume managing numbering",
 
-	aboutVersionLabel: "Version",
 	aboutLinkRepo: "GitHub repository",
 	aboutLinkIssues: "Report an issue",
 
 	aboutCreditsHeading: "Credits",
-	aboutCreditsIntro: "Development referenced the following open-source plugins:",
-	aboutCreditPathSuggest:
-		"Folder/file suggestion popup and matching approach for path input; extended here with exact-file rules and automatic trailing-slash completion.",
-	aboutCreditBacklinks:
-		"Original reference for backlink sync (reverse-lookup references + rewrite anchors); extended here with Wikilink alias/embed parsing, Markdown links, and full coverage of number and text.",
-	aboutCreditWordJoiner:
-		'Original reference for marking numbering prefixes with an invisible Word Joiner boundary; upgraded here to a "double sentinel" scheme that self-heals damaged prefixes.',
+	aboutCreditsIntro: "Development drew on ideas from these open-source plugins.",
+	aboutCreditPathSuggest: "Folder / file suggestions and matching for path input",
+	aboutCreditBacklinks: "The original reference for backlink sync",
+	aboutCreditWordJoiner: "The original reference for marking numbers with invisible characters",
 
 	defaultTemplateDisplay: "Default",
 
@@ -1009,7 +998,7 @@ const en: Messages = {
 		"First turns OFF global auto-numbering, then strips this plugin's prefixes from every Markdown file, restoring bare headings (links update too when “Sync internal links (backlinks)” is on). NOT in Obsidian's undo history — back up first. Continue?",
 	confirmClearVault: "Confirm clear vault",
 
-	freezeVaultModalTitle: "Freeze numbering and release ownership (entire vault)",
+	freezeVaultModalTitle: "Freeze numbering and release ownership",
 	freezeVaultModalBody:
 		"Confirming: (1) your numbers are kept as-is, becoming ordinary text; (2) the invisible markers (U+2060) are removed vault-wide — including inside link anchors, so [[note#heading]] still resolves; (3) the plugin stops all automatic numbering (overrides frontmatter); (4) NOT in undo history — back up first; (5) to take over again later, run “Clean foreign numbering” first, or a fresh prefix gets stacked on top. Continue?",
 	confirmFreezeVault: "Confirm freeze and release",
@@ -1017,7 +1006,6 @@ const en: Messages = {
 	foreignGuardModalTitle: "Possible non-plugin numbering",
 	foreignGuardModalBody: (count) =>
 		`The following ${count} heading(s) look numbered, but the plugin can't be sure you wrote them yourself ("API design", "TODO list", etc. can false-positive). All are checked by default; unchecking one keeps its text as-is (the plugin will still add its own numbering):`,
-	foreignGuardModalConfirm: "Confirm cleanup",
 	foreignGuardItemToggle: (before) => `Clean up foreign numbering in "${before}"`,
 	foreignGuardSearchPlaceholder: "Search headings…",
 	foreignGuardSearchEmpty: "No matching headings",
@@ -1071,12 +1059,83 @@ const en: Messages = {
 		`Copied numbered outline (${count} heading${count === 1 ? "" : "s"})`,
 	noticeCopyFailed: "Failed to copy to clipboard",
 	noticeSectionLinkCopied: (label) => `Copied link: ${label}`,
-	noticeForeignNumberingGuard:
-		"These headings look numbered, but the plugin isn't sure you wrote that yourself — skipped auto-numbering this time.",
-	noticeForeignNumberingGuardAction: "Click to review and clean up",
-	noticeForeignNumberingGuardVirtual:
-		"Most headings in this note already carry numbers the plugin can't confirm you wrote — numbers are hidden here to avoid showing two sets.",
+	noticeForeignNumberingGuardAction: "Review and clean up",
 	noticeForeignGuardFileNotOpen: "This file is no longer open in any tab; reopen it to clean up",
+	pathNoMatchHint: "Notes that match no rule are not numbered.",
+	activeRuleTooltip: "The current note uses this rule",
+	moreActionsTooltip: "More actions",
+	templateBuiltinTag: "Built-in",
+	templateCardUsage: (rules, whitelist) =>
+		`Used by ${rules} ${rules === 1 ? "rule" : "rules"} · ${whitelist} whitelist ${whitelist === 1 ? "entry" : "entries"}`,
+	editBtn: "Edit",
+	templateActionsTooltip: "Template actions",
+	cardSampleTitles: ["Document title", "Overview", "Background", "Details", "Key point", "Notes"],
+	editorKicker: "Edit template",
+	renameTemplateTooltip: "Rename template",
+	editorTabFormat: "Format",
+	editorTabWhitelist: "Whitelist",
+	rangeLabel: "Range",
+	rangeTo: "to",
+	startIndexLabel: "Start at",
+	startIndexHint: "Set 0 to get 0.1, 0.2…",
+	moreRulesLabel: "More rules",
+	ancestorLabel: "Parent numbers",
+	skipLabel: "When a level is skipped",
+	placeholderLabel: "Placeholder",
+	colParents: "Parents",
+	inheritNone: "None",
+	inheritLevels: (n) => `${n} ${n === 1 ? "level" : "levels"}`,
+	outOfRangeBefore: (top) => `Outside the numbering range (numbering starts at H${top})`,
+	outOfRangeAfter: (bottom) => `Outside the numbering range (numbering stops at H${bottom})`,
+	previewTitle: "Preview",
+	previewSample: "Sample",
+	previewCurrent: "Current note",
+	previewNoHeadings: "This note has no headings yet.",
+	previewTagWhitelist: "Whitelist",
+	previewTagSkip: "Skipped",
+	previewTagUnnumbered: "Not numbered",
+	previewSampleWords: [
+		"Document title",
+		"Overview",
+		"Background",
+		"Motivation",
+		"Details",
+		"Notes",
+		"Method",
+		"Conclusion",
+	],
+	footerImpact: (rules, notes, writeNotes) =>
+		`Changes apply immediately · affects ${notes} ${notes === 1 ? "note" : "notes"} under ${rules} ${rules === 1 ? "rule" : "rules"}, ${writeNotes} written to file.`,
+	footerUnused: "Changes apply immediately · no path rule uses this template yet.",
+	footerWhitelist: "Changes apply immediately · click a word to edit it.",
+	doneBtn: "Done",
+	wlLegendIntro: "Matching headings are not numbered and take no number:",
+	wlLegendExact: "exact",
+	wlLegendPartial: "contains the word",
+	wlLegendSubtree: "whole section exempt, numbering resumes after",
+	maintCurrentHeading: "Current note",
+	maintCurrentMeta: (file) => `${file} · undo with Ctrl+Z`,
+	maintNoNote: "No note open",
+	maintVaultHeading: "Whole vault",
+	maintVaultMeta: "Can't be undone — back up first",
+	renumberNowName: "Renumber now",
+	renumberNowDesc: "Renumber this note by its rules (same as the command).",
+	renumberNowBtn: "Renumber",
+	clearStaleName: "Clear leftover numbering",
+	clearStaleDesc: "Remove old numbers written into a display-only note.",
+	clearStaleBtn: "Clear",
+	noticeStaleNotVirtual: "This note isn't in display-only mode, so it has no leftover numbering.",
+	confirmWordPrompt: (word) => `Type "${word}" to confirm`,
+	clearVaultWord: "clear",
+	freezeVaultWord: "freeze",
+	aboutDescription:
+		"Numbers headings from templates — display only or written into the note — and keeps links in sync when headings change.",
+	foreignGuardSelectAll: "Select all",
+	foreignGuardSelected: (selected, total) => `${selected} of ${total} selected`,
+	foreignGuardUndoHint: "Changes to this note can be undone with Ctrl+Z",
+	foreignGuardConfirmCount: (count) => `Clean up ${count}`,
+	noticeForeignGuardCount: (count, virtual) =>
+		`${count} ${count === 1 ? "heading looks" : "headings look"} hand-numbered here, so numbers were ${virtual ? "not shown" : "not added"} this time.`,
 };
 
 /** 取某语言的文案表。 */
