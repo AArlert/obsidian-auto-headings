@@ -1220,7 +1220,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			this.app,
 			this.messages(),
 			candidates.map((c) => ({ lineIndex: c.lineIndex, before: c.before })),
-			(keepLines) => this.computeForeignCleanupPreview(content, path, keepLines)?.items ?? [],
+			(keepLines) => this.computeForeignCleanupPreview(content, path, keepLines).items,
 			(keepLines) => this.applyForeignCleanupSelection(editor, ctx, path, keepLines),
 		).open();
 	}
@@ -1236,26 +1236,25 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * `subtree` 匹配依据标题文本判豁免：某条外来编号是否被清理会改变它自身乃至子孙标题是否被套用
 	 * 编号，静态缓存两个变体没法正确反映这种联动。
 	 *
-	 * @returns 模板未命中（理论不可达——能打开确认框说明当时已经命中过模板）时返回 `null`。
+	 * 笔记没命中模板（路径规则未覆盖 / 「不编号」）时只剥外来编号、不套模板——1.2.2 起编号维护 TAB 的
+	 * 「清理非本插件编号」也走这个确认框（testplan L12），这时效果与同名命令一致。
 	 */
 	private computeForeignCleanupPreview(
 		content: string,
 		path: string,
 		keepLines: ReadonlySet<number>,
-	): { items: ForeignNumberingPreviewItem[]; finalContent: string } | null {
+	): { items: ForeignNumberingPreviewItem[]; finalContent: string } {
 		const template = this.getTemplateForFile(path);
-		if (!template) {
-			return null;
-		}
 		const stripped = clearForeignNumberingContent(content, { keepLines });
 		const { prefixes, suffixes } = this.strippableAffixes();
-		// 仅显示文件（M14）：只剥手写编号，不写插件编号——编号由渲染器显示。
-		const finalContent = this.isVirtualFile(path)
-			? stripped
-			: renumberContent(stripped, template, {
-					strippablePrefixes: prefixes,
-					strippableSuffixes: suffixes,
-				});
+		// 仅显示文件（M14）：只剥手写编号，不写插件编号——编号由渲染器显示。没命中模板同理只剥。
+		const finalContent =
+			!template || this.isVirtualFile(path)
+				? stripped
+				: renumberContent(stripped, template, {
+						strippablePrefixes: prefixes,
+						strippableSuffixes: suffixes,
+					});
 		const finalLines = finalContent.split("\n");
 		const items = previewForeignNumberingCleanup(content).map((c) => ({
 			lineIndex: c.lineIndex,
@@ -1404,9 +1403,6 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 		const oldContent = editor.getValue();
 		const preview = this.computeForeignCleanupPreview(oldContent, path, keepLines);
-		if (!preview) {
-			return; // 理论不可达：能打开确认框说明当时已经命中过模板。
-		}
 		let newContent = preview.finalContent;
 		if (newContent === oldContent) {
 			new Notice(this.messages().noticeNoForeign);
@@ -1818,14 +1814,19 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.runClearNumbering(found.editor, found.ctx);
 	}
 
-	/** 编号维护 TAB 入口：对当前活动文件执行「清理非本插件的标题编号」；无活动文件时 Notice。 */
-	clearActiveFileForeignNumbering(): void {
+	/**
+	 * 编号维护 TAB 入口：对当前活动文件「清理非本插件编号」——1.2.2 起先弹清理预览确认框逐条勾选
+	 * （与迁移守卫 Notice 同一个框，testplan L12 / J14），确认后才改；无活动文件 / 无可清理项时 Notice。
+	 * 同名命令仍是直接执行（{@link runClearForeignNumbering}）。
+	 */
+	reviewActiveFileForeignNumbering(): void {
 		const found = this.activeMarkdownContext();
-		if (!found) {
+		const path = found?.ctx.file?.path;
+		if (!found || !path) {
 			new Notice(this.messages().noticeNoActiveFile);
 			return;
 		}
-		this.runClearForeignNumbering(found.editor, found.ctx);
+		this.openForeignNumberingCleanupModal(path);
 	}
 
 	/**

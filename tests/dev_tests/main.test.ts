@@ -2965,3 +2965,51 @@ describe("复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11
 		expect(cmd.editorCheckCallback!(true, ed, fileInfo("a.md"))).toBe(false);
 	});
 });
+
+describe("编号维护 TAB「清理非本插件编号」先弹预览（1.2.2，testplan L12）", () => {
+	type CleanupModal = {
+		computePreview: (
+			keepLines: ReadonlySet<number>,
+		) => { lineIndex: number; before: string; after: string }[];
+		onConfirm: (keepLines: ReadonlySet<number>) => void;
+	};
+
+	it("打开与迁移守卫同一个确认框，确认前不改笔记；确认后剥编号并套模板", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+
+		p.reviewActiveFileForeignNumbering();
+		expect(Modal.instances).toHaveLength(1);
+		expect(ed.getValue()).toBe("## 1 红米\n### 1.1 工艺");
+
+		const modal = Modal.instances[0] as unknown as CleanupModal;
+		modal.onConfirm(new Set());
+		expect(ed.getValue()).toBe(
+			`## ${WORD_JOINER}1 ${WORD_JOINER}红米\n### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`,
+		);
+	});
+
+	it("笔记没命中模板：预览只剥编号、不套模板（与同名命令效果一致）", () => {
+		const { p, setActiveView } = makePlugin({ pathRules: [] });
+		const ed = new FakeEditor("## 1 红米\n### 1.1 工艺");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+
+		p.reviewActiveFileForeignNumbering();
+		const modal = Modal.instances[0] as unknown as CleanupModal;
+		expect(modal.computePreview(new Set()).map((i) => i.after)).toEqual([
+			"## 红米",
+			"### 工艺",
+		]);
+		modal.onConfirm(new Set());
+		expect(ed.getValue()).toBe("## 红米\n### 工艺");
+	});
+
+	it("没有可清理项：只弹 Notice，不开确认框", () => {
+		const { p, setActiveView } = makePlugin();
+		setActiveView({ editor: new FakeEditor("## 红米"), file: { path: "a.md" } });
+		p.reviewActiveFileForeignNumbering();
+		expect(Modal.instances).toHaveLength(0);
+		expect(Notice.messages.at(-1)).toContain("外来编号");
+	});
+});

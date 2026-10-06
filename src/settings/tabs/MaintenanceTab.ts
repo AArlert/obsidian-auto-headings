@@ -7,7 +7,8 @@ import { confirmWordMatches } from "../model";
  * 「编号维护」TAB（原「敏感操作」，1.2.2 改名与重排，见 spec.md §3.10 / §3.13、testplan L43）。分两组：
  *
  * - **当前笔记**（组标题旁「文件名 · 可用 Ctrl+Z 撤销」）：立即重新编号 / 清除当前文件编号 /
- *   清理非本插件编号 / 清除残留编号——都是现有命令的面板入口，不新增逻辑，普通按钮。
+ *   清理非本插件编号（先弹清理预览确认框，与迁移守卫同一个框）/ 清除残留编号——现有命令的面板入口，
+ *   普通按钮。
  * - **整个仓库**（组标题旁警示图标 +「不可撤销，操作前建议备份」）：清除全库编号… / 固化编号并交还
  *   所有权…——红字普通按钮，确认框里输入确认词后才能点红底按钮（L44）。
  *
@@ -39,7 +40,7 @@ export function renderMaintenanceTab(tab: AutoHeadingsSettingTab, containerEl: H
 		plugin.clearActiveFileNumbering(),
 	);
 	noteAction(t.clearForeignName, t.clearForeignDesc, t.clearForeignBtn, () =>
-		plugin.clearActiveFileForeignNumbering(),
+		plugin.reviewActiveFileForeignNumbering(),
 	);
 	noteAction(t.clearStaleName, t.clearStaleDesc, t.clearStaleBtn, () =>
 		plugin.clearActiveFileStaleNumbering(),
