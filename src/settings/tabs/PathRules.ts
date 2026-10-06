@@ -240,14 +240,11 @@ function renderPathRuleRow(
 			opt.selected = true;
 		}
 	}
-	// 「不编号」伪模板（M12，testplan K15）：固定排在真实模板之后的伪选项——文件夹级彻底关闭
-	// 编号，替代逐文件 frontmatter `false`（哨兵值不落模板文件，见 pathrules.ts）。
-	const noneOpt = select.createEl("option", {
-		value: NO_NUMBERING_TEMPLATE,
-		text: t.pathTemplateNone,
-	});
+	// 「不编号」（M12，testplan K15）：1.3.0 起挪到右边的「模式」下拉（S23），数据仍是伪模板哨兵。
+	// 这里只在规则处于「不编号」时放一个占位项并置灰，模板名没有意义。
 	if (rule.template === NO_NUMBERING_TEMPLATE) {
-		noneOpt.selected = true;
+		select.createEl("option", { value: NO_NUMBERING_TEMPLATE, text: "—" }).selected = true;
+		select.disabled = true;
 	}
 	// 规则引用的模板已不存在（理论上不应发生）时，补一个失效项以免静默改投（伪模板不算失效）。
 	if (rule.template !== NO_NUMBERING_TEMPLATE && !plugin.templateStore.has(rule.template)) {
@@ -271,17 +268,27 @@ function renderPathRuleRow(
 	const modeOptions: Array<[string, string]> = [
 		["write", t.pathModeWrite],
 		["virtual", t.pathModeVirtual],
+		["none", t.pathTemplateNone],
 	];
+	const currentMode = rule.template === NO_NUMBERING_TEMPLATE ? "none" : ruleMode(rule);
 	for (const [value, text] of modeOptions) {
 		const opt = modeSelect.createEl("option", { value, text });
-		if (ruleMode(rule) === value) {
+		if (currentMode === value) {
 			opt.selected = true;
 		}
 	}
-	modeSelect.disabled = rule.template === NO_NUMBERING_TEMPLATE;
 	modeSelect.addEventListener("change", () => {
 		const after = cloneRules(rules);
-		after[index].mode = modeSelect.value === "virtual" ? "virtual" : "write";
+		const picked = modeSelect.value;
+		if (picked === "none") {
+			after[index].template = NO_NUMBERING_TEMPLATE;
+		} else {
+			// 从「不编号」切回时模板名已无从恢复，退回默认模板；用户可再在左边挑别的。
+			if (after[index].template === NO_NUMBERING_TEMPLATE) {
+				after[index].template = DEFAULT_TEMPLATE_NAME;
+			}
+			after[index].mode = picked === "virtual" ? "virtual" : "write";
+		}
 		void commitRules(tab, after);
 	});
 

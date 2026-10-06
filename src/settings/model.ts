@@ -13,6 +13,7 @@
 
 import { DEFAULT_LANG_SETTING, type LangSetting } from "../i18n";
 import type { PathRule } from "../pathrules";
+import type { TemplateSnapshot } from "../templates/styles";
 
 export interface AutoHeadingsSettings {
 	/**
@@ -94,6 +95,11 @@ export interface AutoHeadingsSettings {
 	 * VC 未安装 / 未启用时本字段无效——没有竞争者，本插件的框照常弹。
 	 */
 	headingSuggestWhenVcActive: "yield" | "own";
+	/**
+	 * 各模板的样式历史（M16，spec §3.24）：模板名 → 最近若干份保存快照（最新在前）。存在 data.json
+	 * 里、不另写文件；模板改名 / 删除时随之搬迁 / 清除。缺省视为空表。
+	 */
+	templateHistory: Record<string, TemplateSnapshot[]>;
 }
 
 /** 防抖延迟的边界与默认值（见 spec.md §3.9）。 */
@@ -127,6 +133,7 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	headingLinkSuggestEnabled: true,
 	vcIntegrationMode: "off",
 	headingSuggestWhenVcActive: "yield",
+	templateHistory: {},
 };
 
 /** 将防抖延迟夹到合法范围 [50, 2000]，非数字回退到默认值。 */

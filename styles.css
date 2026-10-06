@@ -1248,6 +1248,50 @@ button.ah-editor-tab.is-active:hover {
 }
 
 .ah-editor-footer-note {
+	flex: 1;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ah-editor-dirty {
+	display: none;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-accent);
+}
+
+.ah-editor-dirty.is-visible {
+	display: inline;
+}
+
+/* 快速套用 / 历史工具条（M16） */
+.ah-style-toolbar {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.ah-history-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.ah-history-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+}
+
+.ah-history-summary {
+	font-weight: var(--font-medium);
+}
+
+.ah-history-time,
+.ah-history-same {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 }

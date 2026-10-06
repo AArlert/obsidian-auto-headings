@@ -12,7 +12,7 @@ Everything below is what you get the moment the plugin is enabled, before you op
 -   **Your heading levels are sacred.** The plugin only adds or removes number prefixes — it **never** rewrites `#`/`##`/`###`. Multiple top-level `# H1`s in one file are left alone and treated as section boundaries (numbering under each one restarts).
 -   **Doesn't fight you while you type.** Renumbering runs on a debounce (50–2000 ms, adjustable) after you stop typing, and rewrites the whole file in a single editor transaction — one `Ctrl/Cmd+Z` undoes it, and your cursor position is preserved.
 -   **Numbering has no background cost.** Numbering only ever processes the file you're actively editing — triggered by an edit, a manual command, or a settings change reapplied to the active file. It never scans your vault for "every file using template X." Files you haven't opened are only touched by bulk actions **you explicitly confirm** (batch renumber on a path rule, removing or writing numbers when switching modes, vault-wide clear). The one feature that reads the whole vault is heading link suggestions: on startup it reads your vault's headings once, locally, to build an index (capped at 50,000), then updates it incrementally; you can turn it off under General settings. The plugin makes no network requests and collects no data.
--   **Two independent switches, plus a manual override.** Enabling the plugin isn't the same as turning it loose on your whole vault: a global auto-numbering toggle decides whether editing a note triggers renumbering at all. Add `obsidian-auto-headings: true` or `false` to a note's frontmatter to override that toggle for one file — force it on while everything else stays untouched, or force it off for a file you don't want the plugin near. The **Renumber now** command ignores both: typing a command is explicit enough intent to skip every switch and renumber immediately.
+-   **Two independent switches, plus a manual override.** Enabling the plugin isn't the same as turning it loose on your whole vault: a global auto-numbering toggle decides whether editing a note triggers renumbering at all. Add `obsidian-auto-headings: true` or `false` to a note's frontmatter to override that toggle for one file — force it on while everything else stays untouched, or force it off for a file you don't want the plugin near. The **Renumber current note** command ignores both: typing a command is explicit enough intent to skip every switch and renumber immediately.
 -   **Configuration lives in Settings, not in your notes.** Templates, path rules, and the whitelist are all managed from the settings panel — nothing gets written to frontmatter except that one optional override key above. Open a note and there's no sign the plugin is even installed.
 -   **Bilingual out of the box.** The entire UI follows Obsidian's own language setting (English / 简体中文), or can be locked to one manually. Fully usable on mobile (`isDesktopOnly: false`).
 -   **Type it, link it.** While typing in any note, Auto Headings suggests vault headings that match what you've written — press `Tab` (or tap on mobile) and your text is expanded to the heading's full name as a clickable link to that heading. Also on by default, and it works for already-numbered headings too.
@@ -25,7 +25,7 @@ Everything below is what you get the moment the plugin is enabled, before you op
     - **General**: language, global auto-numbering toggle, debounce delay, backlink sync, heading link suggestions.
     - **Paths & templates**: the path-rule table (each rule picks a template and a mode: write to file / display only) and the template editor (live preview, whitelist).
     - **Maintenance**: numbering upkeep for the current note and the whole vault.
-4. Per-file override: add `obsidian-auto-headings: true/false` in frontmatter to force-enable/disable a single file. The command **Renumber now** bypasses all switches.
+4. Per-file override: add `obsidian-auto-headings: true/false` in frontmatter to force-enable/disable a single file. The command **Renumber current note** bypasses all switches.
 
 ## Two modes: display only and write to file
 
@@ -51,7 +51,7 @@ Every path rule has a mode (the "Mode" column under **Settings → Paths & templ
 -   **Leftover numbers**: if a display-only note still contains numbers the plugin wrote earlier (you kept them when switching, or moved the note in from a write-mode folder), the plugin hides the old number, shows a single new one, and underlines it with a dotted line; hover for an explanation. The old number is still in the file and will show up elsewhere. The command "Clear leftover plugin numbering in this file" removes it; it only appears in display-only notes.
 -   **Hand-written numbers**: if more than half of the headings in a display-only note already carry hand-written or imported numbers (say, after migrating from another numbering plugin), the plugin shows no numbers there, to avoid two sets, and offers a notice when you open the note so you can preview and clean them up. The occasional heading that happens to start with a number (like "2024 review") is unaffected and gets numbered as usual.
 -   **Outline pane**: display-only numbers also appear in Obsidian's built-in Outline pane and stay correct when you filter, collapse or drag sections there; headings with leftover numbers show the file's text as is.
--   **Renumber now** in a display-only note only refreshes the display; it never writes to the file.
+-   **Renumber current note** in a display-only note only refreshes the display; it never writes to the file.
 -   **Freeze numbering and release ownership**: display-only numbers were never in the files, so they disappear once you freeze. To keep them as text, switch the rule to "Write to file" with "write now" first, then freeze.
 
 ## Customize it
@@ -157,9 +157,9 @@ number. For now it affects only the line it's on, not the headings nested under 
 
 ### Cleanup commands, for when you need a clean slate
 
--   **Renumber now** — force an immediate renumber of the current file (see [Out of the box](#out-of-the-box) — this bypasses every switch)
--   **Clear numbering in current file** — strip every number prefix this plugin ever wrote (or could have written), returning the file to bare headings. It also **pauses that one file** (by writing `obsidian-auto-headings: false` into its frontmatter) — otherwise your very next keystroke would put the numbers straight back. To hand the file back to the plugin, run **Renumber now**; it removes that property for you
--   **Clear non-plugin heading numbering** — strip only numbering _not_ written by this plugin (hand-typed `1.` prefixes, imported document numbering, etc.) while leaving the plugin's own numbering untouched — the tool for taking over a document you didn't originate
+-   **Renumber current note** — force an immediate renumber of the current file (see [Out of the box](#out-of-the-box) — this bypasses every switch)
+-   **Clear numbering in current note** — strip every number prefix this plugin ever wrote (or could have written), returning the file to bare headings. It also **pauses that one file** (by writing `obsidian-auto-headings: false` into its frontmatter) — otherwise your very next keystroke would put the numbers straight back. To hand the file back to the plugin, run **Renumber current note**; it removes that property for you
+-   **Clear non-plugin heading numbering in current note** — strip only numbering _not_ written by this plugin (hand-typed `1.` prefixes, imported document numbering, etc.) while leaving the plugin's own numbering untouched — the tool for taking over a document you didn't originate
 -   **Clear numbering across the entire vault** — a settings-panel button, deliberately _not_ a command (so it can't be hotkey- or command-palette-triggered by accident), gated behind a confirmation dialog where you type "clear" to confirm, and kept under **Settings → Maintenance → Whole vault**
 
 ## How it works — and one thing you should know
@@ -176,7 +176,7 @@ What this means for you:
 -   It travels with copied/exported text; if you `grep` your files for exact heading text, be aware it sits between the number and the title — searching for `"1 My heading"` as one contiguous string will not match.
 -   **Dataview**: it reaches heading text through `section` (on `TASK`/`LIST` queries), through link subpaths, and through the metadata cache in DataviewJS — all of which carry this character. The simplest fix is to stop matching exactly: the numbering is always a _prefix_, so `endswith(section.subpath, "My heading")` just works with no escaping. Recipes for normalizing (and a correction: Dataview has **no** `file.headers` field, contrary to what an earlier README claimed) are in the [marker character contract](marker-contract.md#dataview).
 -   **Pasting into other apps** (WeChat, Zhihu, Notion, email clients, etc.): **copy sanitization** is always on, with nothing to configure — when you copy or cut, the plugin strips this character from the clipboard so external apps receive clean text; pasting the same text back into your vault within the same session restores the original, so numbering re-flows without double numbers. (Added in 1.0.10 as a default-on switch; the switch was removed in 1.0.16 — never putting invisible characters in your clipboard is a promise this plugin keeps, not an option.) Sanitization only covers interactive copy/cut; if you obtain such text through some other route, strip it manually with `.replace(/\u2060/g, "")` in the destination app.
--   If you remove numbering by hand and leave stray characters behind, the commands **Clear numbering in current file** / **Clear non-plugin heading numbering** will tidy things up.
+-   If you remove numbering by hand and leave stray characters behind, the commands **Clear numbering in current note** / **Clear non-plugin heading numbering in current note** will tidy things up.
 -   **Coexistence with similar plugins**: gurjar1/auto-heading-obsidian also tags its numbering with U+2060. Running it alongside this plugin is **not supported** — each would claim the other's prefixes as its own.
 -   **For downstream developers**: the marker's exact byte format, stability guarantees, and interop snippets live in the [marker character contract](marker-contract.md).
 
@@ -197,7 +197,7 @@ Number Headings has been unmaintained for roughly 2.5 years. Migrating takes thr
 
 1. Disable Number Headings;
 2. Enable this plugin and pick a template (the out-of-the-box default `1.1.1` is close to its style; path rules can assign different templates per folder);
-3. Run **Clear non-plugin heading numbering** on your old files — it strips only numbering _not_ written by this plugin (Number Headings' prefixes, hand-written ones, and imported documents all qualify), after which normal editing renumbers everything with your template.
+3. Run **Clear non-plugin heading numbering in current note** on your old files — it strips only numbering _not_ written by this plugin (Number Headings' prefixes, hand-written ones, and imported documents all qualify), after which normal editing renumbers everything with your template.
 
 Its two longest-standing open requests are both **implemented here**: excluding folders from numbering (pick the "No numbering" pseudo-template on a path rule) and skipping headings inside comment blocks (`%%…%%` and `<!-- -->` are ignored — not numbered, and they don't consume a counter slot either).
 
@@ -206,9 +206,9 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 | Command                         | What it does                                                                                 |
 | ------------------------------- | -------------------------------------------------------------------------------------------- |
 | Toggle global auto-numbering | Turn automatic numbering on or off for the whole vault |
-| Renumber now                    | Renumber the current file immediately, bypassing all switches                                |
-| Clear numbering in current file | Strip all numbering prefixes (including hand-written ones)                                   |
-| Clear non-plugin heading numbering | Strip only numbering **not** written by this plugin — use it to take over imported documents |
+| Renumber current note                    | Renumber the current file immediately, bypassing all switches                                |
+| Clear numbering in current note | Strip all numbering prefixes (including hand-written ones)                                   |
+| Clear non-plugin heading numbering in current note | Strip only numbering **not** written by this plugin — use it to take over imported documents |
 | Clear leftover plugin numbering in this file | In a display-only note, strip only numbers this plugin wrote earlier (hand-written numbers stay) |
 | Copy numbered outline | Copy the current note's headings as an indented, numbered outline — works in both write and display-only mode |
 | Copy current section link | Copy a link to the section under the cursor (or the section the cursor is inside) — works in both write and display-only mode |
@@ -229,7 +229,7 @@ In write mode, the only things this plugin ever writes into your files are numbe
 
 **Drop the numbering** — Settings → Maintenance → **Clear vault numbering…** (type "clear" to confirm) (it first switches global auto-numbering off, so nothing gets renumbered mid-clear). Headings go back to bare text.
 
-**Keep the numbering** — Settings → Maintenance → **Freeze numbering…** (type "freeze" to confirm). Every number stays exactly as it is, as ordinary text; only the invisible markers go, and the plugin stops numbering anything from then on. This is the one to use if you like your current numbering but no longer want a plugin managing it, or you're uninstalling and want to keep the result. Markers are removed vault-wide **including inside link anchors**, so your `[[note#heading]]` links keep resolving. Once frozen, the plugin can no longer tell those numbers were its own — that's the point, but it does mean the step is one-way: to hand control back, re-enable it and run **Clear non-plugin heading numbering** first, or the existing numbers get a second prefix stacked on top.
+**Keep the numbering** — Settings → Maintenance → **Freeze numbering…** (type "freeze" to confirm). Every number stays exactly as it is, as ordinary text; only the invisible markers go, and the plugin stops numbering anything from then on. This is the one to use if you like your current numbering but no longer want a plugin managing it, or you're uninstalling and want to keep the result. Markers are removed vault-wide **including inside link anchors**, so your `[[note#heading]]` links keep resolving. Once frozen, the plugin can no longer tell those numbers were its own — that's the point, but it does mean the step is one-way: to hand control back, re-enable it and run **Clear non-plugin heading numbering in current note** first, or the existing numbers get a second prefix stacked on top.
 
 Then:
 

@@ -83,8 +83,7 @@ export function renderWhitelistEditor(
 		const exists = template.whitelist.some((e) => e.text === text && e.match === "exact");
 		if (!exists) {
 			template.whitelist.push({ text, match: "exact" });
-			await plugin.templateStore.save(template);
-			plugin.renumberActiveFile();
+			await host.persist(template);
 		}
 		input.value = "";
 		host.pendingFocus = ".ah-wl-add"; // 重绘后光标留在添加框，便于连续添加。
@@ -113,8 +112,7 @@ export function renderWhitelistEditor(
 
 	/** 提交条目改动并整页重绘（保存模板 + 立即重编当前文件）。 */
 	const commit = async () => {
-		await plugin.templateStore.save(template);
-		plugin.renumberActiveFile();
+		await host.persist(template);
 		host.rerender();
 	};
 

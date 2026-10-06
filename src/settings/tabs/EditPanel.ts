@@ -20,6 +20,7 @@ import {
 	showSpaces,
 } from "../templateView";
 import type { TemplateEditorHost } from "./TemplateEditorModal";
+import { renderStyleToolbar } from "./StyleToolbar";
 import { type PreviewHandle, renderTemplatePreview } from "./TemplatePreview";
 
 /** 序号样式下拉的固定遍历顺序。 */
@@ -92,7 +93,6 @@ export function renderFormatPane(
 	template: Template,
 ): void {
 	const t = host.t;
-	const plugin = host.plugin;
 	const top = normalizeTopLevel(template.topLevel);
 	const bottom = normalizeBottomLevel(template.bottomLevel);
 
@@ -106,14 +106,16 @@ export function renderFormatPane(
 
 	/** 存模板 + 重编当前文件；`rerender` 为 true 时整窗重绘，否则只刷新预览。 */
 	const commit = async (rerender: boolean): Promise<void> => {
-		await plugin.templateStore.save(template);
-		plugin.renumberActiveFile();
+		await host.persist(template);
 		if (rerender) {
 			host.rerender();
 		} else {
 			refreshPreviews();
 		}
 	};
+
+	// —— 快速套用 / 历史（M16，testplan S20/S21）——
+	renderStyleToolbar(host, parent, template, () => commit(true));
 
 	// —— 上方两行 ——
 	const form = parent.createDiv({ cls: "ah-fmt-form" });

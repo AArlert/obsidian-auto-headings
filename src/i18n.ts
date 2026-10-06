@@ -439,6 +439,24 @@ export interface Messages {
 	footerUnused: string;
 	footerWhitelist: string;
 	doneBtn: string;
+	/** 模板编辑弹窗草稿式保存（M16，S22）与快速套用 / 历史（S20/S21）。 */
+	editorSave: string;
+	editorCancel: string;
+	editorDirty: string;
+	editorQuickApply: string;
+	editorHistory: string;
+	quickRecentHeading: string;
+	quickPresetHeading: string;
+	quickNoRecent: string;
+	presetDecimal: string;
+	presetChapter: string;
+	presetOfficial: string;
+	presetLegal: string;
+	presetOutline: string;
+	historyTitle: (name: string) => string;
+	historyEmpty: string;
+	historyRestore: string;
+	historyCurrent: string;
 	/** 白名单页顶部图例（testplan L42）。 */
 	wlLegendIntro: string;
 	wlLegendExact: string;
@@ -808,10 +826,27 @@ const zh: Messages = {
 	previewTagUnnumbered: "不编号",
 	previewSampleWords: ["文档标题", "概述", "背景", "动机", "细节", "补充", "方法", "结论"],
 	footerImpact: (rules, notes, writeNotes) =>
-		`修改即时生效 · 影响 ${rules} 条规则下的 ${notes} 篇笔记，其中 ${writeNotes} 篇写入文件。`,
-	footerUnused: "修改即时生效 · 还没有路径规则使用这个模板。",
-	footerWhitelist: "修改即时生效 · 单击词语即可改写。",
+		`点「保存」后生效 · 影响 ${rules} 条规则下的 ${notes} 篇笔记，其中 ${writeNotes} 篇写入文件。`,
+	footerUnused: "点「保存」后生效 · 还没有路径规则使用这个模板。",
+	footerWhitelist: "点「保存」后生效 · 单击词语即可改写。",
 	doneBtn: "完成",
+	editorSave: "保存",
+	editorCancel: "取消",
+	editorDirty: "● 有未保存的修改",
+	editorQuickApply: "快速套用",
+	editorHistory: "历史",
+	quickRecentHeading: "最近用过的样式",
+	quickPresetHeading: "常见编号体系",
+	quickNoRecent: "还没有保存过的样式",
+	presetDecimal: "数字层级 · 1 / 1.1 / 1.1.1",
+	presetChapter: "章节 · 第一章 / 第一节",
+	presetOfficial: "公文 · 一、/（一）/ 1.",
+	presetLegal: "法律条文 · 第一编 / 第一章 / 第一条",
+	presetOutline: "大纲 · I. / A. / 1.",
+	historyTitle: (name) => `「${name}」的样式历史`,
+	historyEmpty: "还没有历史——点「保存」后会在这里留下快照。",
+	historyRestore: "恢复",
+	historyCurrent: "与当前相同",
 	wlLegendIntro: "命中的标题不编号、不占序号：",
 	wlLegendExact: "完全相同",
 	wlLegendPartial: "包含该词",
@@ -1208,10 +1243,27 @@ const en: Messages = {
 		"Conclusion",
 	],
 	footerImpact: (rules, notes, writeNotes) =>
-		`Changes apply immediately · affects ${notes} ${notes === 1 ? "note" : "notes"} under ${rules} ${rules === 1 ? "rule" : "rules"}, ${writeNotes} written to file.`,
-	footerUnused: "Changes apply immediately · no path rule uses this template yet.",
-	footerWhitelist: "Changes apply immediately · click a word to edit it.",
+		`Applies on Save · affects ${notes} ${notes === 1 ? "note" : "notes"} under ${rules} ${rules === 1 ? "rule" : "rules"}, ${writeNotes} written to file.`,
+	footerUnused: "Applies on Save · no path rule uses this template yet.",
+	footerWhitelist: "Applies on Save · click a word to edit it.",
 	doneBtn: "Done",
+	editorSave: "Save",
+	editorCancel: "Cancel",
+	editorDirty: "● Unsaved changes",
+	editorQuickApply: "Quick apply",
+	editorHistory: "History",
+	quickRecentHeading: "Recently used styles",
+	quickPresetHeading: "Common numbering schemes",
+	quickNoRecent: "No saved styles yet",
+	presetDecimal: "Decimal · 1 / 1.1 / 1.1.1",
+	presetChapter: "Chapters · 第一章 / 第一节",
+	presetOfficial: "Official · 一、/（一）/ 1.",
+	presetLegal: "Legal · 第一编 / 第一章 / 第一条",
+	presetOutline: "Outline · I. / A. / 1.",
+	historyTitle: (name) => `Style history of "${name}"`,
+	historyEmpty: "No history yet — each Save leaves a snapshot here.",
+	historyRestore: "Restore",
+	historyCurrent: "Same as current",
 	wlLegendIntro: "Matching headings are not numbered and take no number:",
 	wlLegendExact: "exact",
 	wlLegendPartial: "contains the word",

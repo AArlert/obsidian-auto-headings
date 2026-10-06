@@ -1248,6 +1248,50 @@ button.ah-editor-tab.is-active:hover {
 }
 
 .ah-editor-footer-note {
+	flex: 1;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ah-editor-dirty {
+	display: none;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-accent);
+}
+
+.ah-editor-dirty.is-visible {
+	display: inline;
+}
+
+/* 快速套用 / 历史工具条（M16） */
+.ah-style-toolbar {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.ah-history-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.ah-history-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+}
+
+.ah-history-summary {
+	font-weight: var(--font-medium);
+}
+
+.ah-history-time,
+.ah-history-same {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 }
@@ -1477,4 +1521,30 @@ button.ah-preview-toggle.is-active {
 	.ah-fmt-row {
 		min-width: 640px;
 	}
+}
+
+/* 标题手柄（M16，spec §3.24）：挂在 .cm-scroller 里的单个浮层，悬停标题行时显示 */
+.ah-heading-handle {
+	position: absolute;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	border-radius: var(--radius-s);
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+	letter-spacing: -2px;
+	cursor: pointer;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.12s ease;
+}
+.ah-heading-handle.is-visible {
+	opacity: 1;
+	pointer-events: auto;
+}
+.ah-heading-handle:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
 }

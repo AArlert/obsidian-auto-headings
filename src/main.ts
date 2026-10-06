@@ -69,6 +69,12 @@ import { VirtualOutlineDecorator } from "./virtual/outlineView";
 import { VirtualReadingRenderer } from "./virtual/readingView";
 import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
+import {
+	pushSnapshot,
+	sanitizeHistory,
+	type TemplateSnapshot,
+	type TemplateStyle,
+} from "./templates/styles";
 import { summarizeTemplateUsage, type TemplateUsage } from "./settings/templateView";
 import { HeadingIndex } from "./headingindex";
 import { NoteEntry } from "./noteentry";
@@ -989,6 +995,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const ok = await this.templateStore.rename(oldName, newName);
 		if (ok) {
 			let changed = false;
+			const history = this.settings.templateHistory;
+			if (history[oldName]) {
+				history[newName] = history[oldName];
+				delete history[oldName];
+				changed = true;
+			}
 			for (const rule of this.settings.pathRules) {
 				if (rule.template === oldName) {
 					rule.template = newName;
@@ -1000,6 +1012,29 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 		}
 		return ok;
+	}
+
+	/** 某模板的样式历史（最新在前）；没有则空数组。 */
+	templateHistoryOf(name: string): TemplateSnapshot[] {
+		return this.settings.templateHistory?.[name] ?? [];
+	}
+
+	/**
+	 * 把某模板当前样式记进历史（M16，S21）。首次记录时若历史为空，调用方应先记「保存前」的样式再记新样式，
+	 * 这样用户总能回到第一次编辑之前的样子。
+	 */
+	async recordTemplateStyle(name: string, style: TemplateStyle): Promise<void> {
+		const history = (this.settings.templateHistory ??= {});
+		history[name] = pushSnapshot(history[name] ?? [], style, Date.now());
+		await this.saveSettings();
+	}
+
+	/** 模板被删除时清掉它的历史。 */
+	async dropTemplateHistory(name: string): Promise<void> {
+		if (this.settings.templateHistory?.[name]) {
+			delete this.settings.templateHistory[name];
+			await this.saveSettings();
+		}
 	}
 
 	/**
@@ -1974,6 +2009,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (merged.headingSuggestWhenVcActive !== "own") {
 			merged.headingSuggestWhenVcActive = "yield";
 		}
+		merged.templateHistory = sanitizeHistory(data.templateHistory);
 		// 迁移：开关 `showOutlineNumbers`（1.2.0–1.2.1，大纲里显示仅显示模式的编号）自 1.2.2 移除，
 		// 大纲编号固定开启（用户定：仅显示模式本就该处处看得到编号）；旧字段随迁移清理。
 		delete merged.showOutlineNumbers;

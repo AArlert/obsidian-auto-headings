@@ -61,15 +61,19 @@ Notes with hand-typed or imported numbering can be cleaned up with one command, 
 
 ## Commands
 
-| Command                                      | What it does                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Renumber now                                 | Renumber the current note right away                                                   |
-| Clear numbering in current file              | Remove all numbering from the current note                                             |
-| Clear non-plugin heading numbering           | Remove hand-typed or imported numbering only                                           |
-| Clear leftover plugin numbering in this file | In display-only mode, remove numbers the plugin wrote earlier                          |
-| Toggle global auto-numbering                 | Turn automatic numbering on or off for the vault                                       |
-| Copy numbered outline                        | Copy the note's headings as an indented, numbered outline (write or display-only mode) |
-| Copy current section link                    | Copy a link to the section under the cursor (write or display-only mode)               |
+| Command                                            | What it does                                                                           |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Renumber current note                              | Renumber the current note right away                                                   |
+| Clear numbering in current note                    | Remove all numbering from the current note                                             |
+| Clear non-plugin heading numbering in current note | Remove hand-typed or imported numbering only                                           |
+| Clear leftover plugin numbering in this file       | In display-only mode, remove numbers the plugin wrote earlier                          |
+| Toggle global auto-numbering                       | Turn automatic numbering on or off for the vault                                       |
+| Copy numbered outline                              | Copy the note's headings as an indented, numbered outline (write or display-only mode) |
+| Copy current section link                          | Copy a link to the section under the cursor (write or display-only mode)               |
+| Skip / restore numbering for heading at cursor     | Add / remove a trailing `<!-- skip -->` so the heading is not numbered                 |
+| Promote / demote current section                   | Raise / lower the section and its sub-headings by one level                            |
+| Choose template for current note…                  | Use a different template for this note only                                            |
+| Toggle auto-numbering for current note             | Turn auto-numbering on / off for this note only                                        |
 
 ## FAQ
 
@@ -86,7 +90,7 @@ No. The plugin makes no network requests and collects no data. When it starts, i
 Yes. Display-only mode never changed your files, so you can simply uninstall. If you used write mode, **Settings → Maintenance** lets you either remove all numbering or keep the numbers as plain text. Both work across the whole vault.
 
 **I'm coming from Number Headings.**
-Disable it, enable Auto Headings, then run **Clear non-plugin heading numbering** on your old notes. Folder exclusion and skipping headings inside comments both work out of the box.
+Disable it, enable Auto Headings, then run **Clear non-plugin heading numbering in current note** on your old notes. Folder exclusion and skipping headings inside comments both work out of the box.
 
 **Can I use it together with another auto-numbering plugin?**
 No. Two numbering plugins will fight over the same headings, so enable only one.
