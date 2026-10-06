@@ -44,10 +44,7 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 	const rules = plugin.settings.pathRules;
 
 	// 节头挂强化类：左侧强调色竖条 + 加大字号，与「模板」分区一眼可分（testplan L20）。
-	new Setting(containerEl)
-		.setName(t.pathRulesHeading)
-		.setHeading()
-		.settingEl.addClass("ah-section-head");
+	new Setting(containerEl).setName(t.pathRulesHeading).setHeading();
 	containerEl.createEl("p", { cls: "ah-section-desc", text: t.pathRulesDesc });
 
 	// —— 兜底缺失提示条 ——
@@ -370,7 +367,7 @@ class ModeTransitionModal extends Modal {
 	onOpen(): void {
 		const { contentEl, plan, t } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t.modeModalTitle });
+		this.setTitle(t.modeModalTitle);
 		const leaving = plan.toVirtual.length + plan.toNone.length;
 		const opts = { clear: leaving > 0 && plan.toNone.length === 0, write: false };
 		if (leaving > 0) {
@@ -428,7 +425,7 @@ class BatchRenumberModal extends Modal {
 	onOpen(): void {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.t.batchModalTitle });
+		this.setTitle(this.t.batchModalTitle);
 		contentEl.createEl("p", { text: this.t.batchModalBody(this.pattern, this.count) });
 		new Setting(contentEl)
 			.addButton((btn) =>

@@ -96,7 +96,6 @@ export interface Messages {
 	sectionLinking: string;
 	sectionSuggest: string;
 	/** 「标题链接建议」分区的一句话导语：先说独立可用，再说什么时候才需要关心 VC 那两项。 */
-	sectionSuggestDesc: string;
 
 	// —— Various Complements 联动（M13）——
 	vcModeName: string;
@@ -396,53 +395,45 @@ export interface Messages {
 const zh: Messages = {
 	tabGeneral: "全局设置",
 	tabTemplates: "路径模板",
-	tabDanger: "敏感操作",
-	tabAbout: "关于",
+	tabDanger: "编号维护",
+	tabAbout: "关于插件",
 
 	languageName: "语言",
-	languageDesc: "设置面板与命令的显示语言。「自动」跟随 Obsidian 界面语言。",
+	languageDesc: "设置面板与命令的显示语言。",
 	langAuto: "自动（跟随 Obsidian）",
 	langZh: "中文",
 	langEn: "English",
 	languageChangeHint: "命令名在重载插件后更新为新语言。",
 
 	autoNumberName: "全局自动编号",
-	autoNumberDesc:
-		"编辑文件时自动为标题编号。关闭后可用「立即重新编号」命令手动触发（或经 frontmatter 按文件强制开启）。",
+	autoNumberDesc: "编辑时自动为标题编号；关闭后可用「立即重新编号」手动触发。",
 
 	debounceName: "防抖延迟",
-	debounceDesc: (min, max, def) => `编辑停顿 ${min}–${max} ms 后触发自动编号（默认 ${def} ms）。`,
+	debounceDesc: (min, max, def) => `停止输入多久后自动编号（${min}–${max} ms，默认 ${def}）。`,
 	resetTooltip: (def) => `恢复默认 ${def} ms`,
 	outlineNumbersName: "在大纲中显示编号",
-	outlineNumbersDesc: "「仅显示」模式下，Obsidian 自带的大纲面板里也显示编号。",
+	outlineNumbersDesc: "「仅显示」模式下，大纲面板里也显示编号。",
 
 	updateBacklinksName: "同步内部链接（Backlink）",
-	updateBacklinksDesc:
-		"标题文字改动时，自动更新其它文件里指向它的 Wikilink 与 Markdown 链接（如 [[文件#标题]]、[说明](文件.md#标题)），避免断链。与编号无关、全局生效；改动不在引用文件的撤销历史内。",
+	updateBacklinksDesc: "标题文字改变时，自动更新其他笔记里指向它的链接。",
 
 	headingLinkSuggestName: "标题链接建议",
-	headingLinkSuggestDesc:
-		"打字匹配库内标题即弹建议，接受后替换为指向该标题的链接。完全自带、默认开启；关闭后不构建标题索引，内存/CPU 成本归零。",
+	headingLinkSuggestDesc: "打字时弹出匹配的标题，选中即插入指向它的链接。",
 	headingSuggestThisFile: "（本文件）",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`vault 过大，标题索引未完整构建（已索引 ${indexed} 个）；建议功能在已索引范围内可用。`,
 	vcCoexistName: "Various Complements 启用时",
-	vcCoexistDesc:
-		"两插件共用同一个建议框，只能留一个。默认让路给 VC：配合词典联动，两边候选同框可见（最完整）。仅当词典联动开启时才真让路，否则仍由本插件接管。VC 未安装/未启用时本项无效。",
+	vcCoexistDesc: "两个插件共用一个建议框，只能留一个。",
 	vcCoexistYield: "让路给 Various Complements（推荐）",
 	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
-	vcCoexistFallbackHint:
-		"当前仍由本插件接管：词典联动未开启，VC 词典里没有标题，让路会什么都看不到。开启联动后即真让路。",
+	vcCoexistFallbackHint: "词典联动未开启，目前仍由本插件接管建议框。",
 
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
 	sectionSuggest: "标题链接建议",
-	sectionSuggestDesc:
-		"打字即出标题链接，不依赖其它插件。只有装了 Various Complements 才需要关心下面两项。",
 
 	vcModeName: "Various Complements 联动",
-	vcModeDesc:
-		"把标题索引导出为 VC 自定义词典，让标题候选出现在 VC 的建议框里（合并两边候选的唯一官方入口）。没装 VC 用不上；默认关闭、开启需显式确认、关闭时零写入。",
+	vcModeDesc: "把标题索引导出为 VC 的自定义词典。",
 	vcModeOff: "不联动",
 	vcModeManual: "手动配置",
 	vcModeAuto: "自动配置",
@@ -465,8 +456,7 @@ const zh: Messages = {
 		"VC「建议框最多显示条数」抬到至少 10（全局项，只抬不降）",
 		"写入后自动重载 VC 词典（失败会另行提示）",
 	],
-	vcDescriptionOffHint:
-		"VC 的「Description on suggestion」为 None，候选下方的来源路径行不显示（同名标题仍可凭括号里的文件名区分）。VC 全局显示偏好，本插件不代改。",
+	vcDescriptionOffHint: "VC 关闭了候选来源行（Description on suggestion 为 None）。",
 	vcAutoConfirmButton: "确认并自动配置",
 	noticeVcAutoWriteSuccess: "已自动配置 Various Complements 联动。",
 	noticeVcAutoWriteInvalidShape:
@@ -729,55 +719,47 @@ const zh: Messages = {
 const en: Messages = {
 	tabGeneral: "General",
 	tabTemplates: "Paths & templates",
-	tabDanger: "Sensitive actions",
+	tabDanger: "Maintenance",
 	tabAbout: "About",
 
 	languageName: "Language",
-	languageDesc:
-		'Display language for the settings panel and commands. "Auto" follows Obsidian\'s UI language.',
+	languageDesc: "Display language for the settings panel and commands.",
 	langAuto: "Auto (follow Obsidian)",
 	langZh: "中文",
 	langEn: "English",
 	languageChangeHint: "Command names update after the plugin is reloaded.",
 
 	autoNumberName: "Global auto-numbering",
-	autoNumberDesc:
-		'Headings are numbered automatically as you edit. When off, trigger manually with "Renumber now" (or force files on via frontmatter).',
+	autoNumberDesc: 'Number headings as you edit; when off, use "Renumber now" instead.',
 
 	debounceName: "Debounce delay",
 	debounceDesc: (min, max, def) =>
-		`Auto-numbering runs ${min}–${max} ms after you stop typing (default ${def} ms).`,
+		`How long after you stop typing to renumber (${min}–${max} ms, default ${def}).`,
 	resetTooltip: (def) => `Reset to default ${def} ms`,
 	outlineNumbersName: "Show numbers in the outline",
-	outlineNumbersDesc: "In display-only mode, also show the numbers in Obsidian's Outline pane.",
+	outlineNumbersDesc: "In display-only mode, also show numbers in the Outline pane.",
 
 	updateBacklinksName: "Sync internal links (backlinks)",
-	updateBacklinksDesc:
-		"When a heading's text changes, update Wikilinks and Markdown links to it in other files (e.g. [[file#heading]] or [label](file.md#heading)) so they don't break. Global and independent of numbering; edits land outside the referencing files' undo history.",
+	updateBacklinksDesc: "When a heading's text changes, update links to it in other notes.",
 
 	headingLinkSuggestName: "Heading link suggestions",
-	headingLinkSuggestDesc:
-		"Typing a heading's text suggests matching vault headings; accept to replace your text with a link to it. Self-contained and on by default; when off, no heading index is built and memory/CPU cost drops to zero.",
+	headingLinkSuggestDesc: "Suggest matching headings as you type; pick one to insert a link.",
 	headingSuggestThisFile: "(this file)",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`Vault too large: heading index built partially (${indexed} headings indexed); suggestions work within the indexed range.`,
 	vcCoexistName: "When Various Complements is enabled",
-	vcCoexistDesc:
-		"Both plugins share the single suggestion popup, so only one can win. Default: yield to VC — with the dictionary integration below, both sides' candidates appear in one popup (the most complete setup). Yielding only takes effect while the dictionary integration is on; otherwise this plugin keeps serving. No effect when VC is not installed or not enabled.",
+	vcCoexistDesc: "Both plugins share one suggestion popup, so only one can show it.",
 	vcCoexistYield: "Yield to Various Complements (recommended)",
 	vcCoexistOwn: "This plugin wins (hides VC's popup)",
 	vcCoexistFallbackHint:
-		"This plugin is still serving: the dictionary integration is off, so VC's dictionary holds no headings and yielding would leave you with nothing.",
+		"Dictionary integration is off, so this plugin still serves suggestions.",
 
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",
 	sectionSuggest: "Heading link suggestions",
-	sectionSuggestDesc:
-		"Heading links as you type, no other plugin required. The two settings below only matter if Various Complements is installed.",
 
 	vcModeName: "Various Complements integration",
-	vcModeDesc:
-		"Export the heading index as a VC custom dictionary so heading candidates appear in VC's popup — the only official way to merge both sides. Not needed without VC; off by default, enabling requires explicit confirmation, and nothing is written while off.",
+	vcModeDesc: "Export the heading index as a VC custom dictionary.",
 	vcModeOff: "Off",
 	vcModeManual: "Manual",
 	vcModeAuto: "Automatic",
@@ -800,8 +782,7 @@ const en: Messages = {
 		'Raise VC\'s "Max number of suggestions" to at least 10 (global; only raised, never lowered)',
 		"Reload VC dictionaries after writing (failure is reported separately)",
 	],
-	vcDescriptionOffHint:
-		"VC's \"Description on suggestion\" is None, so the source-path line under candidates is hidden (same-named headings can still be told apart by the file name in parentheses). Global VC display preference; this plugin won't change it.",
+	vcDescriptionOffHint: "VC hides the candidate source line (Description on suggestion: None).",
 	vcAutoConfirmButton: "Confirm & configure",
 	noticeVcAutoWriteSuccess: "Various Complements integration configured automatically.",
 	noticeVcAutoWriteInvalidShape:

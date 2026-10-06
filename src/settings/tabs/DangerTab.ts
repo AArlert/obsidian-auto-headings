@@ -90,7 +90,7 @@ class ClearVaultModal extends Modal {
 		const { contentEl } = this;
 		const t = this.plugin.messages();
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t.clearVaultModalTitle });
+		this.setTitle(t.clearVaultModalTitle);
 		contentEl.createEl("p", { text: t.clearVaultModalBody });
 		new Setting(contentEl)
 			.addButton((btn) => btn.setButtonText(t.cancel).onClick(() => this.close()))
@@ -128,7 +128,7 @@ class FreezeVaultModal extends Modal {
 		const { contentEl } = this;
 		const t = this.plugin.messages();
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t.freezeVaultModalTitle });
+		this.setTitle(t.freezeVaultModalTitle);
 		contentEl.createEl("p", { text: t.freezeVaultModalBody });
 		new Setting(contentEl)
 			.addButton((btn) => btn.setButtonText(t.cancel).onClick(() => this.close()))

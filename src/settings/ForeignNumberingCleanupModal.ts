@@ -64,7 +64,7 @@ export class ForeignNumberingCleanupModal extends Modal {
 		const scrollTop = prevList?.scrollTop ?? 0;
 
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.t.foreignGuardModalTitle });
+		this.setTitle(this.t.foreignGuardModalTitle);
 		contentEl.createEl("p", { text: this.t.foreignGuardModalBody(this.candidates.length) });
 
 		const items = this.computePreview(this.keepLines);

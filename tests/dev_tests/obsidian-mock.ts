@@ -245,6 +245,9 @@ export class Modal {
 	}
 	open(): void {}
 	close(): void {}
+	setTitle(_title: string): this {
+		return this;
+	}
 }
 
 /** App 类型在源码里仅用作类型注解；提供一个空类以防个别打包路径未擦除该导入。 */

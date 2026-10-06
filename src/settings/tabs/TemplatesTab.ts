@@ -21,10 +21,7 @@ export function renderTemplatesTab(tab: AutoHeadingsSettingTab, containerEl: HTM
 	renderPathRules(tab, containerEl);
 
 	// —— 模板分区 ——（节头挂强化类，与「路径规则」分区一眼可分，testplan L20）
-	new Setting(containerEl)
-		.setName(t.templatesHeading)
-		.setHeading()
-		.settingEl.addClass("ah-section-head");
+	new Setting(containerEl).setName(t.templatesHeading).setHeading();
 	containerEl.createEl("p", { cls: "ah-section-desc", text: t.templatesDesc });
 
 	new Setting(containerEl).addButton((btn) =>
@@ -148,7 +145,7 @@ class DeleteTemplateModal extends Modal {
 		const plugin = this.tab.plugin;
 		const t = plugin.messages();
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t.delModalTitle(this.templateName) });
+		this.setTitle(t.delModalTitle(this.templateName));
 		contentEl.createEl("p", { text: t.delModalBody(this.affected.length) });
 		const ul = contentEl.createEl("ul");
 		for (const rule of this.affected) {

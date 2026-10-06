@@ -21,7 +21,7 @@ const TAB_ORDER: SettingsTabId[] = ["general", "templates", "danger", "about"];
 const TAB_ICONS: Record<SettingsTabId, string> = {
 	general: "settings",
 	templates: "folder-cog",
-	danger: "alert-triangle",
+	danger: "wrench",
 	about: "info",
 };
 
@@ -29,11 +29,13 @@ const TAB_ICONS: Record<SettingsTabId, string> = {
  * 设置页面（M7 起为**多 TAB** 结构，见 spec.md §3.13）：
  *
  * - **全局设置**：语言 / 全局自动编号 / Backlink 同步 / 防抖延迟。
- * - **路径与模板**：路径规则表 + 模板列表（行内展开编辑面板，含白名单编辑器）。
- * - **敏感操作**：三个清除入口（当前文件 / 外来编号 / 全库）+ ⚠ 说明。
- * - **关于**：版本 + 链接。
+ * - **路径模板**：路径规则表 + 模板列表（行内展开编辑面板，含白名单编辑器）。
+ * - **编号维护**（原「敏感操作」）：当前笔记 / 整个仓库的编号维护入口。
+ * - **关于插件**：版本 + 链接 + 鸣谢。
  *
- * 本类只是**壳**：渲染版本号与 TAB 栏，把各 TAB 的内容渲染委托给 `tabs/` 下的分区模块；
+ * TAB 名一律四个字（1.2.2 定，见 spec Roadmap M15），以后新增 TAB 也照此取名、中英双语。
+ *
+ * 本类只是**壳**：渲染 TAB 栏（1.2.2 起版本号只在「关于插件」里显示），把各 TAB 的内容渲染委托给 `tabs/` 下的分区模块；
  * 同时持有跨重绘的视图态（当前 TAB、展开的模板）。
  * 全部界面文案经 {@link Messages} 中英双语（Milestone 6），由 `settings.language` 决定。
  */
@@ -94,12 +96,6 @@ export class AutoHeadingsSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-
-		// —— 版本号（右上角，低调但清晰）——
-		containerEl.createDiv({
-			cls: "ah-version",
-			text: `v${this.plugin.manifest.version}`,
-		});
 
 		// —— TAB 栏（0.7.17 图标化，L21/L22）：未激活 = 仅图标，激活 = 图标 + 文字 + 强调色背景；
 		// 栏自身可横向滑动（窄屏不撑宽设置页）。按钮元素本身跨切换保留（见 switchTab），

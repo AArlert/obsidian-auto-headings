@@ -24,7 +24,7 @@ Everything below is what you get the moment the plugin is enabled, before you op
 3. Open **Settings → Auto Headings** if you want to go further:
     - **General**: language, global auto-numbering toggle, debounce delay, numbers in the outline, backlink sync, heading link suggestions.
     - **Paths & templates**: the path-rule table (each rule picks a template and a mode: write to file / display only) and the template editor (live preview, whitelist).
-    - **Sensitive actions**: the three cleanup entries.
+    - **Maintenance**: numbering upkeep for the current note and the whole vault.
 4. Per-file override: add `obsidian-auto-headings: true/false` in frontmatter to force-enable/disable a single file. The command **Renumber now** bypasses all switches.
 
 ## Two modes: display only and write to file
@@ -89,6 +89,16 @@ See [the same section](note.md#Foobar) in Markdown-link style.
 No broken anchors, no manual find-and-replace across your vault. The approach builds on Header Enhancer, the only other plugin that tackles this problem, with several targeted improvements layered on top — atomic writes so an interrupted update can't half-corrupt a file, safer handling of duplicate headings, and more. (A few edge cases — duplicate heading names, block references, multi-level anchors — are left untouched on purpose; see [Notes](#notes).)
 
 On by default, with a one-time explanatory notice the first time it actually rewrites a link. Can be turned off in **Settings → General** if you'd rather manage links yourself.
+
+### Heading link suggestions
+
+Type the text of a heading (its words without the number) and matching headings from your vault pop up; pick one to replace what you typed with a link to it. Self-contained and on by default — no other plugin needed. Turn it off in **Settings → General → Heading link suggestions** and no heading index is built at all, so memory and CPU cost drop to zero.
+
+**Alongside Various Complements (VC):** both plugins share Obsidian's single suggestion popup, so only one can show at a time. These settings appear only while VC is enabled:
+
+-   **When Various Complements is enabled**: by default this plugin yields to VC; together with the dictionary integration below, both sides' candidates appear in one popup — the most complete setup. It only truly yields while the dictionary integration is on; otherwise VC's dictionary holds no headings and yielding would leave you with nothing, so this plugin keeps serving and the settings page says so. "This plugin wins" hides VC's popup instead.
+-   **Various Complements integration**: exports the heading index as a VC custom dictionary — the only official way to merge both sides. Off by default, and nothing is written while off; enabling asks for confirmation first. "Manual" only generates the dictionary file and you add its path to VC; "Automatic" edits VC's settings for you (the confirmation lists every change).
+-   If VC's "Description on suggestion" is set to None, the source-path line under candidates in VC's popup is hidden. That's a global VC display preference this plugin won't change; same-named headings can still be told apart by the file name in parentheses.
 
 ### Fully customizable templates
 
@@ -217,9 +227,9 @@ If you only ever used display-only mode, the plugin never changed your files —
 
 In write mode, the only things this plugin ever writes into your files are numbering prefixes and two invisible marker characters — all fully removable. Two ways out, depending on whether you want to keep the numbers:
 
-**Drop the numbering** — Settings → Sensitive actions → **Clear numbering in the whole vault** (it first switches global auto-numbering off, so nothing gets renumbered mid-clear). Headings go back to bare text.
+**Drop the numbering** — Settings → Maintenance → **Clear numbering in the whole vault** (it first switches global auto-numbering off, so nothing gets renumbered mid-clear). Headings go back to bare text.
 
-**Keep the numbering** — Settings → Sensitive actions → **Freeze numbering and release ownership (entire vault)**. Every number stays exactly as it is, as ordinary text; only the invisible markers go, and the plugin stops numbering anything from then on. This is the one to use if you like your current numbering but no longer want a plugin managing it, or you're uninstalling and want to keep the result. Markers are removed vault-wide **including inside link anchors**, so your `[[note#heading]]` links keep resolving. Once frozen, the plugin can no longer tell those numbers were its own — that's the point, but it does mean the step is one-way: to hand control back, re-enable it and run **Clear non-plugin heading numbering** first, or the existing numbers get a second prefix stacked on top.
+**Keep the numbering** — Settings → Maintenance → **Freeze numbering and release ownership (entire vault)**. Every number stays exactly as it is, as ordinary text; only the invisible markers go, and the plugin stops numbering anything from then on. This is the one to use if you like your current numbering but no longer want a plugin managing it, or you're uninstalling and want to keep the result. Markers are removed vault-wide **including inside link anchors**, so your `[[note#heading]]` links keep resolving. Once frozen, the plugin can no longer tell those numbers were its own — that's the point, but it does mean the step is one-way: to hand control back, re-enable it and run **Clear non-plugin heading numbering** first, or the existing numbers get a second prefix stacked on top.
 
 Then:
 

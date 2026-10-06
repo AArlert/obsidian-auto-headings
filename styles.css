@@ -1,13 +1,5 @@
 /* obsidian-auto-headings 设置面板样式（Milestone 3） */
 
-/* 版本号：面板右上角，弱化呈现但清晰可读 */
-.ah-version {
-	text-align: right;
-	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
-	margin: 0 0 0.5em;
-}
-
 .ah-section-desc {
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
@@ -741,9 +733,10 @@ button.ah-tab.ah-tab-active:hover {
 }
 
 /* 已交还所有权（M12 离场）时全局设置 TAB 顶部的提示条：
-   离场后下面的开关全部失效，必须显眼到用户不会误以为插件坏了。 */
+   离场后下面的开关全部失效，必须放在最前让用户不会误以为插件坏了。
+   1.2.2 起去掉警告色，改中性灰底细边框（红 / 橙只留给最后一步，testplan L31）。 */
 .ah-retired-banner {
-	border: 1px solid var(--text-warning, var(--background-modifier-border));
+	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m, 6px);
 	background: var(--background-secondary);
 	padding: 10px 14px;
@@ -752,7 +745,8 @@ button.ah-tab.ah-tab-active:hover {
 
 .ah-retired-banner h4 {
 	margin: 0 0 6px;
-	color: var(--text-warning, var(--text-normal));
+	font-size: var(--font-ui-medium);
+	color: var(--text-normal);
 }
 
 .ah-retired-banner p {
@@ -803,17 +797,19 @@ button.ah-tab.ah-tab-active:hover {
 	min-width: 580px;
 }
 
-/* —— 「路径模板」TAB 分区节头视觉强化（0.7.16，testplan L20）——
-   左侧强调色竖条 + 加大字号，让「路径规则」「模板」两分区一眼可分。 */
-.ah-section-head {
-	margin-top: 1.25em;
+/* 防抖滑块左侧的当前值（1.2.2，testplan L29） */
+.ah-slider-value {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+	min-width: 4.5em;
+	text-align: right;
 }
 
-.ah-section-head .setting-item-name {
-	font-size: var(--font-ui-large);
-	font-weight: 700;
-	padding-left: 8px;
-	border-left: 3px solid var(--interactive-accent);
+/* 挂在上一项之下的从属设置（1.2.2：VC 三行缩进挂在「标题链接建议」下，testplan L30） */
+.ah-sub-settings {
+	margin-left: 24px;
 }
 
 /* —— 模板行与编辑面板大框（0.7.17，L23）—— */

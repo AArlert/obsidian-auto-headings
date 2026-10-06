@@ -45,10 +45,7 @@ export function renderAboutTab(tab: AutoHeadingsSettingTab, containerEl: HTMLEle
 	links.createEl("a", { text: t.aboutLinkRepo, href: REPO_URL });
 	links.createEl("a", { text: t.aboutLinkIssues, href: `${REPO_URL}/issues` });
 
-	new Setting(containerEl)
-		.setName(t.aboutCreditsHeading)
-		.setHeading()
-		.settingEl.addClass("ah-section-head");
+	new Setting(containerEl).setName(t.aboutCreditsHeading).setHeading();
 	containerEl.createEl("p", { cls: "ah-section-desc", text: t.aboutCreditsIntro });
 	const creditList = containerEl.createDiv({ cls: "ah-about-credits" });
 	for (const credit of CREDITS) {

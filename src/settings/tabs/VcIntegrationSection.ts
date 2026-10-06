@@ -107,7 +107,7 @@ class VcManualModeConfirmModal extends Modal {
 		const t = this.plugin.messages();
 		const path = this.plugin.vcDictionaryFilePath();
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t.vcManualConfirmTitle });
+		this.setTitle(t.vcManualConfirmTitle);
 		contentEl.createEl("p", { text: t.vcManualConfirmBody });
 		new Setting(contentEl)
 			.setName(t.vcDictionaryPathLabel)
@@ -156,7 +156,7 @@ class VcAutoModeConfirmModal extends Modal {
 		const { contentEl } = this;
 		const t = this.plugin.messages();
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t.vcAutoConfirmTitle });
+		this.setTitle(t.vcAutoConfirmTitle);
 		// 1.0.27：长段 ①②③ 文案改为「短总述 + 要点列表」，确认框整洁可扫读。
 		contentEl.createEl("p", { text: t.vcAutoConfirmBody });
 		const ul = contentEl.createEl("ul");
