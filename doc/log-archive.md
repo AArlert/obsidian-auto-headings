@@ -8,6 +8,44 @@
 
 ---
 
+## 2026-09-26 仓库与流程瘦身（不 bump，交接：claude/agent-workflow-review-b9lj22）
+
+### 做了什么
+
+- 口径：只删**重复内容**与**已在 log-archive / git 里有记录的历史**；已落地功能的设计如果只写在 Roadmap 里，
+  就先搬进 spec 再删，不丢信息。插件行为零改动，`release/` 字节不变。
+- **Roadmap 37KB → 21KB**：已完成的里程碑与条目压成一行（版本 + 规格 / testplan 指针），M14 整节删（规格在
+  §3.22）；M13 的设计只写在 Roadmap 里，迁成新节 **spec §3.23**（标题链接建议与 VC 联动）；M9 的两条划线重定向、
+  已落地项与「调研同时产出」备注删；执行顺序表只列未完成的。
+- **testplan**：§3.1「已修 bug」表并入场景行——根因与修复版本写进对应场景行的状态格（单一出处）；其中 N1–N3
+  与场景组 N（startIndex）撞号，改名 TPL-refresh / TPL-add-lag / PR-drag 移入 §3.4 集成层 bug，`src/main.ts`
+  注释的引用同步；删已失效的「方案A 前历史取舍」注记。
+- **spec 去历史**：§3.12 三条划线「已修」条目改写为现行设计说明（快照基线、WJ 与链接解析、同文件内链走同一事务）；
+  §2.2 两条翻案的非目标改写为仍然成立的非目标，删掉已做完的「多文件批量重新编号（后续版本）」。
+- **流程**：删 `repo-scout` / `mech-editor` 两个 agent（与内置 Explore / general-purpose 重复），只留
+  `quality-gate` / `feature-coder`；CLAUDE.md 删与 §3 重复的 §6、过时的「log 导语有专属规则」，log 块字段改指向
+  dev-cycle；dev-cycle 第 5 步不再要求同步已知 bug 表；`tests/user_tests/README.md` 从未填过的「手动回归记录」表
+  改为一句指针（结果只回填 testplan 场景行）。
+- **仓库**：`sync-release.mjs` 去掉无人使用的 zip 打包（Release 工作流直接传三个文件），删 `adm-zip` 依赖；
+  锁文件手工删两处条目，npm 10.9.7 与 npm 11.20.0 下 `npm ci` 均通过。
+
+### 没做什么
+
+- 现行规格正文（附录 A、§3.6 模板系统等大节）未删减——它们描述的是当前行为或有意保留的决策记录。
+- testplan 场景行的行内版本史未压缩（真值表本身，逐行改风险大于收益）。
+- 竞品调研结论仍未落 A.11（上一块的下一步不变）。
+
+### 下一步
+
+- 同上一块：与用户讨论竞品调研结论 → 落 A.11 + 重排 Roadmap；首次真机实测时跑通 BRAT beta 通道。
+
+### 验证方式
+
+- `npm run preflight` 全绿（索引 / 链接 / 目录树守卫 + 788 测试 + lint + 格式），`release/` 与提交前字节一致；
+  spec 索引 ↔ 38 个分节文件一致。
+
+---
+
 ## 2026-09-26 仓库重构：spec / testplan 拆分、停用 status、发版才 bump + BRAT beta（不 bump，交接：claude/agent-workflow-review-b9lj22）
 
 ### 做了什么

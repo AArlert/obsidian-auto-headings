@@ -24,6 +24,7 @@
  * 设计原则：纯机械、可重复跑（幂等）。Agent 先在 log.md 顶部写完本周期新块、改完 testplan，
  * 再跑本脚本把旧块挪走——所以「写」与「挪」解耦，互不干扰。
  */
+import { execFileSync } from "child_process";
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join, resolve, relative } from "path";
@@ -97,7 +98,8 @@ function slug(text) {
 
 /** 文件的全部标题（围栏外），slug 已按 GitHub 规则去重（重名依次加 -1、-2）。 */
 function headings(md) {
-	const lines = md.split("\n");
+	// 兼容 Windows 工作区的 CRLF：行尾残留的 \r 会让围栏正则的 `$` 失配，围栏内的示例链接被误当真链接。
+	const lines = md.split(/\r?\n/);
 	const mask = fenceMask(lines);
 	const seen = new Map();
 	const out = [];
@@ -351,10 +353,13 @@ function checkIndexes() {
 
 // ───────────────────────── 4. 链接守卫 ─────────────────────────
 
-/** 需要校验链接的 Markdown：doc/（历史归档与本地调研除外）、仓库根、.claude/、tests/。 */
+/**
+ * 需要校验链接的 Markdown：doc/（历史归档与本地调研除外）、仓库根、.claude/、tests/。
+ * `.claude/worktrees/` 是 git worktree 的另一份检出（本地 exclude、不入库），文档可能停在旧版本，跳过。
+ */
 function markdownFiles() {
 	const out = [];
-	const SKIP = new Set(["node_modules", ".git", "release", "research"]);
+	const SKIP = new Set(["node_modules", ".git", "release", "research", "worktrees"]);
 	const walk = (dir) => {
 		for (const ent of readdirSync(dir, { withFileTypes: true })) {
 			const p = join(dir, ent.name);
@@ -363,9 +368,28 @@ function markdownFiles() {
 			} else if (ent.name.endsWith(".md") && p !== ARCHIVE) out.push(p);
 		}
 	};
-	for (const f of readdirSync(root)) if (f.endsWith(".md")) out.push(join(root, f));
+	const tracked = trackedRootMarkdown();
+	for (const f of readdirSync(root))
+		if (f.endsWith(".md") && (!tracked || tracked.has(f))) out.push(join(root, f));
 	for (const d of ["doc", ".claude", "tests"]) if (existsSync(join(root, d))) walk(join(root, d));
 	return out;
+}
+
+/**
+ * 仓库根已入库（含已暂存）的 Markdown 文件名。根目录可能躺着不入库的本地文件（如其他编码助手的镜像
+ * 说明），它们不属于本仓库文档，不校验；新建的根级文档 `git add` 之后（提交钩子运行时）才纳入。
+ * git 不可用时返回 null，退回校验根目录全部 Markdown。
+ */
+function trackedRootMarkdown() {
+	try {
+		const out = execFileSync("git", ["ls-files", "-z", "--", "*.md"], {
+			cwd: root,
+			encoding: "utf8",
+		});
+		return new Set(out.split("\0").filter((f) => f && !f.includes("/")));
+	} catch {
+		return null;
+	}
 }
 
 function checkLinks() {
@@ -378,7 +402,7 @@ function checkLinks() {
 	const broken = [];
 	const files = markdownFiles();
 	for (const abs of files) {
-		const lines = readFileSync(abs, "utf8").split("\n");
+		const lines = readFileSync(abs, "utf8").split(/\r?\n/);
 		const mask = fenceMask(lines);
 		lines.forEach((line, i) => {
 			if (mask[i]) return;

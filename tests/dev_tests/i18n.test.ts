@@ -74,6 +74,18 @@ describe("getMessages 双语", () => {
 		}
 	});
 
+	it("纯字符串文案不含 Markdown 加粗记号（testplan L26）", () => {
+		// 文案经 setDesc / createEl({ text }) 以纯文本渲染，`**` 不会变粗体，只会原样露出星号。
+		for (const lang of ["zh", "en"] as const) {
+			const m = getMessages(lang) as unknown as Record<string, unknown>;
+			for (const [k, v] of Object.entries(m)) {
+				if (typeof v === "string") {
+					expect(v, `${lang}.${k} 含 **`).not.toContain("**");
+				}
+			}
+		}
+	});
+
 	it("插值文案：防抖范围 / 计数 / 模板名正确代入", () => {
 		const zh = getMessages("zh");
 		expect(zh.debounceDesc(50, 2000, 300)).toContain("50");
