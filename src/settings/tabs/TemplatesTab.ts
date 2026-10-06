@@ -1,18 +1,22 @@
-import { App, Modal, Setting, setIcon } from "obsidian";
+import { App, Menu, Modal, Setting, setIcon } from "obsidian";
 import type AutoHeadingsPlugin from "../../main";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import type { Template } from "../../numbering";
 import type { PathRule } from "../../pathrules";
 import { DEFAULT_TEMPLATE_NAME } from "../../templates/schema";
-import { renderPathRules } from "./PathRules";
-import { renderEditPanel } from "./EditPanel";
+import { cardPreviewLines } from "../templateView";
+import { decorateHeadingButton, renderPathRules } from "./PathRules";
+import { TemplateEditorModal } from "./TemplateEditorModal";
 
 /** 删模板对话框里「连规则一并删除」的下拉哨兵值（不会与任何模板名冲突）。 */
 const DELETE_RULES_SENTINEL = " __delete_rules__";
 
 /**
- * 「路径与模板」TAB（M7 多 TAB 重构）：上为**路径规则**分区（`PathRules.ts`），下为**模板**分区
- * ——「+ 新增模板」、每个模板一行（删除 / 编辑）、行内展开编辑面板（`EditPanel.ts`）。
+ * 「路径模板」TAB（M7 多 TAB 重构）：上为**路径规则**分区（`PathRules.ts`），下为**模板**分区。
+ *
+ * 1.2.2 视觉更新（testplan L34）：「新增模板」挪到「模板」标题行右侧（普通按钮，新建后直接打开编辑
+ * 弹窗）；每个模板一张卡片——名称（默认模板带「内置」灰标）+ 三行效果预览 +「用于 N 条规则 · 白名单
+ * M 项」+「编辑」+ ⋯ 菜单（删除，红字；默认模板不可删，没有 ⋯）。编辑在弹窗里（`TemplateEditorModal.ts`）。
  */
 export function renderTemplatesTab(tab: AutoHeadingsSettingTab, containerEl: HTMLElement): void {
 	const t = tab.t;
@@ -20,88 +24,84 @@ export function renderTemplatesTab(tab: AutoHeadingsSettingTab, containerEl: HTM
 	// —— 路径规则分区（Milestone 5）——
 	renderPathRules(tab, containerEl);
 
-	// —— 模板分区 ——（节头挂强化类，与「路径规则」分区一眼可分，testplan L20）
-	new Setting(containerEl).setName(t.templatesHeading).setHeading();
+	// —— 模板分区 ——
+	new Setting(containerEl)
+		.setName(t.templatesHeading)
+		.setHeading()
+		.addButton((btn) => {
+			decorateHeadingButton(btn.buttonEl, "plus", t.addTemplate);
+			btn.onClick(() => {
+				// 同步创建（落盘在后台），随即打开编辑弹窗；弹窗关闭时重绘设置页。
+				const created = tab.plugin.templateStore.create();
+				new TemplateEditorModal(tab.plugin.app, tab, created.name).open();
+			});
+		});
 	containerEl.createEl("p", { cls: "ah-section-desc", text: t.templatesDesc });
 
-	new Setting(containerEl).addButton((btn) =>
-		btn
-			.setButtonText(t.addTemplate)
-			.setCta()
-			.onClick(() => {
-				// 同步创建 + 立即重绘（落盘在后台），避免等磁盘写入导致的卡顿 / GUI 不刷新。
-				const created = tab.plugin.templateStore.create();
-				tab.expandedTemplate = created.name; // 新建后自动展开。
-				tab.display();
-			}),
-	);
-
-	const listEl = containerEl.createDiv({ cls: "ah-template-list" });
+	const cards = containerEl.createDiv({ cls: "ah-template-cards" });
 	for (const template of tab.plugin.templateStore.all()) {
-		renderTemplateRow(tab, listEl, template);
+		renderTemplateCard(tab, cards, template);
 	}
 }
 
-/**
- * 渲染单个模板的行（标题行 + 可展开编辑面板）；默认模板显示名随语言。
- *
- * 0.7.17 布局（testplan L23）：折叠钮**前置**作展开标志（▸/▾），其后模板名；展开时整行变
- * **大框**（边框圆角）扩住标题行与编辑面板，面板缩进与模板名左对齐（折叠钮悬在左侧沟槽）。
- * 点击折叠钮或模板名均可切换展开；删除按钮靠右。
- */
-function renderTemplateRow(
+/** 渲染单个模板的卡片（testplan L34）。 */
+function renderTemplateCard(
 	tab: AutoHeadingsSettingTab,
 	parent: HTMLElement,
 	template: Template,
 ): void {
 	const t = tab.t;
 	const isDefault = template.name === DEFAULT_TEMPLATE_NAME;
-	const expanded = tab.expandedTemplate === template.name;
+	const card = parent.createDiv({ cls: "ah-template-card" });
+	card.setAttr("aria-label", tab.templateDisplayName(template.name));
 
-	const rowEl = parent.createDiv({
-		cls: expanded ? "ah-template-row ah-template-row-expanded" : "ah-template-row",
-	});
-
-	// —— 标题行：[▸/▾] 模板名 …（默认模板说明）… [删除] ——
-	const header = rowEl.createDiv({ cls: "ah-template-header" });
-	const toggle = () => {
-		tab.expandedTemplate = expanded ? null : template.name;
-		tab.display();
-	};
-
-	const chevron = header.createSpan({ cls: "ah-template-chevron" });
-	setIcon(chevron, expanded ? "chevron-down" : "chevron-right");
-	chevron.setAttr("aria-label", expanded ? t.collapseTooltip : t.editTooltip);
-	chevron.title = expanded ? t.collapseTooltip : t.editTooltip;
-	chevron.addEventListener("click", toggle);
-
-	const nameEl = header.createSpan({
-		cls: "ah-template-name",
-		text: tab.templateDisplayName(template.name),
-	});
-	nameEl.addEventListener("click", toggle);
-
-	// 说明（仅默认模板）兼弹性占位，把删除按钮推到最右。
-	const desc = header.createSpan({ cls: "ah-template-desc" });
+	// —— 标题行：名称（+ 内置灰标）… ⋯ ——
+	const head = card.createDiv({ cls: "ah-template-card-head" });
+	const name = head.createDiv({ cls: "ah-template-card-name" });
+	name.createSpan({ text: tab.templateDisplayName(template.name) });
 	if (isDefault) {
-		desc.setText(t.defaultTemplateDesc);
-	}
-
-	const delBtn = header.createEl("button", { cls: "mod-warning ah-template-del" });
-	delBtn.setText(t.deleteBtn);
-	if (isDefault) {
-		delBtn.disabled = true;
-		delBtn.title = t.defaultCannotDelete;
+		name.createSpan({ cls: "ah-pill", text: t.templateBuiltinTag });
 	} else {
-		delBtn.addEventListener("click", () => {
-			void requestDeleteTemplate(tab, template);
+		const more = head.createEl("button", { cls: "clickable-icon ah-template-card-more" });
+		setIcon(more, "more-horizontal");
+		more.setAttr("aria-label", t.templateActionsTooltip);
+		more.addEventListener("click", (e) => {
+			const menu = new Menu();
+			menu.addItem((item) =>
+				item
+					.setTitle(t.deleteBtn)
+					.setIcon("trash-2")
+					.setWarning(true)
+					.onClick(() => void requestDeleteTemplate(tab, template)),
+			);
+			menu.showAtMouseEvent(e);
 		});
 	}
 
-	// —— 展开的编辑面板（缩进与模板名对齐，见 styles.css）——
-	if (expanded) {
-		renderEditPanel(tab, rowEl, template, isDefault);
-	}
+	// —— 三行效果预览：级别 + 编号 + 示例标题 ——
+	const preview = card.createDiv({ cls: "ah-template-card-preview" });
+	cardPreviewLines(template).forEach((line, i) => {
+		preview.createSpan({ cls: "ah-template-card-level", text: `H${line.level}` });
+		const text = preview.createSpan({ cls: "ah-template-card-line" });
+		text.setCssStyles({ paddingInlineStart: `${line.indent}em` });
+		text.createSpan({ text: line.label });
+		text.createSpan({
+			cls: "ah-template-card-word",
+			text: t.cardSampleTitles[i] ?? t.previewHeadingWord,
+		});
+	});
+
+	// —— 底部：用量 … 编辑 ——
+	const foot = card.createDiv({ cls: "ah-template-card-foot" });
+	const ruleCount = tab.plugin.settings.pathRules.filter((r) => r.template === template.name).length;
+	foot.createSpan({
+		cls: "ah-template-card-usage",
+		text: t.templateCardUsage(ruleCount, template.whitelist.length),
+	});
+	const edit = foot.createEl("button", { text: t.editBtn });
+	edit.addEventListener("click", () => {
+		new TemplateEditorModal(tab.plugin.app, tab, template.name).open();
+	});
 }
 
 /**

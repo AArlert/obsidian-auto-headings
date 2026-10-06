@@ -1,7 +1,6 @@
 import { App, PluginSettingTab, setIcon } from "obsidian";
 import type AutoHeadingsPlugin from "../main";
 import type { Messages } from "../i18n";
-import type { WhitelistSortMode } from "../numbering";
 import { DEFAULT_TEMPLATE_NAME } from "../templates/schema";
 import { renderGeneralTab } from "./tabs/GeneralTab";
 import { renderTemplatesTab } from "./tabs/TemplatesTab";
@@ -29,14 +28,14 @@ const TAB_ICONS: Record<SettingsTabId, string> = {
  * 设置页面（M7 起为**多 TAB** 结构，见 spec.md §3.13）：
  *
  * - **全局设置**：语言 / 全局自动编号 / Backlink 同步 / 防抖延迟。
- * - **路径模板**：路径规则表 + 模板列表（行内展开编辑面板，含白名单编辑器）。
+ * - **路径模板**：路径规则表 + 模板卡片（编辑在 `tabs/TemplateEditorModal.ts` 弹窗里）。
  * - **编号维护**（原「敏感操作」）：当前笔记 / 整个仓库的编号维护入口。
  * - **关于插件**：版本 + 链接 + 鸣谢。
  *
  * TAB 名一律四个字（1.2.2 定，见 spec Roadmap M15），以后新增 TAB 也照此取名、中英双语。
  *
  * 本类只是**壳**：渲染版本号与 TAB 栏，把各 TAB 的内容渲染委托给 `tabs/` 下的分区模块；
- * 同时持有跨重绘的视图态（当前 TAB、展开的模板）。
+ * 同时持有跨重绘的视图态（当前 TAB）。
  * 全部界面文案经 {@link Messages} 中英双语（Milestone 6），由 `settings.language` 决定。
  */
 export class AutoHeadingsSettingTab extends PluginSettingTab {
@@ -44,15 +43,6 @@ export class AutoHeadingsSettingTab extends PluginSettingTab {
 
 	/** 当前激活的 TAB（面板存续期间保持，重开面板回到「全局设置」）。 */
 	activeTab: SettingsTabId = "general";
-
-	/** 当前展开编辑面板的模板名（null 表示全部折叠）。 */
-	expandedTemplate: string | null = null;
-
-	/** 白名单编辑器的搜索框文本（纯视图态，跨重绘保持；M8 批次 1，见 testplan L14）。 */
-	wlFilter = "";
-
-	/** 白名单编辑器的排序方式（纯视图态；M8 批次 1，L15）。0.7.17 起默认 A–Z。 */
-	wlSort: WhitelistSortMode = "az";
 
 	/** TAB 按钮元素（切 TAB 时复用、不重建，好让背景色 CSS 过渡动画能播放，见 switchTab）。 */
 	private tabButtons = new Map<SettingsTabId, HTMLButtonElement>();
@@ -171,12 +161,9 @@ export class AutoHeadingsSettingTab extends PluginSettingTab {
 		}
 	}
 
-	/** 真正执行模板删除并刷新面板（收起其编辑面板）。供模板分区与删除对话框调用。 */
+	/** 真正执行模板删除并刷新面板。供模板分区与删除对话框调用。 */
 	async deleteTemplate(name: string): Promise<void> {
 		await this.plugin.templateStore.delete(name);
-		if (this.expandedTemplate === name) {
-			this.expandedTemplate = null;
-		}
 		this.display();
 	}
 }

@@ -68,6 +68,7 @@ import { VirtualOutlineDecorator } from "./virtual/outlineView";
 import { VirtualReadingRenderer } from "./virtual/readingView";
 import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
+import { summarizeTemplateUsage, type TemplateUsage } from "./settings/templateView";
 import { HeadingIndex } from "./headingindex";
 import { HeadingLinkSuggest } from "./headingsuggest";
 import {
@@ -921,17 +922,44 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * SettingsTab 白名单编辑器）。无活动 Markdown 视图时返回空数组。
 	 */
 	currentFileHeadings(): Heading[] {
-		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		if (!view) {
-			return [];
-		}
-		return parseHeadings(view.editor.getValue());
+		const note = this.activeNoteForPreview();
+		return note ? parseHeadings(note.content) : [];
 	}
 
 	/** 当前活动 Markdown 文件的路径（无活动视图时为 null），供设置面板的白名单预览取模板。 */
 	currentFilePath(): string | null {
-		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		return view?.file?.path ?? null;
+		return this.activeNoteForPreview()?.path ?? null;
+	}
+
+	/**
+	 * 当前活动笔记的路径与实时内容，供设置面板的预览使用（1.2.2 模板编辑弹窗「当前笔记」预览、
+	 * 白名单命中预览）。设置面板是模态层时 `getActiveViewOfType` 可能为 null，经
+	 * {@link activeMarkdownContext} 回退查找；找不到返回 `null`。
+	 */
+	activeNoteForPreview(): { path: string; content: string } | null {
+		const found = this.activeMarkdownContext();
+		const path = found?.ctx.file?.path;
+		if (!found || !path) {
+			return null;
+		}
+		return { path, content: found.editor.getValue() };
+	}
+
+	/**
+	 * 当前活动笔记的路径（1.2.2 路径规则表的「当前笔记圆点」用）：没有打开的编辑器时退回
+	 * `getActiveFile()`，阅读视图里的笔记同样能标出命中的规则。
+	 */
+	activeNotePath(): string | null {
+		return this.activeNoteForPreview()?.path ?? this.app.workspace.getActiveFile?.()?.path ?? null;
+	}
+
+	/** 某模板的影响范围（1.2.2 模板卡片与编辑弹窗底部说明，testplan L41）。 */
+	templateUsage(name: string): TemplateUsage {
+		return summarizeTemplateUsage(
+			this.settings.pathRules,
+			this.app.vault.getMarkdownFiles().map((f) => f.path),
+			name,
+		);
 	}
 
 	/**

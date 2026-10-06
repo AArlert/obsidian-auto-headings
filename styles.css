@@ -14,90 +14,42 @@
 	margin: 0.25em 0 0.75em;
 }
 
-.ah-template-list {
-	margin-top: 0.5em;
-}
-
-.ah-template-row {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m);
-	margin-bottom: 0.5em;
-	padding: 0 0.75em;
-}
-
-/* 行内编辑面板 */
-.ah-edit-panel {
-	border-top: 1px solid var(--background-modifier-border);
-	padding: 0.5em 0 0.75em;
-}
-
-/* 六级 × 九列网格 */
-.ah-grid {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	overflow-x: auto;
-}
-
-.ah-grid-row {
-	display: grid;
-	/* 级别 前缀 序号 序号间隔符 后缀 标题间隔符 继承前级 继承级数 预览 */
-	grid-template-columns: 48px 1fr 1.4fr 1fr 1fr 1fr 72px 86px 2fr;
-	gap: 6px;
-	align-items: center;
-}
-
-.ah-grid-head {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
-	font-weight: var(--font-medium);
-	padding-bottom: 2px;
-	border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.ah-grid-cell {
-	min-width: 0;
-}
-
-/* 低于起始编号层级的行：置灰，表示当前不参与编号（仍可编辑，待提升起始层级后生效） */
-.ah-grid-row-inactive {
-	opacity: 0.45;
-}
-
-.ah-level-label {
-	font-weight: var(--font-medium);
-	color: var(--text-normal);
-}
-
 .ah-text-input {
 	width: 100%;
 	box-sizing: border-box;
 }
 
-.ah-grid-cell select.dropdown {
-	width: 100%;
-}
-
-.ah-inherit-cell {
-	display: flex;
-	justify-content: center;
-}
-
-.ah-preview-cell {
-	font-family: var(--font-monospace);
-	font-size: var(--font-ui-smaller);
-	color: var(--text-accent);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
 /* —— 白名单编辑器（Milestone 4）—— */
 .ah-whitelist {
-	margin-top: 0.75em;
-	border: 1px solid var(--background-modifier-border);
+	margin-top: 4px;
+}
+
+/* 图例：一行说明 = / ≈ / ▸ 三个符号（1.2.2，testplan L42） */
+.ah-wl-legend {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 14px;
+	margin: 4px 0 12px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ah-wl-legend-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.ah-wl-legend-item b {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	height: 18px;
 	border-radius: var(--radius-s);
-	padding: 8px 10px;
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
 
 .ah-wl-input-row {
@@ -133,8 +85,6 @@
 /* 行布局（0.7.16，替代 chips，testplan L16）：每条一行，词语弹性占满、控件靠右对齐 */
 .ah-wl-rows {
 	margin-bottom: 0.5em;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
 }
 
 .ah-wl-rows > .ah-section-desc {
@@ -145,12 +95,9 @@
 .ah-wl-row {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 4px 8px;
-	font-size: var(--font-ui-small);
-}
-
-.ah-wl-row + .ah-wl-row {
+	gap: 10px;
+	min-height: 38px;
+	padding: 2px 4px;
 	border-top: 1px solid var(--background-modifier-border);
 }
 
@@ -222,14 +169,19 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 /* 命中数角标（tooltip 列命中标题，L19） */
 .ah-wl-row-count {
 	flex-shrink: 0;
-	min-width: 1.2em;
-	padding: 0 0.3em;
-	border-radius: var(--radius-s);
-	background: var(--background-modifier-border);
-	color: var(--text-muted);
+	min-width: 1.6em;
+	padding: 0 0.4em;
+	border-radius: 9px;
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 	font-size: var(--font-ui-smaller);
 	text-align: center;
 	cursor: help;
+}
+
+/* 命中 0：不显示角标，只留空位保持各行对齐（L42） */
+.ah-wl-row-count.is-empty {
+	visibility: hidden;
 }
 
 .ah-wl-row-warn {
@@ -240,9 +192,11 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 
 .ah-wl-row-del {
 	flex-shrink: 0;
+	display: inline-flex;
 	color: var(--text-faint);
 	cursor: pointer;
-	padding: 0 2px;
+	padding: 2px;
+	--icon-size: 14px;
 }
 
 .ah-wl-row-del:hover {
@@ -259,7 +213,7 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 	margin-top: 0.25em;
 }
 
-/* —— 路径规则表格（Milestone 5）—— */
+/* —— 路径规则表格（Milestone 5；1.2.2 视觉更新，testplan L32 / L33 / L6 / L13）—— */
 .ah-path-warn {
 	color: var(--text-warning);
 	font-size: var(--font-ui-small);
@@ -269,36 +223,30 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 .ah-path-table {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
-	margin: 0.5em 0;
-	overflow-x: auto;
-	/* 路径过多时可纵向滚动，避免列表撑满整页、看不全（M6）。 */
-	max-height: 280px;
+	gap: 6px;
+	margin: 0.25em 0 0;
+	/* 路径过多时可纵向滚动，避免列表撑满整页、看不全（M6，L4）。 */
+	max-height: 320px;
 	overflow-y: auto;
 }
 
-/* 表头在纵向滚动时吸顶，始终可见 */
+.ah-path-row {
+	display: grid;
+	/* 拖拽手柄 当前笔记圆点 路径模式 模板 编号模式 行尾操作 */
+	grid-template-columns: 18px 10px minmax(0, 1fr) minmax(0, 0.8fr) minmax(96px, 0.6fr) 60px;
+	column-gap: 10px;
+	align-items: center;
+}
+
+/* 表头吸顶、无底色、只留浅色列名（L32） */
 .ah-path-head {
 	position: sticky;
 	top: 0;
 	z-index: 1;
 	background: var(--background-primary);
-}
-
-.ah-path-row {
-	display: grid;
-	/* 拖拽手柄 行号 路径模式 模板 编号模式（M14） 批量重编号 删除 */
-	grid-template-columns: 24px 32px 1fr 1fr minmax(96px, 0.8fr) 28px 28px;
-	gap: 6px;
-	align-items: center;
-}
-
-.ah-path-head {
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
-	font-weight: var(--font-medium);
+	color: var(--text-faint);
 	padding-bottom: 2px;
-	border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .ah-path-cell {
@@ -319,18 +267,30 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 }
 
 .ah-path-pattern-cell .ah-text-input {
-	padding-right: 1.6em; /* 给右侧清空按钮留位 */
+	padding-right: 1.8em; /* 给右侧清空按钮留位 */
 }
 
+/* 清空按钮：桌面端悬停 / 聚焦时才出现，触屏常显（L6） */
 .ah-input-clear {
 	position: absolute;
-	right: 0.4em;
+	right: 0.45em;
+	display: inline-flex;
 	color: var(--text-faint);
 	cursor: pointer;
-	font-size: var(--font-ui-smaller);
-	line-height: 1;
-	padding: 0 1px;
-	user-select: none;
+	opacity: 0;
+	transition: opacity 0.12s ease;
+	--icon-size: 14px;
+}
+
+.ah-path-pattern-cell:hover .ah-input-clear,
+.ah-path-pattern-cell:focus-within .ah-input-clear {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	.ah-input-clear {
+		opacity: 1;
+	}
 }
 
 .ah-input-clear:hover {
@@ -449,54 +409,72 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 }
 
 .ah-path-handle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	cursor: grab;
 	color: var(--text-faint);
-	text-align: center;
 	user-select: none;
+	--icon-size: 16px;
 }
 
-.ah-path-index {
+/* 当前笔记圆点（取代原行号列，L32） */
+.ah-path-c-dot {
+	display: flex;
+	justify-content: center;
+}
+
+.ah-path-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--interactive-accent);
+	cursor: help;
+}
+
+/* 行尾操作：桌面两个图标按钮；⋯ 只在窄屏出现（L33） */
+.ah-path-c-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 2px;
+}
+
+.ah-path-icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: var(--radius-s);
 	color: var(--text-muted);
-	text-align: center;
+	cursor: pointer;
+	--icon-size: 16px;
 }
 
-/* 删除整条规则的 ✕：纯文本图标，不再被按钮的椭圆背景包住（M6） */
+.ah-path-icon-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
 .ah-path-del {
 	color: var(--text-faint);
-	cursor: pointer;
-	text-align: center;
-	user-select: none;
-	line-height: 1;
 }
 
 .ah-path-del:hover {
 	color: var(--text-error);
 }
 
-/* 批量重编号入口（M12，testplan K16）：行内 lucide 图标按钮；「不编号」规则置灰不可点。 */
-.ah-path-batch {
-	color: var(--text-faint);
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	--icon-size: var(--icon-s, 16px);
-}
-
-.ah-path-batch:hover {
-	color: var(--text-accent);
-}
-
 .ah-path-batch-disabled,
 .ah-path-batch-disabled:hover {
+	background: transparent;
 	color: var(--text-faint);
 	opacity: 0.4;
 	cursor: default;
 }
 
-/* 危险区域标题：可点击折叠/展开 */
-.ah-danger-heading .setting-item-name {
-	cursor: pointer;
+.ah-path-more {
+	display: none;
 }
 
 .ah-path-dragging {
@@ -505,6 +483,73 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 
 .ah-path-dragover {
 	box-shadow: 0 -2px 0 0 var(--interactive-accent);
+}
+
+/* 规则表下方的灰字说明（L32） */
+.ah-path-hint {
+	margin: 6px 0 0 38px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+/* 窄屏（≤ 480px）：每条规则两行——手柄 + 路径（+ 圆点、⋯）一行，模板 / 模式下拉一行（L13 / L33） */
+@media (max-width: 480px) {
+	.ah-path-head {
+		display: none;
+	}
+
+	.ah-path-row {
+		grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 10px 44px;
+		grid-template-areas:
+			"handle pattern pattern dot actions"
+			"tpl tpl mode mode mode";
+		row-gap: 8px;
+		padding: 10px 0;
+		border-top: 1px solid var(--background-modifier-border);
+	}
+
+	.ah-path-c-handle {
+		grid-area: handle;
+	}
+
+	.ah-path-c-pattern {
+		grid-area: pattern;
+	}
+
+	.ah-path-c-dot {
+		grid-area: dot;
+	}
+
+	.ah-path-c-actions {
+		grid-area: actions;
+	}
+
+	.ah-path-c-template {
+		grid-area: tpl;
+	}
+
+	.ah-path-c-mode {
+		grid-area: mode;
+	}
+
+	.ah-path-cell select.dropdown {
+		height: 44px;
+	}
+
+	.ah-path-batch,
+	.ah-path-del {
+		display: none;
+	}
+
+	.ah-path-more {
+		display: inline-flex;
+		width: 44px;
+		height: 44px;
+	}
+
+	.ah-path-hint {
+		margin-left: 0;
+	}
 }
 
 /* ==== M7 多 TAB 设置页 ==== */
@@ -791,20 +836,6 @@ button.ah-tab.ah-tab-active:hover {
 	font-weight: var(--font-medium);
 }
 
-/* 模板网格与路径表格：窄屏（移动端）横向滚动，不挤压列宽 */
-.ah-grid,
-.ah-path-table {
-	overflow-x: auto;
-}
-
-.ah-grid .ah-grid-row {
-	min-width: 732px;
-}
-
-.ah-path-table .ah-path-row {
-	min-width: 580px;
-}
-
 /* 防抖滑块左侧的当前值（1.2.2，testplan L29） */
 .ah-slider-value {
 	font-family: var(--font-monospace);
@@ -818,86 +849,6 @@ button.ah-tab.ah-tab-active:hover {
 /* 挂在上一项之下的从属设置（1.2.2：VC 三行缩进挂在「标题链接建议」下，testplan L30） */
 .ah-sub-settings {
 	margin-left: 24px;
-}
-
-/* —— 模板行与编辑面板大框（0.7.17，L23）—— */
-
-/* 折叠态：普通行 + 分隔线 */
-.ah-template-row {
-	padding: 4px 0;
-	border-bottom: 1px solid var(--background-modifier-border);
-}
-
-/* 展开态：大框扩住标题行 + 编辑面板 */
-.ah-template-row-expanded {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m);
-	padding: 8px 12px;
-	margin: 8px 0;
-	background: var(--background-primary);
-}
-
-/* 标题行：[▸/▾] 模板名 …说明… [删除] */
-.ah-template-header {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-height: 32px;
-}
-
-.ah-template-chevron {
-	display: flex;
-	align-items: center;
-	width: 18px;
-	flex-shrink: 0;
-	color: var(--text-muted);
-	cursor: pointer;
-}
-
-.ah-template-chevron svg {
-	width: 16px;
-	height: 16px;
-}
-
-.ah-template-name {
-	font-weight: 600;
-	color: var(--text-normal);
-	cursor: pointer;
-	white-space: nowrap;
-}
-
-.ah-template-desc {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	color: var(--text-muted);
-	font-size: var(--font-ui-small);
-}
-
-.ah-template-del {
-	flex-shrink: 0;
-}
-
-/* 编辑面板缩进 = 折叠钮宽 18px + gap 8px，使模板名与面板内容左对齐（折叠钮悬在左侧沟槽）。 */
-.ah-template-row-expanded > .ah-edit-panel {
-	margin-left: 26px;
-}
-
-/* 子框（级别格式 / 白名单共用，0.7.17）：带标题的边框容器 */
-.ah-subbox {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	padding: 8px 10px;
-	margin: 10px 0;
-}
-
-.ah-subbox-title {
-	font-weight: 600;
-	font-size: var(--font-ui-small);
-	color: var(--text-normal);
-	margin-bottom: 6px;
 }
 
 /* 标题链接建议（M13）：建议框候选行——icon 列 + 标题原文/来源路径两行。
@@ -962,4 +913,397 @@ button.ah-tab.ah-tab-active:hover {
 .tree-item-inner[data-ah-number]::before {
 	content: attr(data-ah-number);
 	white-space: pre;
+}
+
+/* ==== 1.2.2 视觉更新：标题行按钮 / 模板卡片 / 模板编辑弹窗（spec Roadmap M15）==== */
+
+/* 设置标题行右侧的「图标 + 文字」普通按钮（「添加规则」「新增模板」，L32 / L34） */
+.ah-heading-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.ah-heading-btn-icon {
+	display: inline-flex;
+	color: var(--text-muted);
+	--icon-size: 15px;
+}
+
+/* 灰色小标签（「内置」等） */
+.ah-pill {
+	display: inline-flex;
+	align-items: center;
+	height: 18px;
+	padding: 0 7px;
+	border-radius: 9px;
+	background: var(--background-modifier-hover);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+/* —— 模板卡片（L34）—— */
+.ah-template-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 16px;
+	margin-top: 4px;
+}
+
+.ah-template-card {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px 16px 14px;
+	border-radius: var(--radius-l, 8px);
+	background: var(--background-secondary);
+}
+
+.ah-template-card-head,
+.ah-template-card-foot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	min-height: 28px;
+}
+
+.ah-template-card-name {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	font-size: var(--font-ui-medium);
+	overflow-wrap: anywhere;
+}
+
+.ah-template-card-preview {
+	display: grid;
+	grid-template-columns: 26px minmax(0, 1fr);
+	row-gap: 6px;
+	line-height: 1.35;
+}
+
+.ah-template-card-level {
+	padding-top: 2px;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ah-template-card-line {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ah-template-card-word {
+	color: var(--text-muted);
+}
+
+.ah-template-card-usage {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+/* —— 模板编辑弹窗（L35）：桌面约 1080px 宽，手机由 Obsidian 铺满全屏 —— */
+.modal.ah-template-modal {
+	width: min(1080px, 94vw);
+	max-width: 94vw;
+}
+
+.ah-editor-title {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.ah-editor-kicker {
+	font-size: var(--font-ui-smaller);
+	font-weight: normal;
+	color: var(--text-faint);
+}
+
+.ah-editor-name-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 32px;
+}
+
+.ah-editor-name {
+	font-size: 1.25em;
+	font-weight: 600;
+}
+
+.ah-editor-name-input {
+	font-size: 1.1em;
+	max-width: 320px;
+}
+
+.ah-editor-rename {
+	--icon-size: 15px;
+}
+
+/* 内部两个 TAB：格式 / 白名单（条数） */
+.ah-editor-tabs {
+	display: flex;
+	gap: 4px;
+	margin-bottom: 14px;
+}
+
+button.ah-editor-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 10px;
+	border: none;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+button.ah-editor-tab:hover {
+	background: var(--background-modifier-hover);
+}
+
+button.ah-editor-tab.is-active,
+button.ah-editor-tab.is-active:hover {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.ah-editor-tab-count {
+	opacity: 0.7;
+}
+
+/* 底部：一行说明 + 「完成」 */
+.ah-editor-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.ah-editor-footer-note {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+/* —— 格式页上方两行（L36）—— */
+.ah-fmt-form {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	align-items: center;
+	gap: 12px 16px;
+	margin-bottom: 18px;
+}
+
+.ah-fmt-form-label {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.ah-fmt-form-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.ah-fmt-gap {
+	width: 16px;
+}
+
+.ah-fmt-hint {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ah-fmt-placeholder {
+	width: 52px;
+}
+
+/* —— 格式表（L36–L39）：宽弹窗下不横滚、预览不截断 —— */
+.ah-fmt-table {
+	display: flex;
+	flex-direction: column;
+	margin: 0 -10px;
+}
+
+.ah-fmt-row {
+	display: grid;
+	/* 级别 前缀 序号 序号间隔符 后缀 标题间隔符 上级编号 预览 */
+	grid-template-columns: 36px minmax(48px, 0.8fr) minmax(96px, 1.3fr) minmax(48px, 0.8fr) minmax(48px, 0.8fr) minmax(48px, 0.8fr) minmax(84px, 1fr) minmax(96px, 1.4fr);
+	column-gap: 10px;
+	align-items: center;
+	min-height: 42px;
+	padding: 0 10px;
+	border-radius: var(--radius-m, 6px);
+}
+
+.ah-fmt-row:not(.ah-fmt-head):not(.ah-fmt-row-out):hover {
+	background: var(--background-modifier-hover);
+}
+
+.ah-fmt-head {
+	min-height: 26px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ah-fmt-row select.dropdown {
+	width: 100%;
+	min-width: 0;
+}
+
+.ah-fmt-level {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ah-fmt-input {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	text-align: center;
+	font-family: var(--font-monospace);
+}
+
+.ah-fmt-dash {
+	padding-left: 10px;
+	color: var(--text-faint);
+}
+
+/* 范围外的级别：整行一句灰字（L39） */
+.ah-fmt-out {
+	grid-column: 2 / -1;
+	font-size: var(--font-ui-small);
+	color: var(--text-faint);
+}
+
+.ah-fmt-row-out .ah-fmt-level {
+	color: var(--text-faint);
+}
+
+/* 预览列只一例：编号正文色、示例标题浅色（L10） */
+.ah-fmt-preview {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ah-fmt-preview-word {
+	color: var(--text-faint);
+}
+
+/* —— 底部预览块（L40）：单栏、可滚动 —— */
+.ah-preview {
+	margin-top: 16px;
+	padding: 12px 16px;
+	border-radius: var(--radius-l, 8px);
+	background: var(--background-secondary);
+}
+
+.ah-preview-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding-bottom: 8px;
+}
+
+.ah-preview-title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ah-preview-toggles {
+	display: flex;
+	flex-shrink: 0;
+	gap: 2px;
+}
+
+button.ah-preview-toggle {
+	height: 22px;
+	padding: 0 8px;
+	border: none;
+	box-shadow: none;
+	background: transparent;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+button.ah-preview-toggle.is-active {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.ah-preview-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 240px;
+	overflow-y: auto;
+	line-height: 1.35;
+}
+
+.ah-preview-line {
+	padding-top: 4px;
+	padding-bottom: 4px;
+	padding-right: 6px;
+	border-radius: var(--radius-s);
+}
+
+.ah-preview-line.is-faint {
+	color: var(--text-faint);
+}
+
+.ah-preview-line.is-highlight {
+	background: hsla(var(--interactive-accent-hsl), 0.16);
+}
+
+.ah-preview-tag {
+	display: inline-flex;
+	align-items: center;
+	height: 17px;
+	margin-left: 8px;
+	padding: 0 6px;
+	border-radius: 9px;
+	background: var(--background-modifier-hover);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	vertical-align: 1px;
+}
+
+.ah-preview-empty {
+	font-size: var(--font-ui-small);
+	color: var(--text-faint);
+}
+
+/* 手机：格式表列多，允许表格自身横向滑动（弹窗本身不撑宽） */
+@media (max-width: 720px) {
+	.ah-fmt-table {
+		overflow-x: auto;
+		margin: 0;
+	}
+
+	.ah-fmt-row {
+		min-width: 640px;
+	}
 }

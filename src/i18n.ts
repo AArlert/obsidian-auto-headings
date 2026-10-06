@@ -173,28 +173,13 @@ export interface Messages {
 	templatesHeading: string;
 	templatesDesc: string;
 	addTemplate: string;
-	defaultTemplateDesc: string;
-	collapseTooltip: string;
-	editTooltip: string;
 	deleteBtn: string;
-	defaultCannotDelete: string;
 
 	// —— 模板编辑面板 ——
-	templateNameName: string;
-	templateNameDesc: string;
 	topLevelName: string;
-	topLevelDesc: string;
 	bottomLevelName: string;
-	bottomLevelDesc: string;
-	startIndexName: string;
-	startIndexDesc: string;
-	ancestorName: string;
-	ancestorDesc: string;
 	ancestorSelf: string;
 	ancestorArabic: string;
-
-	/** 级别格式子框标题（0.7.17，H1–H6 网格容器）。 */
-	levelFormatHeading: string;
 
 	// 网格表头与占位符
 	colLevel: string;
@@ -203,25 +188,14 @@ export interface Messages {
 	colNumberSep: string;
 	colSuffix: string;
 	colTitleSep: string;
-	colInherit: string;
-	colInheritDepth: string;
 	colPreview: string;
 	inheritDepthAll: string;
-	inheritDepthTooltip: string;
-	phPrefix: string;
-	phSuffix: string;
-	phSpace: string;
-	previewInactive: string;
 	previewHeadingWord: string;
 
 	// 跳级占位
-	skipFillName: string;
-	skipFillDesc: string;
 	skipFillFill: string;
 	skipFillDrop: string;
 	skipFillNone: string;
-	placeholderName: string;
-	placeholderDesc: string;
 
 	// 序号样式下拉（值 → 标签）
 	numeralArabic: string;
@@ -238,8 +212,6 @@ export interface Messages {
 	matchSubtree: string;
 
 	// 白名单编辑器
-	whitelistName: string;
-	whitelistDesc: string;
 	wlInputPlaceholder: string;
 	wlFilterPlaceholder: string;
 	wlSortAdded: string;
@@ -385,6 +357,64 @@ export interface Messages {
 	noticeForeignNumberingGuardAction: string;
 	/** 点击迁移守卫 Notice 时，该文件已不在任何已打开的标签页中。 */
 	noticeForeignGuardFileNotOpen: string;
+	// —— 1.2.2 视觉更新：路径规则表 / 模板卡片 / 模板编辑弹窗（spec Roadmap M15）——
+	/** 规则表下方的灰字说明（testplan L32）。 */
+	pathNoMatchHint: string;
+	/** 当前笔记圆点的 tooltip。 */
+	activeRuleTooltip: string;
+	/** 窄屏规则行 ⋯ 按钮的 tooltip（testplan L33）。 */
+	moreActionsTooltip: string;
+	/** 默认模板卡片上的「内置」灰标（testplan L34）。 */
+	templateBuiltinTag: string;
+	/** 卡片底部用量：「用于 N 条规则 · 白名单 M 项」。 */
+	templateCardUsage: (rules: number, whitelist: number) => string;
+	/** 卡片「编辑」按钮。 */
+	editBtn: string;
+	/** 卡片 ⋯ 按钮的 tooltip。 */
+	templateActionsTooltip: string;
+	/** 卡片三行效果预览的示例标题。 */
+	cardSampleTitles: string[];
+	/** 编辑弹窗标题区的小字（testplan L35）。 */
+	editorKicker: string;
+	renameTemplateTooltip: string;
+	editorTabFormat: string;
+	editorTabWhitelist: string;
+	/** 格式页上方两行（testplan L36）。 */
+	rangeLabel: string;
+	rangeTo: string;
+	startIndexLabel: string;
+	startIndexHint: string;
+	moreRulesLabel: string;
+	ancestorLabel: string;
+	skipLabel: string;
+	placeholderLabel: string;
+	/** 「上级编号」合并列（testplan L37）。 */
+	colParents: string;
+	inheritNone: string;
+	inheritLevels: (n: number) => string;
+	/** 不在编号范围内的级别（testplan L39）。 */
+	outOfRangeBefore: (top: number) => string;
+	outOfRangeAfter: (bottom: number) => string;
+	/** 底部预览（testplan L40）。 */
+	previewTitle: string;
+	previewSample: string;
+	previewCurrent: string;
+	previewNoHeadings: string;
+	previewTagWhitelist: string;
+	previewTagSkip: string;
+	previewTagUnnumbered: string;
+	/** 示例笔记的标题词：[文档标题, 概述, 背景, 动机, 细节, 补充, 方法, 结论]。 */
+	previewSampleWords: string[];
+	/** 弹窗底部说明（testplan L41）。 */
+	footerImpact: (rules: number, notes: number, writeNotes: number) => string;
+	footerUnused: string;
+	footerWhitelist: string;
+	doneBtn: string;
+	/** 白名单页顶部图例（testplan L42）。 */
+	wlLegendIntro: string;
+	wlLegendExact: string;
+	wlLegendPartial: string;
+	wlLegendSubtree: string;
 }
 
 /** 简体中文文案。 */
@@ -467,7 +497,7 @@ const zh: Messages = {
 		"把路径映射到模板：文件夹规则以「/」结尾、「/」根规则即全局默认，最具体的规则优先。",
 	pathNoRootWarn: "⚠ 无根路径规则（/），「全局自动编号」开启时不命中任何规则的文件将不被编号。",
 	addRootRule: "+ 添加 / 根规则",
-	addRule: "+ 添加规则",
+	addRule: "添加规则",
 	pathColPattern: "路径模式",
 	pathColTemplate: "模板",
 	pathEmpty: "（暂无规则；添加一条「/」根规则即对全库生效）",
@@ -511,54 +541,27 @@ const zh: Messages = {
 
 	templatesHeading: "模板",
 	templatesDesc: "定义各级标题的编号格式与白名单；哪个文件用哪个模板由上方「路径规则」决定。",
-	addTemplate: "+ 新增模板",
-	defaultTemplateDesc: "内置默认模板，不可删除；可编辑。",
-	collapseTooltip: "折叠",
-	editTooltip: "编辑",
+	addTemplate: "新增模板",
 	deleteBtn: "删除",
-	defaultCannotDelete: "默认模板不可删除",
 
-	templateNameName: "模板名称",
-	templateNameDesc: "重命名后将自动更新对应的模板文件与引用它的路径规则。",
 	topLevelName: "起始编号层级",
-	topLevelDesc: "从这一级开始编号，更浅的标题不动（默认 H2，H1 作标题/分节）。",
 	bottomLevelName: "结束编号层级",
-	bottomLevelDesc:
-		"编号到这一级为止，更深的标题不动；须 ≥ 起始层级（两者配合可只编号 H2–H4 区间）。",
-	startIndexName: "起始编号数字",
-	startIndexDesc: "首个编号标题从该数字起，仅作用于首段（默认 1，设 0 得 0.1.1）。",
-	ancestorName: "祖先序号渲染",
-	ancestorDesc:
-		"继承时祖先段的样式：「各自样式」每个祖先套自身样式；「统一阿拉伯」祖先一律阿拉伯、仅当前级套自身样式（适合中文书）。",
 	ancestorSelf: "各自样式（1.a.①）",
 	ancestorArabic: "统一阿拉伯（一 / 1.1）",
 
-	levelFormatHeading: "级别格式",
 	colLevel: "级别",
 	colPrefix: "前缀",
 	colNumeral: "序号",
 	colNumberSep: "序号间隔符",
 	colSuffix: "后缀",
 	colTitleSep: "标题间隔符",
-	colInherit: "继承前级",
-	colInheritDepth: "继承级数",
 	colPreview: "预览",
 	inheritDepthAll: "全部",
-	inheritDepthTooltip: "最多继承多少个前级；不会越过起始编号层级。",
-	phPrefix: "前缀",
-	phSuffix: "后缀",
-	phSpace: "空格",
-	previewInactive: "（不编号）",
 	previewHeadingWord: "标题",
 
-	skipFillName: "跳级缺失层级",
-	skipFillDesc: "标题跳级（如 H3 后跟 H5）时：补占位符、省略缺失段、或该标题不编号（保持原样）。",
 	skipFillFill: "补位",
 	skipFillDrop: "不补位（省略该段）",
 	skipFillNone: "不编号（保持原样）",
-	placeholderName: "占位字符",
-	placeholderDesc:
-		"补位时填入缺失段的数字（如 0 得 1.1.0.1）；仅限数字、留空按 0，确保编号可干净剥离。",
 
 	numeralArabic: "1, 2, 3",
 	numeralCjk: "一, 二, 三",
@@ -572,9 +575,6 @@ const zh: Messages = {
 	matchPartial: "部分",
 	matchSubtree: "子树",
 
-	whitelistName: "白名单",
-	whitelistDesc:
-		"命中的标题不编号、不占号：「全部」完全相等、「部分」包含该词、「子树」整块豁免且之后编号重新开始。",
 	wlInputPlaceholder: "输入词语后按 Enter 添加…",
 	wlFilterPlaceholder: "搜索条目…",
 	wlSortAdded: "按添加顺序",
@@ -707,6 +707,48 @@ const zh: Messages = {
 	noticeForeignNumberingGuardVirtual:
 		"这篇笔记的标题大多已经带着编号，插件不确定是不是你自己写的，为免出现两套数字，暂不显示编号。",
 	noticeForeignGuardFileNotOpen: "该文件已不在任何标签页中，请重新打开后再清理",
+	pathNoMatchHint: "没有任何规则命中的笔记不编号。",
+	activeRuleTooltip: "当前笔记使用这条规则",
+	moreActionsTooltip: "更多操作",
+	templateBuiltinTag: "内置",
+	templateCardUsage: (rules, whitelist) => `用于 ${rules} 条规则 · 白名单 ${whitelist} 项`,
+	editBtn: "编辑",
+	templateActionsTooltip: "模板操作",
+	cardSampleTitles: ["概述", "背景", "细节"],
+	editorKicker: "编辑模板",
+	renameTemplateTooltip: "重命名模板",
+	editorTabFormat: "格式",
+	editorTabWhitelist: "白名单",
+	rangeLabel: "编号范围",
+	rangeTo: "至",
+	startIndexLabel: "起始编号数字",
+	startIndexHint: "设为 0 可得 0.1、0.2……",
+	moreRulesLabel: "更多规则",
+	ancestorLabel: "上级编号的写法",
+	skipLabel: "标题跳级时",
+	placeholderLabel: "占位字符",
+	colParents: "上级编号",
+	inheritNone: "不带",
+	inheritLevels: (n) => `${n} 级`,
+	outOfRangeBefore: (top) => `不在编号范围内（编号从 H${top} 开始）`,
+	outOfRangeAfter: (bottom) => `不在编号范围内（编号到 H${bottom} 为止）`,
+	previewTitle: "预览",
+	previewSample: "示例",
+	previewCurrent: "当前笔记",
+	previewNoHeadings: "这篇笔记还没有标题。",
+	previewTagWhitelist: "白名单",
+	previewTagSkip: "跳过",
+	previewTagUnnumbered: "不编号",
+	previewSampleWords: ["文档标题", "概述", "背景", "动机", "细节", "补充", "方法", "结论"],
+	footerImpact: (rules, notes, writeNotes) =>
+		`修改即时生效 · 影响 ${rules} 条规则下的 ${notes} 篇笔记，其中 ${writeNotes} 篇写入文件。`,
+	footerUnused: "修改即时生效 · 还没有路径规则使用这个模板。",
+	footerWhitelist: "修改即时生效 · 单击词语即可改写。",
+	doneBtn: "完成",
+	wlLegendIntro: "命中的标题不编号、不占序号：",
+	wlLegendExact: "完全相同",
+	wlLegendPartial: "包含该词",
+	wlLegendSubtree: "整节豁免，之后重新编号",
 };
 
 /** English copy. */
@@ -792,7 +834,7 @@ const en: Messages = {
 	pathNoRootWarn:
 		'⚠ No root path rule (/). With "Global auto-numbering" on, files that match no rule will not be numbered.',
 	addRootRule: "+ Add / root rule",
-	addRule: "+ Add rule",
+	addRule: "Add rule",
 	pathColPattern: "Path pattern",
 	pathColTemplate: "Template",
 	pathEmpty: '(No rules yet; add a "/" root rule to cover the whole vault.)',
@@ -840,59 +882,27 @@ const en: Messages = {
 	templatesHeading: "Templates",
 	templatesDesc:
 		"Define the numbering format and whitelist per heading level; which file uses which template is decided by the Path rules above.",
-	addTemplate: "+ New template",
-	defaultTemplateDesc: "Built-in default template; cannot be deleted, but can be edited.",
-	collapseTooltip: "Collapse",
-	editTooltip: "Edit",
+	addTemplate: "New template",
 	deleteBtn: "Delete",
-	defaultCannotDelete: "The default template cannot be deleted",
 
-	templateNameName: "Template name",
-	templateNameDesc:
-		"Renaming automatically updates the matching template file and any path rules that reference it.",
 	topLevelName: "Start level",
-	topLevelDesc:
-		"The shallowest level to number; shallower headings are left alone (default H2, so H1 acts as the title/section).",
 	bottomLevelName: "End level",
-	bottomLevelDesc:
-		"The deepest level to number; deeper headings are left alone (must be ≥ Start level; combine both to number a range like H2–H4).",
-	startIndexName: "Start number",
-	startIndexDesc:
-		"The number the first numbered heading starts from; first segment only (default 1; 0 gives 0.1.1).",
-	ancestorName: "Ancestor numeral rendering",
-	ancestorDesc:
-		'How ancestor segments render when inheriting: "Own style" uses each ancestor\'s own style; "All Arabic" renders ancestors as Arabic, only the current level in its own style.',
 	ancestorSelf: "Own style (1.a.①)",
 	ancestorArabic: "All Arabic (一 / 1.1)",
 
-	levelFormatHeading: "Level formats",
 	colLevel: "Level",
 	colPrefix: "Prefix",
 	colNumeral: "Numeral",
 	colNumberSep: "Number sep.",
 	colSuffix: "Suffix",
 	colTitleSep: "Title sep.",
-	colInherit: "Inherit",
-	colInheritDepth: "Inherit depth",
 	colPreview: "Preview",
 	inheritDepthAll: "All",
-	inheritDepthTooltip:
-		"The maximum number of preceding levels to inherit; never goes above the start level.",
-	phPrefix: "Prefix",
-	phSuffix: "Suffix",
-	phSpace: "Space",
-	previewInactive: "(not numbered)",
 	previewHeadingWord: "Heading",
 
-	skipFillName: "Skipped levels",
-	skipFillDesc:
-		"When headings skip a level (e.g. H5 right after H3): fill the missing segment, drop it, or leave the heading unnumbered.",
 	skipFillFill: "Fill",
 	skipFillDrop: "Drop (omit the segment)",
 	skipFillNone: "Don't number (leave as-is)",
-	placeholderName: "Placeholder",
-	placeholderDesc:
-		"The digit filling a missing level (e.g. 0 gives 1.1.0.1); digits-only keeps numbering cleanly strippable, empty = 0.",
 
 	numeralArabic: "1, 2, 3",
 	numeralCjk: "一, 二, 三",
@@ -906,9 +916,6 @@ const en: Messages = {
 	matchPartial: "Partial",
 	matchSubtree: "Subtree",
 
-	whitelistName: "Whitelist",
-	whitelistDesc:
-		"Matched headings are not numbered and take no counter slot: Exact = fully equal, Partial = contains the word, Subtree = whole block exempt, numbering restarts after it.",
 	wlInputPlaceholder: "Type a word and press Enter to add…",
 	wlFilterPlaceholder: "Filter entries…",
 	wlSortAdded: "By added order",
@@ -1050,6 +1057,58 @@ const en: Messages = {
 	noticeForeignNumberingGuardVirtual:
 		"Most headings in this note already carry numbers the plugin can't confirm you wrote — numbers are hidden here to avoid showing two sets.",
 	noticeForeignGuardFileNotOpen: "This file is no longer open in any tab; reopen it to clean up",
+	pathNoMatchHint: "Notes that match no rule are not numbered.",
+	activeRuleTooltip: "The current note uses this rule",
+	moreActionsTooltip: "More actions",
+	templateBuiltinTag: "Built-in",
+	templateCardUsage: (rules, whitelist) =>
+		`Used by ${rules} ${rules === 1 ? "rule" : "rules"} · ${whitelist} whitelist ${whitelist === 1 ? "entry" : "entries"}`,
+	editBtn: "Edit",
+	templateActionsTooltip: "Template actions",
+	cardSampleTitles: ["Overview", "Background", "Details"],
+	editorKicker: "Edit template",
+	renameTemplateTooltip: "Rename template",
+	editorTabFormat: "Format",
+	editorTabWhitelist: "Whitelist",
+	rangeLabel: "Range",
+	rangeTo: "to",
+	startIndexLabel: "Start at",
+	startIndexHint: "Set 0 to get 0.1, 0.2…",
+	moreRulesLabel: "More rules",
+	ancestorLabel: "Parent numbers",
+	skipLabel: "When a level is skipped",
+	placeholderLabel: "Placeholder",
+	colParents: "Parents",
+	inheritNone: "None",
+	inheritLevels: (n) => `${n} ${n === 1 ? "level" : "levels"}`,
+	outOfRangeBefore: (top) => `Outside the numbering range (numbering starts at H${top})`,
+	outOfRangeAfter: (bottom) => `Outside the numbering range (numbering stops at H${bottom})`,
+	previewTitle: "Preview",
+	previewSample: "Sample",
+	previewCurrent: "Current note",
+	previewNoHeadings: "This note has no headings yet.",
+	previewTagWhitelist: "Whitelist",
+	previewTagSkip: "Skipped",
+	previewTagUnnumbered: "Not numbered",
+	previewSampleWords: [
+		"Document title",
+		"Overview",
+		"Background",
+		"Motivation",
+		"Details",
+		"Notes",
+		"Method",
+		"Conclusion",
+	],
+	footerImpact: (rules, notes, writeNotes) =>
+		`Changes apply immediately · affects ${notes} ${notes === 1 ? "note" : "notes"} under ${rules} ${rules === 1 ? "rule" : "rules"}, ${writeNotes} written to file.`,
+	footerUnused: "Changes apply immediately · no path rule uses this template yet.",
+	footerWhitelist: "Changes apply immediately · click a word to edit it.",
+	doneBtn: "Done",
+	wlLegendIntro: "Matching headings are not numbered and take no number:",
+	wlLegendExact: "exact",
+	wlLegendPartial: "contains the word",
+	wlLegendSubtree: "whole section exempt, numbering resumes after",
 };
 
 /** 取某语言的文案表。 */
