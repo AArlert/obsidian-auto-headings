@@ -138,7 +138,7 @@ export class NoteEntry {
 			}),
 		);
 
-		p.registerEditorExtension(headingHandleExtension(this));
+		p.registerEditorExtension(headingHandleExtension(this, () => p.messages().handleHint));
 		this.registerStatusBar();
 	}
 
@@ -188,7 +188,12 @@ export class NoteEntry {
 			i
 				.setTitle(m.menuNoteSettings)
 				.setIcon("settings")
-				.onClick(() => void this.openNoteMenu(file, evt)),
+				.onClick(
+					() =>
+						void this.openNoteMenu(file, evt, () =>
+							this.openHeadingMenu(evt, editor, file, lineIndex),
+						),
+				),
 		);
 		menu.showAtMouseEvent(evt);
 	}
@@ -342,14 +347,14 @@ export class NoteEntry {
 	}
 
 	/** 在鼠标位置弹出「本篇」原生菜单（状态栏 / 标题手柄的「本篇编号设置…」共用，S14）。 */
-	async openNoteMenu(file: TFile, evt: MouseEvent): Promise<void> {
+	async openNoteMenu(file: TFile, evt: MouseEvent, onBack?: () => void): Promise<void> {
 		const menu = new Menu();
-		await this.buildNoteMenu(menu, file);
+		await this.buildNoteMenu(menu, file, onBack);
 		menu.showAtMouseEvent(evt);
 	}
 
 	/** 组装「本篇」菜单（S14/S15）。 */
-	async buildNoteMenu(menu: Menu, file: TFile): Promise<void> {
+	async buildNoteMenu(menu: Menu, file: TFile, onBack?: () => void): Promise<void> {
 		const p = this.plugin;
 		const m = p.messages();
 		const rule = resolvePathRule(p.settings.pathRules, file.path);
@@ -387,6 +392,10 @@ export class NoteEntry {
 			menu.addItem((i) =>
 				i.setTitle(m.statusMenuClearStale).onClick(() => p.clearActiveFileStaleNumbering()),
 			);
+		}
+		if (onBack) {
+			menu.addSeparator();
+			menu.addItem((i) => i.setTitle(m.menuBack).setIcon("arrow-left").onClick(onBack));
 		}
 	}
 }

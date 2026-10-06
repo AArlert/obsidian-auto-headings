@@ -33,10 +33,7 @@ export interface TemplateEditorHost {
 	pendingFocus: string | null;
 	/** 整窗重绘（保留滚动位置）。 */
 	rerender(): void;
-	/**
-	 * 草稿被改动（M16，S22）：两页的每次改动都调它，**不写盘、不碰任何笔记**；点「保存」才落盘并重编。
-	 * 传入的 `template` 恒为弹窗持有的草稿对象。
-	 */
+	/** 模板被改动：立即存盘并重编已打开的笔记（改动即时生效，S22）。 */
 	persist(template: Template): Promise<void>;
 }
 
@@ -60,13 +57,8 @@ export class TemplateEditorModal extends Modal implements TemplateEditorHost {
 	private pane: EditorPane;
 	private templateName: string;
 	private renaming = false;
-	/** 草稿（M16，S22）：编辑期间所有改动落在这份深拷贝上，保存前不动模板文件与笔记。 */
-	private draft: Template | null = null;
-	/** 打开时的样式，保存时据此判断样式是否变过（决定要不要记历史）。 */
+	/** 打开时的样式；关闭时据此判断样式是否变过（决定要不要记历史，S21）。 */
 	private baseStyle: TemplateStyle | null = null;
-	private dirty = false;
-	private saveBtn: HTMLButtonElement | null = null;
-	private dirtyEl: HTMLElement | null = null;
 
 	constructor(
 		app: App,
@@ -94,50 +86,38 @@ export class TemplateEditorModal extends Modal implements TemplateEditorHost {
 	onOpen(): void {
 		this.modalEl.addClass("ah-template-modal");
 		const stored = this.plugin.templateStore.get(this.templateName);
-		if (stored) {
-			this.draft = structuredClone(stored);
-			this.baseStyle = styleOf(stored);
-		}
+		this.baseStyle = stored ? styleOf(stored) : null;
 		this.render();
-	}
-
-	async persist(): Promise<void> {
-		this.dirty = true;
-		this.syncDirtyUi();
-	}
-
-	private syncDirtyUi(): void {
-		if (this.saveBtn) {
-			this.saveBtn.disabled = !this.dirty;
-		}
-		this.dirtyEl?.toggleClass("is-visible", this.dirty);
-	}
-
-	/**
-	 * 保存草稿（S22）：写模板文件；样式变过则记历史（历史为空时先把打开时的样式记一份，保证能回到编辑前）；
-	 * 再重编已打开的笔记。保存成功后关闭弹窗。
-	 */
-	private async save(): Promise<void> {
-		const draft = this.draft;
-		if (!draft || !this.baseStyle) {
-			return;
-		}
-		await this.plugin.templateStore.save(draft);
-		const next = styleOf(draft);
-		if (!stylesEqual(this.baseStyle, next)) {
-			if (this.plugin.templateHistoryOf(draft.name).length === 0) {
-				await this.plugin.recordTemplateStyle(draft.name, this.baseStyle);
-			}
-			await this.plugin.recordTemplateStyle(draft.name, next);
-		}
-		this.plugin.renumberActiveFile();
-		this.dirty = false;
-		this.close();
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
-		this.tab.display();
+		void this.recordHistory().finally(() => this.tab.display());
+	}
+
+	/**
+	 * 退出弹窗即视为一次保存（S21）：样式相对打开时变过，就把新样式记进历史；历史为空时先把打开时的
+	 * 样式记一份，保证能回到第一次编辑之前。只改白名单、样式没变则不记。
+	 */
+	private async recordHistory(): Promise<void> {
+		const tpl = this.plugin.templateStore.get(this.templateName);
+		if (!tpl || !this.baseStyle) {
+			return;
+		}
+		const next = styleOf(tpl);
+		if (stylesEqual(this.baseStyle, next)) {
+			return;
+		}
+		if (this.plugin.templateHistoryOf(tpl.name).length === 0) {
+			await this.plugin.recordTemplateStyle(tpl.name, this.baseStyle);
+		}
+		await this.plugin.recordTemplateStyle(tpl.name, next);
+		this.baseStyle = next;
+	}
+
+	async persist(template: Template): Promise<void> {
+		await this.plugin.templateStore.save(template);
+		this.plugin.renumberActiveFile();
 	}
 
 	rerender(): void {
@@ -145,8 +125,8 @@ export class TemplateEditorModal extends Modal implements TemplateEditorHost {
 	}
 
 	private render(): void {
-		const template = this.draft;
-		if (!template || !this.plugin.templateStore.get(this.templateName)) {
+		const template = this.plugin.templateStore.get(this.templateName);
+		if (!template) {
 			this.close(); // 模板已被删除 / 改名失败后丢失：没有可编辑的对象。
 			return;
 		}
@@ -189,12 +169,8 @@ export class TemplateEditorModal extends Modal implements TemplateEditorHost {
 		// —— 底部：一行说明 + 「完成」——
 		const footer = contentEl.createDiv({ cls: "ah-editor-footer" });
 		footer.createSpan({ cls: "ah-editor-footer-note", text: this.footerNote(template) });
-		this.dirtyEl = footer.createSpan({ cls: "ah-editor-dirty", text: this.t.editorDirty });
-		const cancel = footer.createEl("button", { text: this.t.editorCancel });
-		cancel.addEventListener("click", () => this.close());
-		this.saveBtn = footer.createEl("button", { cls: "mod-cta", text: this.t.editorSave });
-		this.saveBtn.addEventListener("click", () => void this.save());
-		this.syncDirtyUi();
+		const done = footer.createEl("button", { cls: "mod-cta", text: this.t.doneBtn });
+		done.addEventListener("click", () => this.close());
 
 		contentEl.scrollTop = scrollTop;
 		if (this.pendingFocus) {
@@ -239,7 +215,6 @@ export class TemplateEditorModal extends Modal implements TemplateEditorHost {
 					// 沿用原改名逻辑：同步更新模板文件与引用它的路径规则（名称冲突时失败，原名不变）。
 					if (await this.plugin.renameTemplate(template.name, next)) {
 						this.templateName = next;
-						template.name = next;
 					}
 				}
 				this.render();

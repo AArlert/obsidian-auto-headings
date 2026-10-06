@@ -1,6 +1,11 @@
 /** 跳过标记切换与整节升降级纯函数单测（testplan S1–S7，见 src/headingedit.ts）。 */
 import { describe, expect, it } from "vitest";
-import { planSectionShift, toggleSkipMarker } from "../../src/headingedit";
+import {
+	bodyLineCount,
+	moveSection,
+	planSectionShift,
+	toggleSkipMarker,
+} from "../../src/headingedit";
 
 describe("toggleSkipMarker（S1/S2）", () => {
 	it("无标记 → 行尾补规范标记", () => {
@@ -52,5 +57,42 @@ describe("planSectionShift（S4–S7）", () => {
 	});
 	it("末级小节到文件末尾", () => {
 		expect(planSectionShift("# A\n## B\n## C", 2, 1)).toEqual([{ line: 2, text: "### C" }]);
+	});
+});
+
+describe("moveSection（整节拖动）", () => {
+	const doc = ["# A", "## B", "x", "### C", "## D", "y", "## E"].join("\n");
+
+	it("把 B 小节（含子标题）移到 E 之前", () => {
+		expect(moveSection(doc, 1, 6)).toBe(
+			["# A", "## D", "y", "## B", "x", "### C", "## E"].join("\n"),
+		);
+	});
+	it("移到文末", () => {
+		expect(moveSection(doc, 4, bodyLineCount(doc))).toBe(
+			["# A", "## B", "x", "### C", "## E", "## D", "y"].join("\n"),
+		);
+	});
+	it("向前移（E 移到 B 之前）", () => {
+		expect(moveSection(doc, 6, 1)).toBe(
+			["# A", "## E", "## B", "x", "### C", "## D", "y"].join("\n"),
+		);
+	});
+	it("落在自身内部或紧贴其后 → null（等于没动）", () => {
+		expect(moveSection(doc, 1, 3)).toBeNull();
+		expect(moveSection(doc, 1, 4)).toBeNull();
+		expect(moveSection(doc, 1, 1)).toBeNull();
+	});
+	it("文末换行符原样保留，不多不少", () => {
+		const d = "# A\n## B\nx\n## C\ny\n";
+		expect(moveSection(d, 3, 1)).toBe("# A\n## C\ny\n## B\nx\n");
+		expect(moveSection(d, 1, bodyLineCount(d))).toBe("# A\n## C\ny\n## B\nx\n");
+	});
+	it("围栏里的 # 行不是小节边界", () => {
+		const d = ["## A", "```", "## 假", "```", "## B"].join("\n");
+		expect(moveSection(d, 0, 5)).toBe(["## B", "## A", "```", "## 假", "```"].join("\n"));
+	});
+	it("非标题行 → null", () => {
+		expect(moveSection(doc, 2, 0)).toBeNull();
 	});
 });

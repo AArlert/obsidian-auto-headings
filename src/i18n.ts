@@ -315,6 +315,9 @@ export interface Messages {
 	menuPromoteSection: string;
 	menuDemoteSection: string;
 	menuNoteSettings: string;
+	menuBack: string;
+	/** 标题折叠箭头的悬停提示（拖动 / 右键）。 */
+	handleHint: string;
 	/** 标题手柄菜单标签行：编号 标题 · 级别。 */
 	menuHandleLabel: (text: string, level: number) => string;
 	noticeSectionShiftOutOfRange: string;
@@ -442,9 +445,6 @@ export interface Messages {
 	footerWhitelist: string;
 	doneBtn: string;
 	/** 模板编辑弹窗草稿式保存（M16，S22）与快速套用 / 历史（S20/S21）。 */
-	editorSave: string;
-	editorCancel: string;
-	editorDirty: string;
 	editorQuickApply: string;
 	editorHistory: string;
 	quickRecentHeading: string;
@@ -732,6 +732,8 @@ const zh: Messages = {
 	menuPromoteSection: "升级本节",
 	menuDemoteSection: "降级本节",
 	menuNoteSettings: "本篇编号设置…",
+	menuBack: "返回",
+	handleHint: "拖动可移动整节 · 右键打开菜单",
 	menuHandleLabel: (text, level) => `${text} · H${level}`,
 	noticeSectionShiftOutOfRange: "本节里有标题会超出 1–6 级，未做任何修改",
 	noticeNoteTemplateNoRule: "这篇笔记所在路径没有启用编号，请先到设置里添加路径规则",
@@ -830,13 +832,10 @@ const zh: Messages = {
 	previewTagUnnumbered: "不编号",
 	previewSampleWords: ["文档标题", "概述", "背景", "动机", "细节", "补充", "方法", "结论"],
 	footerImpact: (rules, notes, writeNotes) =>
-		`点「保存」后生效 · 影响 ${rules} 条规则下的 ${notes} 篇笔记，其中 ${writeNotes} 篇写入文件。`,
-	footerUnused: "点「保存」后生效 · 还没有路径规则使用这个模板。",
-	footerWhitelist: "点「保存」后生效 · 单击词语即可改写。",
+		`修改即时生效 · 影响 ${rules} 条规则下的 ${notes} 篇笔记，其中 ${writeNotes} 篇写入文件。`,
+	footerUnused: "修改即时生效 · 还没有路径规则使用这个模板。",
+	footerWhitelist: "修改即时生效 · 单击词语即可改写。",
 	doneBtn: "完成",
-	editorSave: "保存",
-	editorCancel: "取消",
-	editorDirty: "● 有未保存的修改",
 	editorQuickApply: "快速套用",
 	editorHistory: "历史",
 	quickRecentHeading: "最近用过的样式",
@@ -848,7 +847,7 @@ const zh: Messages = {
 	presetLegal: "法律条文 · 第一编 / 第一章 / 第一条",
 	presetOutline: "大纲 · I. / A. / 1.",
 	historyTitle: (name) => `「${name}」的样式历史`,
-	historyEmpty: "还没有历史——点「保存」后会在这里留下快照。",
+	historyEmpty: "还没有历史——改过样式并关闭编辑窗口后会在这里留下快照。",
 	historyRestore: "恢复",
 	historyCurrent: "与当前相同",
 	wlLegendIntro: "命中的标题不编号、不占序号：",
@@ -1135,6 +1134,8 @@ const en: Messages = {
 	menuPromoteSection: "Promote section",
 	menuDemoteSection: "Demote section",
 	menuNoteSettings: "Numbering settings for this note…",
+	menuBack: "Back",
+	handleHint: "Drag to move the section · right-click for menu",
 	menuHandleLabel: (text, level) => `${text} · H${level}`,
 	noticeSectionShiftOutOfRange:
 		"A heading in this section would leave levels 1–6; nothing changed",
@@ -1249,13 +1250,10 @@ const en: Messages = {
 		"Conclusion",
 	],
 	footerImpact: (rules, notes, writeNotes) =>
-		`Applies on Save · affects ${notes} ${notes === 1 ? "note" : "notes"} under ${rules} ${rules === 1 ? "rule" : "rules"}, ${writeNotes} written to file.`,
-	footerUnused: "Applies on Save · no path rule uses this template yet.",
-	footerWhitelist: "Applies on Save · click a word to edit it.",
+		`Changes apply immediately · affects ${notes} ${notes === 1 ? "note" : "notes"} under ${rules} ${rules === 1 ? "rule" : "rules"}, ${writeNotes} written to file.`,
+	footerUnused: "Changes apply immediately · no path rule uses this template yet.",
+	footerWhitelist: "Changes apply immediately · click a word to edit it.",
 	doneBtn: "Done",
-	editorSave: "Save",
-	editorCancel: "Cancel",
-	editorDirty: "● Unsaved changes",
 	editorQuickApply: "Quick apply",
 	editorHistory: "History",
 	quickRecentHeading: "Recently used styles",
@@ -1267,7 +1265,8 @@ const en: Messages = {
 	presetLegal: "Legal · 第一编 / 第一章 / 第一条",
 	presetOutline: "Outline · I. / A. / 1.",
 	historyTitle: (name) => `Style history of "${name}"`,
-	historyEmpty: "No history yet — each Save leaves a snapshot here.",
+	historyEmpty:
+		"No history yet — closing the editor after a style change leaves a snapshot here.",
 	historyRestore: "Restore",
 	historyCurrent: "Same as current",
 	wlLegendIntro: "Matching headings are not numbered and take no number:",

@@ -1253,16 +1253,6 @@ button.ah-editor-tab.is-active:hover {
 	color: var(--text-muted);
 }
 
-.ah-editor-dirty {
-	display: none;
-	font-size: var(--font-ui-smaller);
-	color: var(--text-accent);
-}
-
-.ah-editor-dirty.is-visible {
-	display: inline;
-}
-
 /* 快速套用 / 历史工具条（M16） */
 .ah-style-toolbar {
 	display: flex;
@@ -1523,7 +1513,7 @@ button.ah-preview-toggle.is-active {
 	}
 }
 
-/* 标题手柄（M16，spec §3.24）：挂在 .cm-scroller 里的单个浮层，悬停标题行时显示 */
+/* 标题手柄（M16，spec §3.24）：仅手机端使用的行尾「⋯」浮层（桌面端复用原生折叠箭头） */
 .ah-heading-handle {
 	position: absolute;
 	z-index: 5;
@@ -1547,4 +1537,20 @@ button.ah-preview-toggle.is-active {
 .ah-heading-handle:hover {
 	color: var(--text-normal);
 	background: var(--background-modifier-hover);
+}
+
+/* 拖动整节时的落点横线与拖动态光标（桌面端，复用折叠箭头拖动） */
+.ah-drop-line {
+	position: absolute;
+	left: 0;
+	right: 0;
+	z-index: 6;
+	height: 2px;
+	background: var(--interactive-accent);
+	pointer-events: none;
+}
+body.ah-dragging-section,
+body.ah-dragging-section * {
+	cursor: grabbing !important;
+	user-select: none;
 }

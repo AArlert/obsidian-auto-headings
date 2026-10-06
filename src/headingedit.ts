@@ -66,3 +66,44 @@ export function planSectionShift(
 	}
 	return edits;
 }
+
+/**
+ * 整节移动：把 `headingLine` 所在小节（含全部子标题）整体搬到第 `destLine` 行之前（`destLine` 取
+ * `0..正文行数`，等于正文行数即移到文末）。小节范围同 {@link planSectionShift}：到下一个级别 ≤ 它的标题为止。
+ *
+ * 搬动**不改任何标题级别**（升降级是另外的操作）。目标落在小节自身之内或紧贴其后（等于没动）时返回
+ * `null`。文末换行符原样保留，不会因搬动多出或丢掉空行。
+ */
+export function moveSection(content: string, headingLine: number, destLine: number): string | null {
+	const headings = parseHeadings(content);
+	const idx = headings.findIndex((h) => h.lineIndex === headingLine);
+	if (idx === -1) {
+		return null;
+	}
+	const base = headings[idx].level;
+	const trailingNewline = content.endsWith("\n");
+	const lines = content.split("\n");
+	const body = trailingNewline ? lines.slice(0, -1) : lines;
+	let end = body.length;
+	for (let i = idx + 1; i < headings.length; i++) {
+		if (headings[i].level <= base) {
+			end = headings[i].lineIndex;
+			break;
+		}
+	}
+	const start = headingLine;
+	if (destLine < 0 || destLine > body.length || (destLine >= start && destLine <= end)) {
+		return null;
+	}
+	const chunk = body.slice(start, end);
+	const rest = [...body.slice(0, start), ...body.slice(end)];
+	const at = destLine < start ? destLine : destLine - chunk.length;
+	rest.splice(at, 0, ...chunk);
+	return rest.join("\n") + (trailingNewline ? "\n" : "");
+}
+
+/** {@link moveSection} 之外的辅助：正文行数（不含文末换行产生的空尾行）。 */
+export function bodyLineCount(content: string): number {
+	const n = content.split("\n").length;
+	return content.endsWith("\n") ? n - 1 : n;
+}
