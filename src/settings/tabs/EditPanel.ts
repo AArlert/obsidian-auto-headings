@@ -221,7 +221,10 @@ export function renderFormatPane(
 	);
 	if (skipFill.mode === "fill") {
 		more.createSpan({ text: t.placeholderLabel });
-		const input = more.createEl("input", { type: "text", cls: "ah-fmt-input ah-fmt-placeholder" });
+		const input = more.createEl("input", {
+			type: "text",
+			cls: "ah-fmt-input ah-fmt-placeholder",
+		});
 		input.value = skipFill.placeholder;
 		input.setAttr("aria-label", t.placeholderLabel);
 		// IME 感知（testplan L25）：组合期间不提交，compositionend 后提交一次；仅保留数字。
@@ -278,8 +281,10 @@ export function renderFormatPane(
 		row.addEventListener("mouseenter", () => preview?.highlight(level));
 		row.addEventListener("mouseleave", () => preview?.highlight(null));
 
-		const text = (field: "prefix" | "numberSeparator" | "suffix" | "titleSeparator", label: string) =>
-			textCell(row, fmt, field, `H${level} ${label}`, () => void commit(false));
+		const text = (
+			field: "prefix" | "numberSeparator" | "suffix" | "titleSeparator",
+			label: string,
+		) => textCell(row, fmt, field, `H${level} ${label}`, () => void commit(false));
 
 		text("prefix", t.colPrefix);
 		dropdown(
@@ -303,7 +308,9 @@ export function renderFormatPane(
 			const options: Array<[string, string]> = [
 				["none", t.inheritNone],
 				["all", t.inheritDepthAll],
-				...inheritDepthOptions(level).map((d) => [String(d), t.inheritLevels(d)] as [string, string]),
+				...inheritDepthOptions(level).map(
+					(d) => [String(d), t.inheritLevels(d)] as [string, string],
+				),
 			];
 			const current = inheritChoiceOf(fmt, level);
 			dropdown(

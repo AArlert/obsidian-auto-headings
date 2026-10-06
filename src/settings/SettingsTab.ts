@@ -4,14 +4,14 @@ import type { Messages } from "../i18n";
 import { DEFAULT_TEMPLATE_NAME } from "../templates/schema";
 import { renderGeneralTab } from "./tabs/GeneralTab";
 import { renderTemplatesTab } from "./tabs/TemplatesTab";
-import { renderDangerTab } from "./tabs/DangerTab";
+import { renderMaintenanceTab } from "./tabs/MaintenanceTab";
 import { renderAboutTab } from "./tabs/AboutTab";
 
 /** 设置页的四个 TAB（M7 多 TAB 重构，见 spec.md §3.13）。 */
-export type SettingsTabId = "general" | "templates" | "danger" | "about";
+export type SettingsTabId = "general" | "templates" | "maintenance" | "about";
 
 /** TAB 的固定遍历顺序。 */
-const TAB_ORDER: SettingsTabId[] = ["general", "templates", "danger", "about"];
+const TAB_ORDER: SettingsTabId[] = ["general", "templates", "maintenance", "about"];
 
 /**
  * 各 TAB 的 lucide 图标（0.7.17，testplan L22）。用 Obsidian 内置 `setIcon`（SVG、currentColor）
@@ -20,7 +20,7 @@ const TAB_ORDER: SettingsTabId[] = ["general", "templates", "danger", "about"];
 const TAB_ICONS: Record<SettingsTabId, string> = {
 	general: "settings",
 	templates: "folder-cog",
-	danger: "wrench",
+	maintenance: "wrench",
 	about: "info",
 };
 
@@ -76,8 +76,8 @@ export class AutoHeadingsSettingTab extends PluginSettingTab {
 				return t.tabGeneral;
 			case "templates":
 				return t.tabTemplates;
-			case "danger":
-				return t.tabDanger;
+			case "maintenance":
+				return t.tabMaintenance;
 			case "about":
 				return t.tabAbout;
 		}
@@ -152,8 +152,8 @@ export class AutoHeadingsSettingTab extends PluginSettingTab {
 			case "templates":
 				renderTemplatesTab(this, this.bodyEl);
 				break;
-			case "danger":
-				renderDangerTab(this, this.bodyEl);
+			case "maintenance":
+				renderMaintenanceTab(this, this.bodyEl);
 				break;
 			case "about":
 				renderAboutTab(this, this.bodyEl);

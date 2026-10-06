@@ -93,7 +93,9 @@ function renderTemplateCard(
 
 	// —— 底部：用量 … 编辑 ——
 	const foot = card.createDiv({ cls: "ah-template-card-foot" });
-	const ruleCount = tab.plugin.settings.pathRules.filter((r) => r.template === template.name).length;
+	const ruleCount = tab.plugin.settings.pathRules.filter(
+		(r) => r.template === template.name,
+	).length;
 	foot.createSpan({
 		cls: "ah-template-card-usage",
 		text: t.templateCardUsage(ruleCount, template.whitelist.length),

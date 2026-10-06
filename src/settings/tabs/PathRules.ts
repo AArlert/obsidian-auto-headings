@@ -30,7 +30,11 @@ function suggestLabelsOf(t: Messages): PathSuggestLabels {
  * 把设置项标题行右侧的按钮渲染成「图标 + 文字」（1.2.2：「添加规则」「新增模板」挪到各自标题行右侧，
  * 普通按钮，见 testplan L32 / L34）。
  */
-export function decorateHeadingButton(buttonEl: HTMLButtonElement, icon: string, text: string): void {
+export function decorateHeadingButton(
+	buttonEl: HTMLButtonElement,
+	icon: string,
+	text: string,
+): void {
 	buttonEl.empty();
 	buttonEl.addClass("ah-heading-btn");
 	setIcon(buttonEl.createSpan({ cls: "ah-heading-btn-icon" }), icon);
@@ -157,7 +161,9 @@ function renderPathRuleRow(
 	}
 
 	// 路径模式输入（接建议弹窗 + 行内清空按钮）。
-	const patternCell = row.createDiv({ cls: "ah-path-cell ah-path-c-pattern ah-path-pattern-cell" });
+	const patternCell = row.createDiv({
+		cls: "ah-path-cell ah-path-c-pattern ah-path-pattern-cell",
+	});
 	const input = patternCell.createEl("input", { type: "text", cls: "ah-text-input" });
 	input.value = rule.pattern;
 	input.placeholder = t.pathInputPlaceholder;

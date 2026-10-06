@@ -160,7 +160,7 @@ number. For now it affects only the line it's on, not the headings nested under 
 -   **Renumber now** — force an immediate renumber of the current file (see [Out of the box](#out-of-the-box) — this bypasses every switch)
 -   **Clear numbering in current file** — strip every number prefix this plugin ever wrote (or could have written), returning the file to bare headings. It also **pauses that one file** (by writing `obsidian-auto-headings: false` into its frontmatter) — otherwise your very next keystroke would put the numbers straight back. To hand the file back to the plugin, run **Renumber now**; it removes that property for you
 -   **Clear non-plugin heading numbering** — strip only numbering _not_ written by this plugin (hand-typed `1.` prefixes, imported document numbering, etc.) while leaving the plugin's own numbering untouched — the tool for taking over a document you didn't originate
--   **Clear numbering across the entire vault** — a settings-panel button, deliberately _not_ a command (so it can't be hotkey- or command-palette-triggered by accident), gated behind a confirmation dialog and tucked in a collapsed "danger zone" section
+-   **Clear numbering across the entire vault** — a settings-panel button, deliberately _not_ a command (so it can't be hotkey- or command-palette-triggered by accident), gated behind a confirmation dialog where you type "clear" to confirm, and kept under **Settings → Maintenance → Whole vault**
 
 ## How it works — and one thing you should know
 
@@ -227,9 +227,9 @@ If you only ever used display-only mode, the plugin never changed your files —
 
 In write mode, the only things this plugin ever writes into your files are numbering prefixes and two invisible marker characters — all fully removable. Two ways out, depending on whether you want to keep the numbers:
 
-**Drop the numbering** — Settings → Maintenance → **Clear numbering in the whole vault** (it first switches global auto-numbering off, so nothing gets renumbered mid-clear). Headings go back to bare text.
+**Drop the numbering** — Settings → Maintenance → **Clear vault numbering…** (type "clear" to confirm) (it first switches global auto-numbering off, so nothing gets renumbered mid-clear). Headings go back to bare text.
 
-**Keep the numbering** — Settings → Maintenance → **Freeze numbering and release ownership (entire vault)**. Every number stays exactly as it is, as ordinary text; only the invisible markers go, and the plugin stops numbering anything from then on. This is the one to use if you like your current numbering but no longer want a plugin managing it, or you're uninstalling and want to keep the result. Markers are removed vault-wide **including inside link anchors**, so your `[[note#heading]]` links keep resolving. Once frozen, the plugin can no longer tell those numbers were its own — that's the point, but it does mean the step is one-way: to hand control back, re-enable it and run **Clear non-plugin heading numbering** first, or the existing numbers get a second prefix stacked on top.
+**Keep the numbering** — Settings → Maintenance → **Freeze numbering…** (type "freeze" to confirm). Every number stays exactly as it is, as ordinary text; only the invisible markers go, and the plugin stops numbering anything from then on. This is the one to use if you like your current numbering but no longer want a plugin managing it, or you're uninstalling and want to keep the result. Markers are removed vault-wide **including inside link anchors**, so your `[[note#heading]]` links keep resolving. Once frozen, the plugin can no longer tell those numbers were its own — that's the point, but it does mean the step is one-way: to hand control back, re-enable it and run **Clear non-plugin heading numbering** first, or the existing numbers get a second prefix stacked on top.
 
 Then:
 

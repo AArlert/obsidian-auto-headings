@@ -136,3 +136,11 @@ export function clampDebounceDelay(value: number): number {
 	}
 	return Math.min(DEBOUNCE_MAX, Math.max(DEBOUNCE_MIN, Math.round(value)));
 }
+
+/**
+ * 全库操作确认框的确认词是否输对（1.2.2，testplan L44）：忽略首尾空白与大小写，
+ * 防误触而非防恶意——只要求用户有意识地敲一遍。
+ */
+export function confirmWordMatches(input: string, word: string): boolean {
+	return input.trim().toLowerCase() === word.trim().toLowerCase();
+}

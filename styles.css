@@ -608,36 +608,97 @@ button.ah-tab.ah-tab-active:hover {
 }
 
 /* 敏感操作 TAB 的 ⚠ 说明 */
-.ah-danger-intro {
-	color: var(--text-warning, var(--text-muted));
-	font-size: var(--font-ui-small);
-	margin: 4px 0 12px;
+/* —— 编号维护 TAB（1.2.2，testplan L43 / L44）—— */
+/* 分组标题右侧的一行灰字（「文件名 · 可用 Ctrl+Z 撤销」/ 警示图标 +「不可撤销…」） */
+.ah-maint-meta {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--font-ui-smaller);
+	font-weight: normal;
+	color: var(--text-faint);
+}
+
+.ah-maint-meta-icon {
+	display: inline-flex;
+	color: var(--text-warning);
+	--icon-size: 14px;
+}
+
+/* 页面上的危险操作：红字普通按钮（红底只留给确认框里的最后一步） */
+button.ah-danger-text {
+	color: var(--text-error);
+}
+
+.ah-confirm-word-label {
+	margin-top: 14px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ah-confirm-word-input {
+	width: 100%;
+	margin-top: 6px;
 }
 
 /* 迁移守卫可点击 Notice 里的链接（testplan J14）：与说明文字区分开，看起来可点击。 */
 .ah-foreign-guard-link {
+	display: block;
+	width: fit-content;
+	margin-top: 6px;
 	color: var(--text-accent);
-	text-decoration: underline;
+	font-weight: 600;
+	text-decoration: none;
 	cursor: pointer;
 }
 
-/* 疑似外来编号清理预览确认框（testplan J14/J17）：逐条勾选 + git 风格 diff 对照。
-   桌面稍微放宽弹窗宽度，长标题也能舒展开；卡片式留白、不紧凑。 */
-.modal.ah-foreign-guard-modal {
-	width: min(640px, 92vw);
+.ah-foreign-guard-link::after {
+	content: " ›";
 }
 
-/* 顶部搜索定位（J17 追加）：候选多时按标题现状文本实时匹配，结果列表紧贴输入框下方。 */
-.ah-foreign-guard-search {
-	margin: 0 0 12px;
+/* 疑似外来编号清理预览确认框（testplan J14/J17；1.2.2 版式，J22 / J23）：逐条勾选 + git 风格
+   红绿对照。条目不套卡片框；勾选框与红色首行文字中线对齐；列表滚动条占独立槽位
+   （scrollbar-gutter），顶部一行用同样的槽位，红绿行右缘与搜索框右缘对齐。 */
+.modal.ah-foreign-guard-modal {
+	width: min(700px, 92vw);
+	--ah-fg-check: 16px;
+}
+
+.ah-foreign-guard-toolbar,
+.ah-foreign-guard-list,
+.ah-foreign-guard-search-results {
+	scrollbar-gutter: stable;
+}
+
+/* 顶部一行：全选（三态）+ 已选 X / N … 搜索框 */
+.ah-foreign-guard-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 12px 0 10px;
+	overflow: hidden;
+}
+
+.ah-foreign-guard-all {
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.ah-foreign-guard-count {
+	color: var(--text-faint);
 }
 
 .ah-foreign-guard-search-input {
-	width: 100%;
+	width: 240px;
+	max-width: 50%;
 }
 
 .ah-foreign-guard-search-results {
-	margin: 6px 0 0;
+	margin: 0 0 8px;
 	padding-left: 0;
 	list-style: none;
 	max-height: 30vh;
@@ -676,72 +737,72 @@ button.ah-tab.ah-tab-active:hover {
 		background: var(--text-selection, var(--background-modifier-hover));
 	}
 	100% {
-		background: var(--background-secondary);
+		background: transparent;
 	}
 }
 
 .ah-foreign-guard-list {
 	max-height: 50vh;
 	overflow-y: auto;
-	margin: 0 0 16px;
+	margin: 0;
 	padding-left: 0;
 	list-style: none;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 12px;
 }
 
+/* 每条：勾选框 | 红绿两行。字号与行高固定，勾选框按首行中线算 margin-top。 */
 .ah-foreign-guard-item {
-	position: relative;
-	padding: 12px 14px 12px 40px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-m, 8px);
-	background: var(--background-secondary);
-}
-
-/* 逐条勾选（默认勾选=清理，J17）：checkbox 绝对定位悬在左侧留白里，不挤占 diff 的横向空间，
-   diff 因此能在所有宽度下都占满卡片内容区（1.0.24 起不再随宽度切换横排/竖排）。
-   `top` 与 item 的 `padding-top` 相等 ⇒ 天然对齐 before（红）首行顶部，红行换行成两排也不受影响。 */
-.ah-foreign-guard-toggle {
-	position: absolute;
-	top: 12px;
-	left: 14px;
-	display: block;
-	cursor: pointer;
+	display: grid;
+	grid-template-columns: var(--ah-fg-check) minmax(0, 1fr);
+	column-gap: 12px;
+	align-items: start;
+	border-radius: var(--radius-s, 4px);
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
 }
 
 .ah-foreign-guard-checkbox {
 	display: block;
-	width: 18px;
-	height: 18px;
+	width: var(--ah-fg-check);
+	height: var(--ah-fg-check);
 	margin: 0;
 	accent-color: var(--interactive-accent);
 	cursor: pointer;
 }
 
+/* 首行（红）：上内边距 5px + 一行 1.5em，中线在 5px + 0.75em 处 */
+.ah-foreign-guard-item > .ah-foreign-guard-checkbox {
+	margin-top: calc(5px + 0.75em - var(--ah-fg-check) / 2);
+}
+
+/* 未勾选（保留原文）的条目整体变淡（J23） */
+.ah-foreign-guard-item.is-kept .ah-foreign-guard-diff {
+	opacity: 0.55;
+}
+
 /* git 风格 −/+ 两行对照：现状（红）在上，套模板后的效果（绿）在下。 */
 .ah-foreign-guard-diff {
-	width: 100%;
-	min-width: 0; /* 允许长标题正常换行，不撑破卡片 */
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 2px;
 	font-family: var(--font-monospace);
-	font-size: var(--font-ui-small);
 }
 
 .ah-foreign-guard-line {
 	display: flex;
 	align-items: flex-start;
-	gap: 8px;
-	padding: 4px 8px;
+	gap: 10px;
+	padding: 5px 10px;
 	border-radius: var(--radius-s, 4px);
 }
 
 .ah-foreign-guard-marker {
 	flex: 0 0 auto;
+	width: 0.6em;
 	font-weight: 600;
-	opacity: 0.75;
 }
 
 .ah-foreign-guard-text {
@@ -768,20 +829,41 @@ button.ah-tab.ah-tab-active:hover {
 	color: var(--color-green, #08b94e);
 }
 
-/* 窄屏（含移动端）：布局与桌面端一致（checkbox 悬浮左侧留白 + diff 占满内容区），
-   仅放大勾选可点触区域，相应加宽卡片左侧留白避免与 diff 重叠。 */
+/* 底部：分隔线 + 撤销提示 … 取消 / 确认清理 N 处 */
+.ah-foreign-guard-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 16px;
+	padding-top: 14px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.ah-foreign-guard-undo {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ah-foreign-guard-buttons {
+	display: flex;
+	gap: 8px;
+}
+
+/* 窄屏（含移动端）：放大勾选可点触区域，搜索框占满下一行 */
 @media (max-width: 480px) {
 	.modal.ah-foreign-guard-modal {
 		width: 100vw;
+		--ah-fg-check: 22px;
 	}
 
-	.ah-foreign-guard-item {
-		padding-left: 44px;
+	.ah-foreign-guard-toolbar {
+		flex-wrap: wrap;
 	}
 
-	.ah-foreign-guard-checkbox {
-		width: 22px;
-		height: 22px;
+	.ah-foreign-guard-search-input {
+		width: 100%;
+		max-width: none;
 	}
 }
 
@@ -814,26 +896,73 @@ button.ah-tab.ah-tab-active:hover {
 	padding: 10px 0 0;
 }
 
-/* 关于 TAB 的链接行 */
+/* —— 关于插件 TAB（1.2.2，testplan L45）—— */
+.ah-about-head {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	padding-top: 8px;
+}
+
+.ah-about-name {
+	font-size: 1.25em;
+	font-weight: 600;
+}
+
+.ah-about-version {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ah-about-desc {
+	max-width: 560px;
+	margin: 8px 0 0;
+	font-size: var(--font-ui-small);
+	line-height: 1.6;
+	color: var(--text-muted);
+}
+
 .ah-about-links {
 	display: flex;
-	gap: 16px;
-	margin-top: 12px;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 18px 0 8px;
 }
 
-/* 关于 TAB 的鸣谢列表 */
-.ah-about-credits {
-	display: flex;
-	flex-direction: column;
-	gap: 0.6em;
+/* 链接做成普通按钮的样子（外链图标 + 文字） */
+.ah-about-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: var(--input-height, 30px);
+	padding: 0 12px;
+	border-radius: var(--button-radius, var(--radius-s));
+	background: var(--interactive-normal);
+	box-shadow: var(--input-shadow);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	text-decoration: none;
 }
 
-.ah-about-credit-item .ah-section-desc {
-	margin: 0.2em 0 0;
+.ah-about-link:hover {
+	background: var(--interactive-hover);
+	color: var(--text-normal);
 }
 
-.ah-about-credit-repo {
-	font-weight: var(--font-medium);
+.ah-about-link-icon {
+	display: inline-flex;
+	color: var(--text-muted);
+	--icon-size: 16px;
+}
+
+.ah-about-credit .setting-item-name a {
+	color: var(--text-normal);
+	text-decoration: none;
+}
+
+.ah-about-credit .setting-item-name a:hover {
+	color: var(--text-accent);
 }
 
 /* 防抖滑块左侧的当前值（1.2.2，testplan L29） */
@@ -1143,7 +1272,9 @@ button.ah-editor-tab.is-active:hover {
 .ah-fmt-row {
 	display: grid;
 	/* 级别 前缀 序号 序号间隔符 后缀 标题间隔符 上级编号 预览 */
-	grid-template-columns: 36px minmax(48px, 0.8fr) minmax(96px, 1.3fr) minmax(48px, 0.8fr) minmax(48px, 0.8fr) minmax(48px, 0.8fr) minmax(84px, 1fr) minmax(96px, 1.4fr);
+	grid-template-columns:
+		36px minmax(48px, 0.8fr) minmax(96px, 1.3fr) minmax(48px, 0.8fr) minmax(48px, 0.8fr)
+		minmax(48px, 0.8fr) minmax(84px, 1fr) minmax(96px, 1.4fr);
 	column-gap: 10px;
 	align-items: center;
 	min-height: 42px;

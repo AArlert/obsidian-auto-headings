@@ -8,7 +8,7 @@
  *
  * 选中非「不联动」时额外渲染一行「词典文件路径 + 一键复制」。
  *
- * 两个确认 Modal 的结构照抄 DangerTab.ts 的 ClearVaultModal/FreezeVaultModal 惯例
+ * 两个确认 Modal 的结构照抄 MaintenanceTab.ts 的 VaultConfirmModal 惯例
  * （Modal 子类 + onOpen 里 createEl + 取消/确认按钮，确认后 this.close() 再 await 业务方法）。
  */
 

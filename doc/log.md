@@ -15,41 +15,37 @@
 
 ---
 
-## 2026-10-07 1.2.2 视觉风格更新：第一块（外壳 + 全局设置）（不 bump，交接：feat/1.2.2-visual-refresh，仅本地、未推送）
+## 2026-10-07 1.2.2 视觉风格更新：M15 全部落地（不 bump，交接：feat/1.2.2-visual-refresh，仅本地、未推送）
 
 ### 做了什么
 
-- **通用规矩**：分区标题回原生 `setHeading()`，删 `.ah-section-head` 竖条（L20）；8 处弹窗改原生
-  `Modal.setTitle`（方案写 7 处，漏了 VC 自动确认框，L27）。
-- **外壳**：TAB 改四字名（编号维护 / 关于插件，英文 Maintenance），编号维护图标换 `wrench`；去掉右上角版本号（L9）。
-- **全局设置**：说明一律一行，加 `i18n.test.ts` 长度守门（中文 ≤ 32 字、英文 ≤ 90，L28），删「标题链接建议」
-  导语段；防抖滑块左侧常显当前值（L29）；VC 三行缩进挂在「标题链接建议」下，VC 已启用或联动已开才显示（L30，
-  取代 Q24 例外 ②，Q10 同步注明）；离场提示条改中性灰（L31）。
-- 删掉的长解释落进使用指南新节「标题链接建议」（中英）；README / 使用指南里的旧 TAB 名改掉；spec 3.13 部分改写，
-  Roadmap M15 勾掉已完成项。
-- 构建已部署 iCloud 测试库，等用户看第一块。
+- **第一块（外壳 + 全局设置）**：分区标题回原生、8 处弹窗原生 `setTitle`、TAB 四字名（编号维护图标 `wrench`）、
+  全局设置说明一行化（`i18n.test.ts` 守门）、防抖滑块常显数值、VC 三行缩进且按 VC 状态显隐、离场提示条中性化。
+  用户看过后定：外壳版本号**保留**；「在大纲中显示编号」开关**删除**、固定开启（旧字段加载时清理）。
+- **第二块（路径模板）**：规则表去行号改当前笔记圆点、添加规则挪到标题行、窄屏两行 + ⋯ 菜单（确认框拆到
+  `PathRuleModals.ts`）；模板卡片；新增模板编辑弹窗 `TemplateEditorModal.ts`（格式页 `EditPanel.ts` / 底部预览
+  `TemplatePreview.ts` / 白名单页图例）；纯逻辑 `templateView.ts` + `templateView.test.ts`。
+- **第三块**：编号维护 TAB（`DangerTab.ts` → `MaintenanceTab.ts`，两组、补「立即重新编号」「清除残留编号」入口、
+  全库确认框输入确认词 `confirmWordMatches`）；关于插件（双语简介、按钮链接、鸣谢一行名称 + 一行说明）；外来编号
+  弹窗（全选三态、已选计数、去卡片框、勾选框对齐、滚动条独立槽位、写明数量的确认按钮）与带处数的 Notice。
+- testplan：L9 / L10 / L12 / L13 / L20 / L23 改写，新增 L27–L45、J22–J24，Q10 / Q24 / V43 注明变化；spec 3.6 / 3.7 /
+  3.10 / 3.13 / 3.18 / 3.22 / 4 同步，Roadmap M15 全勾并写两条落地备注；使用指南补「标题链接建议」一节。
 
 ### 没做什么
 
-- 用户 2026-10-07 定「三大块分批看」：第二块（路径规则 + 模板卡片 + 模板编辑弹窗）、第三块（编号维护 + 关于插件 +
-  外来编号）未动。「说明一行」「强调色 / 红色用法」两条通用规矩随后两块逐 TAB 落实。
-- 行为上唯一可感知的变化：VC 未安装 / 未启用且联动关着时，不能再预先开「手动配置」（入口不显示）——用户审稿时定的。
+- 两处有意偏离画布（Roadmap M15 落地备注）：全库清除确认框**没加**「同时关闭自动编号」勾选框（H7 既定行为，做成
+  可选会改功能）；「清理非本插件编号」保持直接执行，不改成先弹预览框。
+- 新界面的 🔲 手验场景都还没过真机；没 bump、没写发布说明、没推送。
 
 ### 下一步
 
-- **用户改主意（2026-10-07）：照 Artifact 画布把剩下的全部做完再叫他看**；外壳版本号保留；「在大纲中显示编号」开关已删（已提交）。
-- 第二块进行中：L 组场景 L32–L42 已写（L6 / L10 / L13 / L23 已改写）；纯逻辑 `src/settings/templateView.ts` 已写、**单测未写**
-  （`tests/dev_tests/templateView.test.ts`）。待做：规则表（PathRules.ts，弹窗类拆到新文件）、模板卡片（TemplatesTab.ts）、
-  新建 `TemplateEditorModal.ts` + `TemplatePreview.ts`、EditPanel.ts 改格式页、WhitelistEditor.ts 加图例与 0 角标隐藏、
-  i18n 新键与清理废键、styles.css；画布样稿 Rules / TemplateEditor / Whitelist / MobileRules.dc.html。
-- 第三块（编号维护 / 关于插件 / 外来编号）未动。全部完成后部署 iCloud 库再叫用户。仍不推送、不合并、不 bump。
+- 用户在 iCloud 测试库实测整套 1.2.2 → 按反馈改 → 用户确认后 bump 1.2.2、写 `doc/release-notes/1.2.2.md`、
+  testplan「未发版」换版本号、合并 master、推送、打 tag（期间仍不推送，见 [[release-1.2.2-local-first]] 记忆）。
 
 ### 验证方式
 
-- `npm run check`：822 条测试仅 `whitelist.test.ts:406` Windows ICU 假红；eslint / prettier（本仓库文件）/ docs 守卫通过。
-
----
-
+- `npm run check`：837 条测试仅 `whitelist.test.ts:406` Windows ICU 假红；tsc / eslint / prettier（本仓库文件）/ docs 守卫通过。
+- 构建已部署 iCloud 测试库（`release/` 2026-10-07 07:08）。
 ## 2026-10-07 1.2.2 视觉风格更新：方案定稿（不 bump，交接：feat/1.2.2-visual-refresh，仅本地、未推送）
 
 ### 做了什么

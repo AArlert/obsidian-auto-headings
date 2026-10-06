@@ -36,7 +36,8 @@ export function renderTemplatePreview(
 		const head = box.createDiv({ cls: "ah-preview-head" });
 		head.createSpan({
 			cls: "ah-preview-title",
-			text: source === "current" && note ? `${t.previewTitle} · ${note.path}` : t.previewTitle,
+			text:
+				source === "current" && note ? `${t.previewTitle} · ${note.path}` : t.previewTitle,
 		});
 		const toggles = head.createDiv({ cls: "ah-preview-toggles" });
 		const toggle = (id: "sample" | "current", label: string): void => {
@@ -98,7 +99,10 @@ export function renderTemplatePreview(
 		highlight(level: number | null): void {
 			highlighted = level;
 			box.querySelectorAll<HTMLElement>(".ah-preview-line").forEach((el) => {
-				el.toggleClass("is-highlight", level !== null && el.dataset.level === String(level));
+				el.toggleClass(
+					"is-highlight",
+					level !== null && el.dataset.level === String(level),
+				);
 			});
 		},
 	};

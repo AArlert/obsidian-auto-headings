@@ -144,7 +144,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private vcTruncationNoticed = false;
 
 	/**
-	 * 「清除全库编号」进行中标志（M7 多 TAB 敏感操作，见 spec.md §3.10）：置位期间
+	 * 「清除全库编号」进行中标志（编号维护 TAB，见 spec.md §3.10）：置位期间
 	 * {@link shouldAutoTrigger} 恒 false——批量写回会触发已打开文件的 editor-change，若不压制，
 	 * 防抖到期后刚清掉的编号会被立刻编回去。仅内存标志，不持久化；清除完毕（含异常）恢复。
 	 */
@@ -950,7 +950,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * `getActiveFile()`，阅读视图里的笔记同样能标出命中的规则。
 	 */
 	activeNotePath(): string | null {
-		return this.activeNoteForPreview()?.path ?? this.app.workspace.getActiveFile?.()?.path ?? null;
+		return (
+			this.activeNoteForPreview()?.path ?? this.app.workspace.getActiveFile?.()?.path ?? null
+		);
 	}
 
 	/** 某模板的影响范围（1.2.2 模板卡片与编辑弹窗底部说明，testplan L41）。 */
@@ -1121,7 +1123,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			this.dismissGuardNotice(path);
 			return false;
 		}
-		this.showForeignNumberingGuardNotice(path);
+		this.showForeignNumberingGuardNotice(path, content);
 		return true;
 	}
 
@@ -1154,7 +1156,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 与 `createEl`/`createDiv`/`createSpan` 同类，直接按全局标识符调用。`tests/dev_tests/obsidian-mock.ts`
 	 * 在加载时把同名替身挂到 `globalThis`，供单测环境（无真实 Obsidian/DOM 运行时）下使用。
 	 */
-	private showForeignNumberingGuardNotice(path: string): void {
+	private showForeignNumberingGuardNotice(path: string, content: string): void {
 		// ① 只为用户当前正看着的文件发声（见 activeGuardNotice 注释）：防抖计时器可能在用户已经
 		//    切走之后才到期，批量刷新更是遍历全部叶子——为看不见的文件弹提示，用户只会把它读成
 		//    在说眼前这篇，点进去又发现「没什么可清理」（1.0.19 真机反馈的正是这条链路）。
@@ -1169,11 +1171,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.activeGuardNotice?.notice.hide();
 
 		const t = this.messages();
+		// 1.2.2（testplan J24）：一句话带处数，「查看并清理」另起一行。处数与清理预览同一口径
+		// （previewForeignNumberingCleanup），点进去看到的条数与提示一致。
+		const count = previewForeignNumberingCleanup(content).length;
 		let link!: HTMLAnchorElement;
 		const frag = createFragment((el) => {
-			el.appendText(
-				`${this.isVirtualFile(path) ? t.noticeForeignNumberingGuardVirtual : t.noticeForeignNumberingGuard} `,
-			);
+			// 链接另起一行由 styles.css 的 `.ah-foreign-guard-link { display: block }` 负责。
+			el.appendText(t.noticeForeignGuardCount(count, this.isVirtualFile(path)));
 			link = el.createEl("a", {
 				text: t.noticeForeignNumberingGuardAction,
 				href: "#",
@@ -1744,8 +1748,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
-	 * 取「当前活动 Markdown 文件」的编辑器与上下文，供设置面板**敏感操作 TAB** 的两个单文件清除
-	 * 入口使用。设置面板是模态层，`getActiveViewOfType(MarkdownView)` 可能返回 `null`（testplan TPL-refresh 同源），
+	 * 取「当前活动 Markdown 文件」的编辑器与上下文，供设置面板**编号维护 TAB** 的单文件入口与
+	 * 模板编辑弹窗的预览使用。设置面板是模态层，`getActiveViewOfType(MarkdownView)` 可能返回 `null`（testplan TPL-refresh 同源），
 	 * 故回退到「按 `getActiveFile()` 在打开的 markdown 叶子里找同路径视图」（{@link markdownContextForPath}）。
 	 * 找不到返回 `null`。
 	 */
@@ -1777,7 +1781,34 @@ export default class AutoHeadingsPlugin extends Plugin {
 		return null;
 	}
 
-	/** 敏感操作 TAB 入口：对当前活动文件执行「清除当前文件编号」；无活动 Markdown 文件时 Notice。 */
+	/** 编号维护 TAB 入口：对当前活动文件执行「立即重新编号」；无活动 Markdown 文件时 Notice。 */
+	renumberActiveNoteNow(): void {
+		const found = this.activeMarkdownContext();
+		if (!found) {
+			new Notice(this.messages().noticeNoActiveFile);
+			return;
+		}
+		this.runImmediateRenumber(found.editor, found.ctx);
+	}
+
+	/**
+	 * 编号维护 TAB 入口：对当前活动文件执行「清除本文件残留编号」。与同名命令一样只对仅显示笔记有意义
+	 * （写入笔记清了下一次按键又会被编回去），其他笔记弹 Notice 说明。
+	 */
+	clearActiveFileStaleNumbering(): void {
+		const found = this.activeMarkdownContext();
+		if (!found) {
+			new Notice(this.messages().noticeNoActiveFile);
+			return;
+		}
+		if (!this.isVirtualFile(found.ctx.file?.path)) {
+			new Notice(this.messages().noticeStaleNotVirtual);
+			return;
+		}
+		this.runClearStaleNumbering(found.editor, found.ctx);
+	}
+
+	/** 编号维护 TAB 入口：对当前活动文件执行「清除当前文件编号」；无活动 Markdown 文件时 Notice。 */
 	clearActiveFileNumbering(): void {
 		const found = this.activeMarkdownContext();
 		if (!found) {
@@ -1787,7 +1818,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.runClearNumbering(found.editor, found.ctx);
 	}
 
-	/** 敏感操作 TAB 入口：对当前活动文件执行「清理非本插件的标题编号」；无活动文件时 Notice。 */
+	/** 编号维护 TAB 入口：对当前活动文件执行「清理非本插件的标题编号」；无活动文件时 Notice。 */
 	clearActiveFileForeignNumbering(): void {
 		const found = this.activeMarkdownContext();
 		if (!found) {
@@ -1979,7 +2010,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		if (isMostlyForeignNumbered(content)) {
-			this.showForeignNumberingGuardNotice(path);
+			this.showForeignNumberingGuardNotice(path, content);
 		} else {
 			this.dismissGuardNotice(path);
 		}
@@ -1989,7 +2020,6 @@ export default class AutoHeadingsPlugin extends Plugin {
 	staleTooltip(): string {
 		return this.messages().virtualStaleTooltip;
 	}
-
 
 	/** 阅读视图拿不到段落信息时读文件全文（M14 兜底）；不是 Markdown 文件或读失败返回 `null`。 */
 	async readFileContent(path: string): Promise<string | null> {
