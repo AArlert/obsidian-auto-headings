@@ -97,7 +97,15 @@ export function headingHandleExtension(entry: NoteEntry): Extension {
 				const s = this.view.scrollDOM.getBoundingClientRect();
 				const r = line.getBoundingClientRect();
 				const top = r.top - s.top + this.view.scrollDOM.scrollTop;
-				const base = Platform.isMobile ? r.right - 28 : r.left - DESKTOP_OFFSET;
+				let base: number;
+				if (!Platform.isMobile && r.left - s.left >= DESKTOP_OFFSET + 8) {
+					base = r.left - DESKTOP_OFFSET;
+				} else {
+					// 左边距放不下（窄边距 / 手机）：贴在标题文字末尾，不压折叠箭头。
+					const range = document.createRange();
+					range.selectNodeContents(line);
+					base = Math.min(range.getBoundingClientRect().right + 8, r.right - 28);
+				}
 				const left = Math.max(2, base - s.left + this.view.scrollDOM.scrollLeft);
 				this.el.style.top = `${top}px`;
 				this.el.style.left = `${left}px`;

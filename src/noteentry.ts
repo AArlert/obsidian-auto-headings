@@ -22,11 +22,15 @@ import { headingHandleExtension } from "./headinghandle";
 import { stripWordJoiners } from "./strip";
 import { NO_NUMBERING_TEMPLATE, resolvePathRule } from "./pathrules";
 
+/** 选择器里「清除单篇模板、跟随路径规则」的哨兵项（模板名不会为空串）。 */
+const FOLLOW_RULE = "";
+
 /** 模板选择器：原生模糊搜索弹窗，选中即回调（单篇模板，S9）。 */
 class TemplatePickerModal extends FuzzySuggestModal<string> {
 	constructor(
 		app: App,
 		private readonly names: string[],
+		private readonly followLabel: string,
 		placeholder: string,
 		private readonly onChoose: (name: string) => void,
 	) {
@@ -37,7 +41,7 @@ class TemplatePickerModal extends FuzzySuggestModal<string> {
 		return this.names;
 	}
 	getItemText(item: string): string {
-		return item;
+		return item === FOLLOW_RULE ? this.followLabel : item;
 	}
 	onChooseItem(item: string): void {
 		this.onChoose(item);
@@ -230,11 +234,28 @@ export class NoteEntry {
 			new Notice(m.noticeNoTemplates);
 			return;
 		}
-		new TemplatePickerModal(p.app, names, m.chooseTemplatePlaceholder, (name) => {
-			void this.writeFrontmatter(file, (fm) => {
-				fm[TEMPLATE_KEY] = name;
-			}).then(() => new Notice(p.messages().noticeNoteTemplateSet(name)));
-		}).open();
+		new TemplatePickerModal(
+			p.app,
+			[FOLLOW_RULE, ...names],
+			m.chooseTemplateFollowRule,
+			m.chooseTemplatePlaceholder,
+			(name) => {
+				void this.writeFrontmatter(file, (fm) => {
+					if (name === FOLLOW_RULE) {
+						delete fm[TEMPLATE_KEY];
+					} else {
+						fm[TEMPLATE_KEY] = name;
+					}
+				}).then(
+					() =>
+						new Notice(
+							name === FOLLOW_RULE
+								? p.messages().noticeNoteTemplateCleared
+								: p.messages().noticeNoteTemplateSet(name),
+						),
+				);
+			},
+		).open();
 	}
 
 	/** 开关当前笔记的自动编号（S12）：有效为开写 false，否则写 true。 */
@@ -263,6 +284,10 @@ export class NoteEntry {
 		edit: (fm: Record<string, unknown>) => void,
 	): Promise<void> {
 		await this.plugin.app.fileManager.processFrontMatter(file, edit);
+		// 删光最后一个键后官方 API 会留下空的 `---`/`---` 外壳，顺手清掉（S15：不留空壳）。
+		await this.plugin.app.vault.process(file, (c) =>
+			c.replace(/^---\r?\n---[ \t]*(\r?\n|$)/, ""),
+		);
 		this.plugin.renumberActiveFile();
 		this.updateStatus();
 	}

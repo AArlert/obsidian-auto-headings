@@ -324,6 +324,8 @@ export interface Messages {
 	noticeNoteAutoOff: string;
 	noticeNoTemplates: string;
 	chooseTemplatePlaceholder: string;
+	chooseTemplateFollowRule: string;
+	noticeNoteTemplateCleared: string;
 	/** 状态栏「本篇」标签与菜单。 */
 	statusModeWrite: string;
 	statusModeVirtual: string;
@@ -738,6 +740,8 @@ const zh: Messages = {
 	noticeNoteAutoOff: "这篇笔记已设为不自动编号",
 	noticeNoTemplates: "没有可选的模板",
 	chooseTemplatePlaceholder: "选择这篇笔记使用的模板…",
+	chooseTemplateFollowRule: "（跟随路径规则，清除这篇的单独设置）",
+	noticeNoteTemplateCleared: "这篇笔记恢复使用路径规则的模板",
 	statusModeWrite: "写入",
 	statusModeVirtual: "仅显示",
 	statusNoNumbering: "本篇不编号",
@@ -1141,6 +1145,8 @@ const en: Messages = {
 	noticeNoteAutoOff: "This note is set to not auto-number",
 	noticeNoTemplates: "No templates available",
 	chooseTemplatePlaceholder: "Choose a template for this note…",
+	chooseTemplateFollowRule: "(Follow path rule — clear this note's override)",
+	noticeNoteTemplateCleared: "This note now follows its path rule's template",
 	statusModeWrite: "Write",
 	statusModeVirtual: "Display only",
 	statusNoNumbering: "Not numbered",
