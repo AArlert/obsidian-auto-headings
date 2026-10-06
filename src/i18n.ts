@@ -428,7 +428,7 @@ const zh: Messages = {
 		`vault 过大，标题索引未完整构建（已索引 ${indexed} 个）；建议功能在已索引范围内可用。`,
 	vcCoexistName: "Various Complements 启用时",
 	vcCoexistDesc:
-		"两插件共用同一个建议框，只能留一个。默认让路给 VC：配合词典联动，两边候选同框可见（最完整）。**仅当词典联动开启时才真让路**，否则仍由本插件接管。VC 未安装/未启用时本项无效。",
+		"两插件共用同一个建议框，只能留一个。默认让路给 VC：配合词典联动，两边候选同框可见（最完整）。仅当词典联动开启时才真让路，否则仍由本插件接管。VC 未安装/未启用时本项无效。",
 	vcCoexistYield: "让路给 Various Complements（推荐）",
 	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
 	vcCoexistFallbackHint:
@@ -624,11 +624,11 @@ const zh: Messages = {
 	clearVaultBtn: "清除全库编号…",
 	freezeVaultName: "固化编号并交还所有权（全库）",
 	freezeVaultDesc:
-		"**保留**现有编号、只移除不可见标记，此后插件停止一切自动编号。适合「想留住编号但不想再被管」或准备卸载；不可逆、不在撤销历史内，建议先备份。注意：「仅显示」模式的编号本来就不在文件里，固化后会随之消失。",
+		"保留现有编号、只移除不可见标记，此后插件停止一切自动编号。适合「想留住编号但不想再被管」或准备卸载；不可逆、不在撤销历史内，建议先备份。注意：「仅显示」模式的编号本来就不在文件里，固化后会随之消失。",
 	freezeVaultBtn: "固化编号并交还所有权…",
 	retiredBannerTitle: "插件已交还编号所有权",
 	retiredBannerBody:
-		"编号已保留为普通文本，插件当前**不做任何自动编号**。恢复接管：点下面按钮，再对相关文件跑「清理非本插件的标题编号」；否则现有编号会被当外来编号，叠成双重编号。",
+		"编号已保留为普通文本，插件当前不做任何自动编号。恢复接管：点下面按钮，再对相关文件跑「清理非本插件的标题编号」；否则现有编号会被当外来编号，叠成双重编号。",
 	resumeBtn: "恢复接管",
 
 	aboutVersionLabel: "版本",
@@ -661,7 +661,7 @@ const zh: Messages = {
 
 	freezeVaultModalTitle: "固化编号并交还所有权（全库）",
 	freezeVaultModalBody:
-		"确认后：① 全库编号**原样保留**为普通文本；② 移除全部不可见标记（含链接锚点内的，[[笔记#标题]] 仍可解析）；③ 插件**停止一切自动编号**（凌驾于 frontmatter 开关）；④ 不在撤销历史内，建议先备份；⑤ 恢复接管前须先跑「清理非本插件的标题编号」，否则会叠成双重编号。确认继续？",
+		"确认后：① 全库编号原样保留为普通文本；② 移除全部不可见标记（含链接锚点内的，[[笔记#标题]] 仍可解析）；③ 插件停止一切自动编号（凌驾于 frontmatter 开关）；④ 不在撤销历史内，建议先备份；⑤ 恢复接管前须先跑「清理非本插件的标题编号」，否则会叠成双重编号。确认继续？",
 	confirmFreezeVault: "确认固化并交还",
 
 	foreignGuardModalTitle: "疑似非本插件的编号",
@@ -763,7 +763,7 @@ const en: Messages = {
 		`Vault too large: heading index built partially (${indexed} headings indexed); suggestions work within the indexed range.`,
 	vcCoexistName: "When Various Complements is enabled",
 	vcCoexistDesc:
-		"Both plugins share the single suggestion popup, so only one can win. Default: yield to VC — with the dictionary integration below, both sides' candidates appear in one popup (the most complete setup). **Yielding only takes effect while the dictionary integration is on**; otherwise this plugin keeps serving. No effect when VC is not installed or not enabled.",
+		"Both plugins share the single suggestion popup, so only one can win. Default: yield to VC — with the dictionary integration below, both sides' candidates appear in one popup (the most complete setup). Yielding only takes effect while the dictionary integration is on; otherwise this plugin keeps serving. No effect when VC is not installed or not enabled.",
 	vcCoexistYield: "Yield to Various Complements (recommended)",
 	vcCoexistOwn: "This plugin wins (hides VC's popup)",
 	vcCoexistFallbackHint:
@@ -974,11 +974,11 @@ const en: Messages = {
 	clearVaultBtn: "Clear vault numbering…",
 	freezeVaultName: "Freeze numbering and release ownership (entire vault)",
 	freezeVaultDesc:
-		"**Keeps** your numbers and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For “keep the numbers, drop the plugin” (e.g. before uninstalling). Irreversible and NOT in undo history — back up first. Note: numbers in display-only mode were never in the files, so they disappear after freezing.",
+		"Keeps your numbers and removes only the plugin's invisible markers; the plugin then stops all automatic numbering. For “keep the numbers, drop the plugin” (e.g. before uninstalling). Irreversible and NOT in undo history — back up first. Note: numbers in display-only mode were never in the files, so they disappear after freezing.",
 	freezeVaultBtn: "Freeze numbering and release ownership…",
 	retiredBannerTitle: "The plugin has released ownership of your numbering",
 	retiredBannerBody:
-		"Your numbers remain as ordinary text and the plugin is currently doing **no** automatic numbering. To hand control back: press the button below, then run **Clean foreign numbering** on the affected files, or existing numbers get stacked with a fresh prefix.",
+		"Your numbers remain as ordinary text and the plugin is currently doing no automatic numbering. To hand control back: press the button below, then run “Clean foreign numbering” on the affected files, or existing numbers get stacked with a fresh prefix.",
 	resumeBtn: "Resume managing numbering",
 
 	aboutVersionLabel: "Version",
@@ -1011,7 +1011,7 @@ const en: Messages = {
 
 	freezeVaultModalTitle: "Freeze numbering and release ownership (entire vault)",
 	freezeVaultModalBody:
-		"Confirming: (1) your numbers are **kept as-is**, becoming ordinary text; (2) the invisible markers (U+2060) are removed vault-wide — **including inside link anchors**, so [[note#heading]] still resolves; (3) the plugin **stops all automatic numbering** (overrides frontmatter); (4) NOT in undo history — back up first; (5) to take over again later, run **Clean foreign numbering** first, or a fresh prefix gets stacked on top. Continue?",
+		"Confirming: (1) your numbers are kept as-is, becoming ordinary text; (2) the invisible markers (U+2060) are removed vault-wide — including inside link anchors, so [[note#heading]] still resolves; (3) the plugin stops all automatic numbering (overrides frontmatter); (4) NOT in undo history — back up first; (5) to take over again later, run “Clean foreign numbering” first, or a fresh prefix gets stacked on top. Continue?",
 	confirmFreezeVault: "Confirm freeze and release",
 
 	foreignGuardModalTitle: "Possible non-plugin numbering",
