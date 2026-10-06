@@ -73,6 +73,39 @@ export function hasSkipMarker(headingText: string): boolean {
 }
 
 /**
+ * **整节跳过标记**（1.3.0）：行尾 `<!-- skip-tree -->`，与 {@link hasSkipMarker} 同形、同样大小写不敏感，
+ * 但作用于**该标题及其整棵子树**（到下一个级别不深于它的标题为止）：子树内全部标题透明——不编号、
+ * 不占序号、剥离已有编号，其后同级编号照常连续（与单标题跳过一样不重置计数器）。
+ */
+const SKIP_TREE_MARKER_RE = /<!--\s*skip-tree\s*-->\s*$/i;
+
+/** 判定一个标题是否带「整节跳过」标记（用法同 {@link hasSkipMarker}）。 */
+export function hasSkipTreeMarker(headingText: string): boolean {
+	return SKIP_TREE_MARKER_RE.test(headingText);
+}
+
+/**
+ * 按「整节跳过」标记算出被整节豁免的标题集合：带标记的标题自己，加上其后级别更深的连续标题。
+ * `headings` 须是 {@link parseHeadings} 的结果（按行号升序）。
+ */
+export function computeSkipTreeMembers(headings: readonly Heading[]): Set<Heading> {
+	const out = new Set<Heading>();
+	let rootLevel: number | null = null;
+	for (const h of headings) {
+		if (rootLevel !== null && h.level > rootLevel) {
+			out.add(h);
+			continue;
+		}
+		rootLevel = null;
+		if (hasSkipTreeMarker(h.rawText)) {
+			rootLevel = h.level;
+			out.add(h);
+		}
+	}
+	return out;
+}
+
+/**
  * 将完整文件内容解析为标题列表。
  *
  * 跳过区域的识别规则见 {@link scanSkipRegions}：围栏代码块须由**同种**栅栏符号、且**数量

@@ -14,10 +14,16 @@ import {
 	type TFile,
 } from "obsidian";
 import type AutoHeadingsPlugin from "./main";
-import { planSectionShift, toggleSkipMarker } from "./headingedit";
+import {
+	planSectionShift,
+	skipKindOf,
+	stripSkipMarker,
+	toggleSkipMarker,
+	type SkipKind,
+} from "./headingedit";
 import { sectionHeadingAt } from "./copycommands";
 import { readFileSwitch, SWITCH_KEY, TEMPLATE_KEY } from "./frontmatter";
-import { hasSkipMarker, parseHeadings, type Heading } from "./parser";
+import { parseHeadings, type Heading } from "./parser";
 import { headingHandleExtension } from "./headinghandle";
 import { stripWordJoiners } from "./strip";
 import { NO_NUMBERING_TEMPLATE, resolvePathRule } from "./pathrules";
@@ -85,6 +91,9 @@ export class NoteEntry {
 		headingCmd("toggle-heading-skip", t.cmdToggleHeadingSkip, (e, h) =>
 			this.toggleSkip(e, h.lineIndex),
 		);
+		headingCmd("toggle-section-skip", t.cmdToggleSectionSkip, (e, h) =>
+			this.toggleSkip(e, h.lineIndex, "tree"),
+		);
 		headingCmd("promote-section", t.cmdPromoteSection, (e, h) =>
 			this.shiftSection(e, h.lineIndex, -1),
 		);
@@ -122,19 +131,7 @@ export class NoteEntry {
 					return;
 				}
 				const m = p.messages();
-				menu.addItem((item) =>
-					item
-						.setTitle(m.menuToggleSkip)
-						.setIcon("eye-off")
-						.setChecked(hasSkipMarker(h.rawText))
-						.onClick(() => this.toggleSkip(editor, h.lineIndex)),
-				);
-				menu.addItem((item) =>
-					item
-						.setTitle(m.menuCopySectionLink)
-						.setIcon("link")
-						.onClick(() => void p.runCopySectionLink(file, h)),
-				);
+				this.addHeadingItems(menu, editor, file, h, false);
 			}),
 		);
 
@@ -154,35 +151,10 @@ export class NoteEntry {
 		}
 		const m = p.messages();
 		const menu = new Menu();
-		const bare = hasSkipMarker(h.text) ? toggleSkipMarker(h.text) : h.text;
-		const title = stripWordJoiners(bare).trim();
+		const title = stripWordJoiners(stripSkipMarker(h.text)).trim();
 		menu.addItem((i) => i.setTitle(m.menuHandleLabel(title, h.level)).setIsLabel(true));
 		menu.addSeparator();
-		menu.addItem((i) =>
-			i
-				.setTitle(m.menuToggleSkip)
-				.setIcon("eye-off")
-				.setChecked(hasSkipMarker(h.rawText))
-				.onClick(() => this.toggleSkip(editor, lineIndex)),
-		);
-		menu.addItem((i) =>
-			i
-				.setTitle(m.menuPromoteSection)
-				.setIcon("arrow-up")
-				.onClick(() => this.shiftSection(editor, lineIndex, -1)),
-		);
-		menu.addItem((i) =>
-			i
-				.setTitle(m.menuDemoteSection)
-				.setIcon("arrow-down")
-				.onClick(() => this.shiftSection(editor, lineIndex, 1)),
-		);
-		menu.addItem((i) =>
-			i
-				.setTitle(m.menuCopySectionLink)
-				.setIcon("link")
-				.onClick(() => void p.runCopySectionLink(file, h)),
-		);
+		this.addHeadingItems(menu, editor, file, h, true);
 		menu.addSeparator();
 		menu.addItem((i) =>
 			i
@@ -200,10 +172,66 @@ export class NoteEntry {
 
 	// ───────────────────────── 单标题 / 整节改写 ─────────────────────────
 
-	/** 切换某标题行的跳过标记；一次编辑事务（S1/S2）。 */
-	toggleSkip(editor: Editor, line: number): void {
+	/**
+	 * 标题相关菜单项（右键菜单与标题菜单共用）：两种跳过标记（勾选项）、可选的升降级、复制链接 / 嵌入。
+	 * 右键菜单不放升降级（只加最必要的几项，不喧宾夺主）。
+	 */
+	private addHeadingItems(
+		menu: Menu,
+		editor: Editor,
+		file: TFile,
+		h: Heading,
+		withShift: boolean,
+	): void {
+		const m = this.plugin.messages();
+		const kind = skipKindOf(h.rawText);
+		const lineIndex = h.lineIndex;
+		menu.addItem((i) =>
+			i
+				.setTitle(m.menuToggleSkip)
+				.setIcon("eye-off")
+				.setChecked(kind === "self")
+				.onClick(() => this.toggleSkip(editor, lineIndex)),
+		);
+		menu.addItem((i) =>
+			i
+				.setTitle(m.menuToggleSkipTree)
+				.setIcon("folder-x")
+				.setChecked(kind === "tree")
+				.onClick(() => this.toggleSkip(editor, lineIndex, "tree")),
+		);
+		if (withShift) {
+			menu.addItem((i) =>
+				i
+					.setTitle(m.menuPromoteSection)
+					.setIcon("arrow-up")
+					.onClick(() => this.shiftSection(editor, lineIndex, -1)),
+			);
+			menu.addItem((i) =>
+				i
+					.setTitle(m.menuDemoteSection)
+					.setIcon("arrow-down")
+					.onClick(() => this.shiftSection(editor, lineIndex, 1)),
+			);
+		}
+		menu.addItem((i) =>
+			i
+				.setTitle(m.menuCopySectionLink)
+				.setIcon("link")
+				.onClick(() => void this.plugin.runCopySectionLink(file, h)),
+		);
+		menu.addItem((i) =>
+			i
+				.setTitle(m.menuCopySectionEmbed)
+				.setIcon("file-input")
+				.onClick(() => void this.plugin.runCopySectionLink(file, h, "embed")),
+		);
+	}
+
+	/** 切换某标题行的跳过标记；一次编辑事务（S1/S2/S26）。 */
+	toggleSkip(editor: Editor, line: number, kind: SkipKind = "self"): void {
 		const old = editor.getLine(line);
-		const next = toggleSkipMarker(old);
+		const next = toggleSkipMarker(old, kind);
 		if (next === old) {
 			return;
 		}
@@ -360,7 +388,9 @@ export class NoteEntry {
 		const rule = resolvePathRule(p.settings.pathRules, file.path);
 		const sw = readFileSwitch(await p.app.vault.cachedRead(file));
 		menu.addItem((i) =>
-			i.setTitle(rule ? m.statusMenuRule(rule.pattern) : m.statusMenuNoRule).setIsLabel(true),
+			i
+				.setTitle("📍 " + (rule ? m.statusMenuRule(rule.pattern) : m.statusMenuNoRule))
+				.setIsLabel(true),
 		);
 		menu.addSeparator();
 		const auto = (title: string, value: boolean | null) =>
@@ -370,18 +400,18 @@ export class NoteEntry {
 					.setChecked(sw === value)
 					.onClick(() => void this.setNoteAuto(file, value)),
 			);
-		auto(m.statusMenuAutoFollow, null);
-		auto(m.statusMenuAutoOn, true);
-		auto(m.statusMenuAutoOff, false);
+		auto("🔁 " + m.statusMenuAutoFollow, null);
+		auto("✅ " + m.statusMenuAutoOn, true);
+		auto("🚫 " + m.statusMenuAutoOff, false);
 		menu.addSeparator();
 		menu.addItem((i) =>
-			i.setTitle(m.statusMenuChangeTemplate).onClick(() => this.chooseTemplate(file)),
+			i.setTitle("📄 " + m.statusMenuChangeTemplate).onClick(() => this.chooseTemplate(file)),
 		);
 		menu.addItem((i) =>
-			i.setTitle(m.statusMenuRenumber).onClick(() => p.renumberActiveNoteNow()),
+			i.setTitle("🔄 " + m.statusMenuRenumber).onClick(() => p.renumberActiveNoteNow()),
 		);
 		menu.addItem((i) =>
-			i.setTitle(m.statusMenuCopyOutline).onClick(() => {
+			i.setTitle("📋 " + m.statusMenuCopyOutline).onClick(() => {
 				const found = p.activeMarkdownContext();
 				if (found) {
 					void p.runCopyNumberedOutline(found.editor, file);
@@ -390,12 +420,14 @@ export class NoteEntry {
 		);
 		if (p.isVirtualFile(file.path)) {
 			menu.addItem((i) =>
-				i.setTitle(m.statusMenuClearStale).onClick(() => p.clearActiveFileStaleNumbering()),
+				i
+					.setTitle("🧹 " + m.statusMenuClearStale)
+					.onClick(() => p.clearActiveFileStaleNumbering()),
 			);
 		}
 		if (onBack) {
 			menu.addSeparator();
-			menu.addItem((i) => i.setTitle(m.menuBack).setIcon("arrow-left").onClick(onBack));
+			menu.addItem((i) => i.setTitle("↩️ " + m.menuBack).onClick(onBack));
 		}
 	}
 }

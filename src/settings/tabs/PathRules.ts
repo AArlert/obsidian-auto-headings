@@ -105,8 +105,8 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 	const table = containerEl.createDiv({ cls: "ah-path-table" });
 	const head = table.createDiv({ cls: "ah-path-row ah-path-head" });
 	for (const [label, cls] of [
-		["", "ah-path-c-handle"],
 		["", "ah-path-c-dot"],
+		["", "ah-path-c-handle"],
 		[t.pathColPattern, "ah-path-c-pattern"],
 		[t.pathColTemplate, "ah-path-c-template"],
 		[t.pathColMode, "ah-path-c-mode"],
@@ -145,20 +145,20 @@ function renderPathRuleRow(
 	const rules = plugin.settings.pathRules;
 	const row = table.createDiv({ cls: "ah-path-row" });
 
-	// 拖拽手柄（**仅手柄可发起拖拽**，整行不再 draggable——否则会妨碍路径输入框的文本选择）。
-	const handle = row.createDiv({ cls: "ah-path-cell ah-path-c-handle ah-path-handle" });
-	setIcon(handle, "grip-vertical");
-	handle.setAttr("draggable", "true");
-	handle.setAttr("aria-label", t.dragHandleTooltip);
-	handle.title = t.dragHandleTooltip;
-
-	// 当前笔记圆点（取代原行号列，testplan L32）。
+	// 当前笔记圆点（取代原行号列，testplan L32；1.3.0 起放在拖拽手柄之前）。
 	const dotCell = row.createDiv({ cls: "ah-path-cell ah-path-c-dot" });
 	if (isActive) {
 		const dot = dotCell.createSpan({ cls: "ah-path-dot" });
 		dot.setAttr("aria-label", t.activeRuleTooltip);
 		dot.title = t.activeRuleTooltip;
 	}
+
+	// 拖拽手柄（**仅手柄可发起拖拽**，整行不再 draggable——否则会妨碍路径输入框的文本选择）。
+	const handle = row.createDiv({ cls: "ah-path-cell ah-path-c-handle ah-path-handle" });
+	setIcon(handle, "grip-vertical");
+	handle.setAttr("draggable", "true");
+	handle.setAttr("aria-label", t.dragHandleTooltip);
+	handle.title = t.dragHandleTooltip;
 
 	// 路径模式输入（接建议弹窗 + 行内清空按钮）。
 	const patternCell = row.createDiv({

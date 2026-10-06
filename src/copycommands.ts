@@ -11,6 +11,7 @@
 
 import { displayAnchor } from "./backlinks";
 import { parseHeadings, type Heading } from "./parser";
+import { stripSkipMarker } from "./headingedit";
 import { stripPrefix, stripWordJoiners } from "./strip";
 import type { VirtualHeadingLabel } from "./virtual/compute";
 
@@ -97,7 +98,7 @@ export interface SectionLinkParts {
  */
 export function sectionLinkParts(heading: Heading): SectionLinkParts {
 	const anchor = displayAnchor(heading.text);
-	const alias = stripPrefix(heading.rawText)
+	const alias = stripSkipMarker(stripPrefix(heading.rawText))
 		.replace(/^[ \t]+/, "")
 		.replace(/\s+$/, "");
 	return { anchor, alias: alias || undefined };

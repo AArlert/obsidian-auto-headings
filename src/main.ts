@@ -43,6 +43,7 @@ import {
 import {
 	computeHeadingRenames,
 	computeSnapshotRenames,
+	buildAliasMap,
 	rewriteBacklinksInContent,
 	snapshotHeadings,
 	type HeadingRename,
@@ -1480,11 +1481,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 原子读改写（不在撤销历史内，确认框已提示备份）。顺带同步指向这些标题的内链——同文件自
 	 * 链接随主事务折叠，跨文件反链汇总为一条 Notice（{@link notifyBacklinkTotal}）。
 	 */
-	async clearAllVaultNumbering(): Promise<void> {
-		// 先**持久关闭**「全局自动编号」（0.7.17，testplan H7）：清完全库却留着开关开，
-		// 一编辑又被编回去——「全开着却没一个被编号」不符合直觉。清库 = 用户明确表态
-		// 「现在不要编号」，故先关开关再清；想恢复时手动再开即可。
-		if (this.settings.autoNumber) {
+	async clearAllVaultNumbering(turnOffAutoNumber = true): Promise<void> {
+		// 默认先**持久关闭**「全局自动编号」（0.7.17，testplan H7；1.3.0 起确认框里有勾选项可不关，H20）：
+		// 清完全库却留着开关开，一编辑又被编回去——「全开着却没一个被编号」不符合直觉。
+		// 勾选 = 用户明确表态「现在不要编号」，故先关开关再清；想恢复时手动再开即可。
+		if (turnOffAutoNumber && this.settings.autoNumber) {
 			this.settings.autoNumber = false;
 			await this.saveSettings();
 			// 面板若开着，立即反映开关新状态（单测环境未挂设置面板，可选调用）。
@@ -1922,6 +1923,24 @@ export default class AutoHeadingsPlugin extends Plugin {
 				return true;
 			},
 		});
+		// 同一小节的嵌入形态（`![[文件#标题]]`），门控与上一条相同。
+		this.addCommand({
+			id: "copy-section-embed",
+			name: t.cmdCopySectionEmbed,
+			editorCheckCallback: (checking, editor, ctx) => {
+				const file = ctx.file;
+				const heading = file
+					? sectionHeadingAt(editor.getValue(), editor.getCursor().line)
+					: null;
+				if (!file || !heading) {
+					return false;
+				}
+				if (!checking) {
+					void this.runCopySectionLink(file, heading, "embed");
+				}
+				return true;
+			},
+		});
 	}
 
 	/**
@@ -1950,13 +1969,31 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 「复制当前小节链接」命令的执行体（R4）：链接由 Obsidian 按用户的链接设置生成
 	 * （`generateMarkdownLink`），锚点 / 别名口径见 {@link sectionLinkParts}。
 	 */
-	async runCopySectionLink(file: TFile, heading: Heading): Promise<void> {
+	async runCopySectionLink(
+		file: TFile,
+		heading: Heading,
+		variant: "link" | "embed" = "link",
+	): Promise<void> {
 		const { anchor, alias } = sectionLinkParts(heading);
-		const link = this.app.fileManager.generateMarkdownLink(file, "", "#" + anchor, alias);
 		const m = this.messages();
+		// 嵌入形态（`![[文件#标题]]`）：不带别名——wikilink 嵌入里 `|…` 的含义是尺寸，不是显示文字。
+		let link = this.app.fileManager.generateMarkdownLink(
+			file,
+			"",
+			"#" + anchor,
+			variant === "embed" ? undefined : alias,
+		);
+		if (variant === "embed") {
+			link = "!" + link.replace(/^!/, "").replace(/\|[^\]|]*\]\]$/, "]]");
+		}
 		try {
 			await navigator.clipboard.writeText(link);
-			new Notice(m.noticeSectionLinkCopied(alias ?? stripWordJoiners(anchor)));
+			const label = alias ?? stripWordJoiners(anchor);
+			new Notice(
+				variant === "embed"
+					? m.noticeSectionEmbedCopied(label)
+					: m.noticeSectionLinkCopied(label),
+			);
 		} catch {
 			new Notice(m.noticeCopyFailed);
 		}
@@ -2551,7 +2588,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		const basename = target.basename ?? linkBasename(target.path);
 		const map = new Map(renames.map((r) => [r.from, r.to]));
-		const result = rewriteBacklinksInContent(newContent, basename, true, map);
+		const result = rewriteBacklinksInContent(
+			newContent,
+			basename,
+			true,
+			map,
+			buildAliasMap(renames),
+		);
 		return { content: result.content, renames, selfCount: result.count };
 	}
 
@@ -2621,6 +2664,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		let total = selfCount;
 		const map = new Map(renames.map((r) => [r.from, r.to]));
+		const aliasMap = buildAliasMap(renames);
 		const vault = this.app.vault;
 		const basename = target.basename ?? linkBasename(target.path);
 		const editors = this.openEditorsByPath();
@@ -2632,7 +2676,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			if (editor) {
 				// 引用方正被打开：走它的编辑器，不读盘（见本方法上方的根因说明）。
 				const old = editor.getValue();
-				const result = rewriteBacklinksInContent(old, basename, false, map);
+				const result = rewriteBacklinksInContent(old, basename, false, map, aliasMap);
 				if (result.count > 0) {
 					this.writeLineDiff(editor, old, result.content);
 				}
@@ -2645,7 +2689,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 				continue;
 			}
 			await vault.process(file, (content) => {
-				const result = rewriteBacklinksInContent(content, basename, false, map);
+				const result = rewriteBacklinksInContent(content, basename, false, map, aliasMap);
 				total += result.count;
 				return result.content;
 			});

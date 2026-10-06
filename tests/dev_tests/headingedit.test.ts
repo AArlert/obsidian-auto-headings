@@ -4,6 +4,7 @@ import {
 	bodyLineCount,
 	moveSection,
 	planSectionShift,
+	skipKindOf,
 	toggleSkipMarker,
 } from "../../src/headingedit";
 
@@ -94,5 +95,19 @@ describe("moveSection（整节拖动）", () => {
 	});
 	it("非标题行 → null", () => {
 		expect(moveSection(doc, 2, 0)).toBeNull();
+	});
+});
+
+describe("整节跳过标记（skip-tree）", () => {
+	it("补 / 去 / 与单标题标记互换", () => {
+		expect(toggleSkipMarker("## A", "tree")).toBe("## A <!-- skip-tree -->");
+		expect(toggleSkipMarker("## A <!-- skip-tree -->", "tree")).toBe("## A");
+		expect(toggleSkipMarker("## A <!-- skip -->", "tree")).toBe("## A <!-- skip-tree -->");
+		expect(toggleSkipMarker("## A <!--SKIP-TREE-->", "self")).toBe("## A <!-- skip -->");
+	});
+	it("skipKindOf 区分两类", () => {
+		expect(skipKindOf("## A <!-- skip -->")).toBe("self");
+		expect(skipKindOf("## A <!-- skip-tree -->")).toBe("tree");
+		expect(skipKindOf("## A")).toBeNull();
 	});
 });

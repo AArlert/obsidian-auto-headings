@@ -15,6 +15,7 @@
  */
 
 import { WORD_JOINER } from "./numbering";
+import { stripPrefix } from "./strip";
 import { parseHeadings } from "./parser";
 import { scanSkipRegions } from "./scan";
 import { linkCodecLocator } from "./yamlquote";
@@ -25,7 +26,60 @@ export interface HeadingRename {
 	from: string;
 	/** 新锚点（归一后），写入新链接 `[[file#to]]`。 */
 	to: string;
+	/**
+	 * 链接显示别名的同步表（`[[file#锚点|别名]]` 里 `|` 之后那段）：`[旧别名归一键, 新别名文本]`。
+	 * 只收两种别名——与旧标题完整文本相同的、与旧标题**去编号后**文本相同的（「复制本节链接」生成的就是后者）；
+	 * 用户自己写的别名不在此列，原样保留。
+	 */
+	aliases?: Array<[string, string]>;
 }
+
+/** 行尾跳过标记（`<!-- skip -->` / `<!-- skip-tree -->`），别名里不该带它。 */
+const TRAILING_SKIP_RE = /\s*<!--\s*skip(?:-tree)?\s*-->\s*$/i;
+
+/** 标题文本 → 适合当链接别名的纯文本：去跳过标记、剥 WJ、trim。 */
+function aliasText(text: string): string {
+	return text.replace(TRAILING_SKIP_RE, "").split(WORD_JOINER).join("").trim();
+}
+
+/**
+ * 构造别名同步表：旧文完整 / 去编号后两种形态 → 新文对应形态。
+ * **标题文字本身没变**（只是加 / 改 / 去了编号前缀）时不产出任何别名改动——否则给标题新编上号会把
+ * 别名也改成带号的。
+ */
+function aliasPairs(oldText: string, newText: string): Array<[string, string]> {
+	const oldBare = aliasText(stripPrefix(oldText));
+	const newBare = aliasText(stripPrefix(newText));
+	if (linkAnchor(oldBare) === linkAnchor(newBare)) {
+		return [];
+	}
+	const out: Array<[string, string]> = [];
+	const add = (from: string, to: string) => {
+		const key = linkAnchor(from);
+		if (key && to && !out.some(([k]) => k === key)) {
+			out.push([key, to]);
+		}
+	};
+	add(aliasText(oldText), aliasText(newText));
+	add(oldBare, newBare);
+	return out;
+}
+
+/** 把改名表里的别名同步表汇总成「旧别名键 → 新别名」映射。 */
+export function buildAliasMap(renames: readonly HeadingRename[]): Map<string, string> {
+	const m = new Map<string, string>();
+	for (const r of renames) {
+		for (const [k, v] of r.aliases ?? []) {
+			if (!m.has(k)) {
+				m.set(k, v);
+			}
+		}
+	}
+	return m;
+}
+
+/** 新别名能否安全写进 `[[…|别名]]`（不含会破坏链接 / YAML 引号的字符）。 */
+const SAFE_ALIAS_RE = /^[^"'\\[\]|\r\n]+$/;
 
 /**
  * 标题快照：Backlink 同步的「上次同步点」基线（testplan M14，见 spec.md §3.12）。
@@ -113,7 +167,8 @@ function buildRenames(pairs: Array<{ oldText: string; newText: string }>): Headi
 		if ((oldAnchorCount.get(from) ?? 0) > 1) continue; // 歧义：同名标题多处，保守不改。
 		if (seen.has(from)) continue;
 		seen.add(from);
-		renames.push({ from, to });
+		const aliases = aliasPairs(p.oldText, p.newText);
+		renames.push(aliases.length > 0 ? { from, to, aliases } : { from, to });
 	}
 	return renames;
 }
@@ -599,6 +654,7 @@ export function rewriteBacklinksInContent(
 	targetBasename: string,
 	isSameFile: boolean,
 	renames: Map<string, string>,
+	aliasRenames?: Map<string, string>,
 ): { content: string; count: number } {
 	let count = 0;
 	const codecAt = linkCodecLocator(content);
@@ -624,7 +680,15 @@ export function rewriteBacklinksInContent(
 			const written = codec.encode(to, rawSubpath);
 			if (written === null) return whole; // 此处写不进（会写坏 YAML）：保守不改。
 			count++;
-			return `${bang}[[${pathPart}#${written}${alias}]]`;
+			// 别名同步：别名恰是旧标题（完整或去编号后）时跟着改，否则（用户自己写的）原样保留。
+			let outAlias = alias;
+			if (alias.length > 1 && aliasRenames) {
+				const next = aliasRenames.get(linkAnchor(alias.slice(1)));
+				if (next !== undefined && SAFE_ALIAS_RE.test(next)) {
+					outAlias = `|${next}`;
+				}
+			}
+			return `${bang}[[${pathPart}#${written}${outAlias}]]`;
 		},
 	);
 	const markdown = rewriteMarkdownBacklinks(wikiOut, targetBasename, isSameFile, renames);

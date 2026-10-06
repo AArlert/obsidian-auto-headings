@@ -126,7 +126,7 @@ interface PluginInternals {
 	strippableAffixes(): { prefixes: string[]; suffixes: string[] };
 	renumberActiveFile(): void;
 	renumberOnOpen(file: { path: string }): void;
-	clearAllVaultNumbering(): Promise<void>;
+	clearAllVaultNumbering(turnOffAutoNumber?: boolean): Promise<void>;
 	freezeVaultNumbering(): Promise<void>;
 	resumeFromRetired(): Promise<void>;
 	onunload(): void;
@@ -1641,6 +1641,17 @@ describe("清除全库编号（敏感操作 TAB，0.7.11：清除期间压制自
 		p.scheduleRenumber(ed, fileInfo("a.md"));
 		vi.advanceTimersByTime(300);
 		expect(ed.txnCount).toBe(0);
+	});
+});
+
+describe("H20（1.3.0）：清除全库的「同时关闭自动编号」勾选项", () => {
+	it("取消勾选：只清不关，全局自动编号保持开启", async () => {
+		const { p, vaultFiles } = makePlugin({
+			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲` },
+		});
+		await p.clearAllVaultNumbering(false);
+		expect(vaultFiles.get("a.md")).toBe("## 甲");
+		expect(p.settings.autoNumber).toBe(true);
 	});
 });
 

@@ -117,7 +117,7 @@ All of it previews live as you type, so you see the exact heading format before 
 
 A path-rule table maps folders and individual files to a named template, most-specific match wins (a file-level rule beats its parent folder's rule). Use academic numbering in `/papers`, chapter-style numbering in `/book`, and the default `1 / 1.1` everywhere else — all in the same vault, no manual switching. The rule table supports drag-to-reorder, path autocompletion from your actual vault structure (browse folders level by level, or type to fuzzy-search), and warns you if you haven't set a root (`/`) fallback rule while global auto-numbering is on.
 
-Two rule-level tools round this out: pick the pseudo-template **"No numbering"** to switch numbering off for a whole folder (no more per-file frontmatter flags — existing numbers are left frozen, not stripped), and use the per-rule **batch renumber** button to renumber every file the rule matches in one confirmed action (each file uses its own effective template; files opted out via frontmatter or containing foreign numbering are skipped).
+Two rule-level tools round this out: pick **"No numbering"** in the rule's Mode dropdown to switch numbering off for a whole folder (no more per-file frontmatter flags — existing numbers are left frozen, not stripped), and use the per-rule **batch renumber** button to renumber every file the rule matches in one confirmed action (each file uses its own effective template; files opted out via frontmatter or containing foreign numbering are skipped).
 
 ### Whitelist — keep structural headings out of the count
 
@@ -150,10 +150,25 @@ word is a real chapter elsewhere — append `<!-- skip -->` to the end of that h
 
 It's invisible in reading view. A skipped heading **doesn't consume a counter slot**, so the headings after it
 stay consecutive. Add the marker to a heading that already has a number and the next renumber removes that
-number. For now it affects only the line it's on, not the headings nested under it.
+number.
 
-> This is a fallback for the occasional one-off line, not the everyday path — use the whitelist to exclude a
-> whole class of words. A one-click toggle next to the heading is planned, so you won't have to type it.
+There are two markers, and you **don't have to type them** — right-click the fold arrow next to the heading, or use the editor context menu or the command palette:
+
+| Marker | Menu item | Effect |
+| --- | --- | --- |
+| `<!-- skip -->` | Skip numbering for this heading | Skips only the line it's on |
+| `<!-- skip-tree -->` | Skip numbering for the whole section (with sub-headings) | Skips the heading and everything nested under it (up to the next heading of the same or higher level); the headings after it stay consecutive |
+
+> This is for the occasional one-off line or section, not the everyday path — use the whitelist to exclude a whole class of words.
+
+### In-note entry points: heading menu and the "this note" menu
+
+Do one-note things without opening settings:
+
+-   **The fold arrow beside a heading** gains two abilities: **press and drag** to move the whole section (sub-headings included) elsewhere (a blue line marks the drop spot; one undo reverts it; heading levels aren't changed), and **right-click** for the heading menu — skip this heading / skip the whole section, promote section, demote section, copy section link, copy section embed, numbering settings for this note…. A plain click still folds/unfolds as usual. On mobile, a "⋯" appears at the end of the heading line while the cursor is in it, opening the same menu.
+-   **Copy section link** has two forms: a normal link `[[Note#Heading|Heading]]` and an embed `![[Note#Heading]]`.
+-   **The status-bar "this note" label** (e.g. "Display only · Default") opens a menu for that note: the matching rule; auto-numbering three-way (follow global / always for this note / never for this note — read and written in the note's own frontmatter `obsidian-auto-headings`, absent means follow global); change template (writes the frontmatter property `obsidian-auto-headings-template`; choose "Follow path rule" to clear it); renumber now; copy numbered outline; clear leftover numbering.
+-   When you rename a heading, wikilinks to it update not just the `#anchor` but also an **`|alias` that equals the old heading**; aliases you wrote yourself are left alone.
 
 ### Cleanup commands, for when you need a clean slate
 
@@ -212,6 +227,12 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 | Clear leftover plugin numbering in this file | In a display-only note, strip only numbers this plugin wrote earlier (hand-written numbers stay) |
 | Copy numbered outline | Copy the current note's headings as an indented, numbered outline — works in both write and display-only mode |
 | Copy current section link | Copy a link to the section under the cursor (or the section the cursor is inside) — works in both write and display-only mode |
+| Copy current section embed link | Same, but copies the `![[Note#Heading]]` embed form |
+| Skip / restore numbering for heading at cursor | Toggle a trailing `<!-- skip -->` |
+| Skip / restore numbering for the whole section at cursor | Toggle a trailing `<!-- skip-tree -->` (sub-headings included) |
+| Promote / demote current section | Raise / lower the section and its sub-headings by one level |
+| Choose template for current note… | Use a different template for this note only |
+| Toggle auto-numbering for current note | Turn auto-numbering on / off for this note only |
 
 ## Notes
 

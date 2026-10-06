@@ -104,6 +104,19 @@ class VaultConfirmModal extends Modal {
 		this.setTitle(isClear ? t.clearVaultModalTitle : t.freezeVaultModalTitle);
 		contentEl.createEl("p", { text: isClear ? t.clearVaultModalBody : t.freezeVaultModalBody });
 
+		// 清库专属选项（1.3.0，testplan H20）：同时关闭自动编号，默认勾选（避免刚清掉又被编回去）。
+		let turnOffAuto = true;
+		if (isClear) {
+			const row = contentEl.createEl("label", { cls: "ah-confirm-option" });
+			const box = row.createEl("input", { type: "checkbox" });
+			box.checked = true;
+			box.addEventListener("change", () => {
+				turnOffAuto = box.checked;
+			});
+			row.createSpan({ text: t.clearVaultTurnOffAuto });
+			row.createSpan({ cls: "ah-confirm-option-hint", text: t.clearVaultTurnOffAutoHint });
+		}
+
 		contentEl.createDiv({ cls: "ah-confirm-word-label", text: t.confirmWordPrompt(word) });
 		const input = contentEl.createEl("input", { type: "text", cls: "ah-confirm-word-input" });
 		input.setAttr("aria-label", t.confirmWordPrompt(word));
@@ -115,7 +128,7 @@ class VaultConfirmModal extends Modal {
 			}
 			this.close();
 			if (isClear) {
-				await this.plugin.clearAllVaultNumbering();
+				await this.plugin.clearAllVaultNumbering(turnOffAuto);
 			} else {
 				await this.plugin.freezeVaultNumbering();
 			}

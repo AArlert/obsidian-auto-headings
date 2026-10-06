@@ -274,6 +274,8 @@ export interface Messages {
 	// 清除全库对话框
 	clearVaultModalTitle: string;
 	clearVaultModalBody: string;
+	clearVaultTurnOffAuto: string;
+	clearVaultTurnOffAutoHint: string;
 	confirmClearVault: string;
 
 	// 固化编号（交还所有权）对话框
@@ -302,6 +304,7 @@ export interface Messages {
 	cmdCopyOutline: string;
 	/** 「复制当前小节链接」命令名（R 组；光标在第一个标题之前时不出现在命令面板）。 */
 	cmdCopySectionLink: string;
+	cmdCopySectionEmbed: string;
 
 	// —— 笔记内入口（M16，spec §3.24）——
 	cmdToggleHeadingSkip: string;
@@ -311,6 +314,9 @@ export interface Messages {
 	cmdToggleNoteAuto: string;
 	/** 右键菜单 / 标题手柄菜单项。 */
 	menuToggleSkip: string;
+	menuToggleSkipTree: string;
+	menuCopySectionEmbed: string;
+	cmdToggleSectionSkip: string;
 	menuCopySectionLink: string;
 	menuPromoteSection: string;
 	menuDemoteSection: string;
@@ -387,6 +393,7 @@ export interface Messages {
 	noticeCopyFailed: string;
 	/** 「复制当前小节链接」复制成功的提示，参数为链接别名（无别名时为剥 WJ 的锚点，R4）。 */
 	noticeSectionLinkCopied: (label: string) => string;
+	noticeSectionEmbedCopied: (label: string) => string;
 	/** 迁移守卫 Notice 里的可点击文案（点击打开清理预览确认框，J14）。 */
 	noticeForeignNumberingGuardAction: string;
 	/** 点击迁移守卫 Notice 时，该文件已不在任何已打开的标签页中。 */
@@ -699,6 +706,8 @@ const zh: Messages = {
 	confirmDelete: "确认删除",
 
 	clearVaultModalTitle: "清除全库编号",
+	clearVaultTurnOffAuto: "同时关闭自动编号",
+	clearVaultTurnOffAutoHint: "（避免刚清掉又被编回去）",
 	clearVaultModalBody:
 		"将先关闭「全局自动编号」，再从全库剥离本插件写入的编号前缀，还原为裸标题（「同步内部链接（Backlink）」开着时链接一并更新）。不在撤销历史内，建议先备份。确认继续？",
 	confirmClearVault: "确认清除全库",
@@ -722,12 +731,16 @@ const zh: Messages = {
 	cmdClearStale: "清除当前笔记的残留编号（仅显示模式）",
 	cmdCopyOutline: "复制编号大纲",
 	cmdCopySectionLink: "复制当前小节链接",
+	cmdCopySectionEmbed: "复制当前小节的嵌入链接",
 	cmdToggleHeadingSkip: "跳过 / 恢复光标处标题的编号",
 	cmdPromoteSection: "升级当前小节",
 	cmdDemoteSection: "降级当前小节",
 	cmdChooseNoteTemplate: "为当前笔记选择模板…",
 	cmdToggleNoteAuto: "开关当前笔记的自动编号",
 	menuToggleSkip: "跳过此标题的编号",
+	menuToggleSkipTree: "跳过整节的编号（含子标题）",
+	menuCopySectionEmbed: "复制本节嵌入",
+	cmdToggleSectionSkip: "跳过 / 恢复光标处整节的编号",
 	menuCopySectionLink: "复制本节链接",
 	menuPromoteSection: "升级本节",
 	menuDemoteSection: "降级本节",
@@ -796,6 +809,7 @@ const zh: Messages = {
 	noticeOutlineCopied: (count) => `已复制编号大纲（${count} 个标题）`,
 	noticeCopyFailed: "复制到剪贴板失败",
 	noticeSectionLinkCopied: (label) => `已复制链接：${label}`,
+	noticeSectionEmbedCopied: (label) => `已复制嵌入链接：${label}`,
 	noticeForeignNumberingGuardAction: "查看并清理",
 	noticeForeignGuardFileNotOpen: "该文件已不在任何标签页中，请重新打开后再清理",
 	pathNoMatchHint: "没有任何规则命中的笔记不编号。",
@@ -1101,6 +1115,8 @@ const en: Messages = {
 	confirmDelete: "Confirm delete",
 
 	clearVaultModalTitle: "Clear vault numbering",
+	clearVaultTurnOffAuto: "Also turn off auto-numbering",
+	clearVaultTurnOffAutoHint: "(so numbers are not added right back)",
 	clearVaultModalBody:
 		"First turns OFF global auto-numbering, then strips this plugin's prefixes from every Markdown file, restoring bare headings (links update too when “Sync internal links (backlinks)” is on). NOT in Obsidian's undo history — back up first. Continue?",
 	confirmClearVault: "Confirm clear vault",
@@ -1124,12 +1140,16 @@ const en: Messages = {
 	cmdClearStale: "Clear leftover numbering in current note (display-only mode)",
 	cmdCopyOutline: "Copy numbered outline",
 	cmdCopySectionLink: "Copy current section link",
+	cmdCopySectionEmbed: "Copy current section embed link",
 	cmdToggleHeadingSkip: "Skip / restore numbering for heading at cursor",
 	cmdPromoteSection: "Promote current section",
 	cmdDemoteSection: "Demote current section",
 	cmdChooseNoteTemplate: "Choose template for current note…",
 	cmdToggleNoteAuto: "Toggle auto-numbering for current note",
 	menuToggleSkip: "Skip numbering for this heading",
+	menuToggleSkipTree: "Skip numbering for the whole section (with sub-headings)",
+	menuCopySectionEmbed: "Copy section embed",
+	cmdToggleSectionSkip: "Skip / restore numbering for the whole section at cursor",
 	menuCopySectionLink: "Copy section link",
 	menuPromoteSection: "Promote section",
 	menuDemoteSection: "Demote section",
@@ -1204,6 +1224,7 @@ const en: Messages = {
 		`Copied numbered outline (${count} heading${count === 1 ? "" : "s"})`,
 	noticeCopyFailed: "Failed to copy to clipboard",
 	noticeSectionLinkCopied: (label) => `Copied link: ${label}`,
+	noticeSectionEmbedCopied: (label) => `Copied embed link: ${label}`,
 	noticeForeignNumberingGuardAction: "Review and clean up",
 	noticeForeignGuardFileNotOpen: "This file is no longer open in any tab; reopen it to clean up",
 	pathNoMatchHint: "Notes that match no rule are not numbered.",

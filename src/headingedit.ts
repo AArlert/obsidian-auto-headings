@@ -4,13 +4,30 @@
  * 不依赖 Obsidian 运行时，node 环境可直接单测（`tests/dev_tests/headingedit.test.ts`）。
  * 只产出「整行变更」，由调用方（`main.ts`）并入同一个 `editor.transaction`。
  */
-import { hasSkipMarker, parseHeadings } from "./parser";
+import { hasSkipMarker, hasSkipTreeMarker, parseHeadings } from "./parser";
 
-/** 规范形态的跳过标记（含前导空格），写入侧只产出这一种。 */
+/** 跳过标记的两种类型：`self` 只跳过这一个标题，`tree` 连同整棵子树一起跳过。 */
+export type SkipKind = "self" | "tree";
+
+/** 规范形态的跳过标记（含前导空格），写入侧只产出这两种。 */
 export const SKIP_MARKER = " <!-- skip -->";
+export const SKIP_TREE_MARKER = " <!-- skip-tree -->";
 
-/** 行尾跳过标记（连同前导空白）的匹配；与 `parser.ts` 的识别口径一致。 */
-const SKIP_TAIL_RE = /[ \t]*<!--\s*skip\s*-->\s*$/i;
+/** 行尾跳过标记（两种之一，连同前导空白）的匹配；与 `parser.ts` 的识别口径一致。 */
+const SKIP_TAIL_RE = /[ \t]*<!--\s*skip(?:-tree)?\s*-->\s*$/i;
+
+/** 标题行当前带哪种跳过标记；没有返回 `null`。 */
+export function skipKindOf(line: string): SkipKind | null {
+	if (hasSkipTreeMarker(line)) {
+		return "tree";
+	}
+	return hasSkipMarker(line) ? "self" : null;
+}
+
+/** 把标题文本里的跳过标记（若有）整段去掉，供标签行 / 别名显示用。 */
+export function stripSkipMarker(text: string): string {
+	return text.replace(SKIP_TAIL_RE, "");
+}
 
 /** 一行的整行替换。 */
 export interface LineEdit {
@@ -19,14 +36,16 @@ export interface LineEdit {
 }
 
 /**
- * 切换标题行的跳过标记：无则在行尾补规范标记，有则整段移除（含前导空白）。
- * 调用方须保证 `line` 是标题行。
+ * 切换标题行的跳过标记：已带**同类**标记则整段移除（含前导空白）；带**另一类**则换成这一类；
+ * 没有则在行尾补规范标记。调用方须保证 `line` 是标题行。
  */
-export function toggleSkipMarker(line: string): string {
-	if (hasSkipMarker(line)) {
+export function toggleSkipMarker(line: string, kind: SkipKind = "self"): string {
+	const current = skipKindOf(line);
+	if (current === kind) {
 		return line.replace(SKIP_TAIL_RE, "");
 	}
-	return line.replace(/[ \t]+$/, "") + SKIP_MARKER;
+	const bare = current === null ? line.replace(/[ \t]+$/, "") : line.replace(SKIP_TAIL_RE, "");
+	return bare + (kind === "tree" ? SKIP_TREE_MARKER : SKIP_MARKER);
 }
 
 /**

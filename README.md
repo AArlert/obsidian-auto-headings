@@ -51,6 +51,10 @@ Pick a numeral style, prefix and suffix for each heading level and watch a live 
 
 A built-in list keeps headings like "Contents", "Appendix" and "References" unnumbered, in both English and Chinese. You can add your own entries, or exclude a whole section together with everything under it.
 
+### Work right in the note
+
+The fold arrow beside a heading: **drag** it to move the whole section, **right-click** it for a menu (skip this heading / the whole section, promote / demote, copy link or embed). The status-bar "this note" label switches the template or auto-numbering for just that note. When you rename a heading, a link's `|alias` is updated too.
+
 ### Link to any heading as you type
 
 Start typing the name of a heading anywhere in your vault and a suggestion pops up. Press `Tab` to turn it into a link.
@@ -61,19 +65,21 @@ Notes with hand-typed or imported numbering can be cleaned up with one command, 
 
 ## Commands
 
-| Command                                            | What it does                                                                           |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Renumber current note                              | Renumber the current note right away                                                   |
-| Clear numbering in current note                    | Remove all numbering from the current note                                             |
-| Clear non-plugin heading numbering in current note | Remove hand-typed or imported numbering only                                           |
-| Clear leftover plugin numbering in this file       | In display-only mode, remove numbers the plugin wrote earlier                          |
-| Toggle global auto-numbering                       | Turn automatic numbering on or off for the vault                                       |
-| Copy numbered outline                              | Copy the note's headings as an indented, numbered outline (write or display-only mode) |
-| Copy current section link                          | Copy a link to the section under the cursor (write or display-only mode)               |
-| Skip / restore numbering for heading at cursor     | Add / remove a trailing `<!-- skip -->` so the heading is not numbered                 |
-| Promote / demote current section                   | Raise / lower the section and its sub-headings by one level                            |
-| Choose template for current note…                  | Use a different template for this note only                                            |
-| Toggle auto-numbering for current note             | Turn auto-numbering on / off for this note only                                        |
+| Command                                                  | What it does                                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Renumber current note                                    | Renumber the current note right away                                                   |
+| Clear numbering in current note                          | Remove all numbering from the current note                                             |
+| Clear non-plugin heading numbering in current note       | Remove hand-typed or imported numbering only                                           |
+| Clear leftover plugin numbering in this file             | In display-only mode, remove numbers the plugin wrote earlier                          |
+| Toggle global auto-numbering                             | Turn automatic numbering on or off for the vault                                       |
+| Copy numbered outline                                    | Copy the note's headings as an indented, numbered outline (write or display-only mode) |
+| Copy current section link                                | Copy a link to the section under the cursor (write or display-only mode)               |
+| Skip / restore numbering for heading at cursor           | Add / remove a trailing `<!-- skip -->` so the heading is not numbered                 |
+| Skip / restore numbering for the whole section at cursor | Add / remove a trailing `<!-- skip-tree -->` — sub-headings are skipped too            |
+| Copy current section embed link                          | Copy the `![[Note#Heading]]` embed form                                                |
+| Promote / demote current section                         | Raise / lower the section and its sub-headings by one level                            |
+| Choose template for current note…                        | Use a different template for this note only                                            |
+| Toggle auto-numbering for current note                   | Turn auto-numbering on / off for this note only                                        |
 
 ## FAQ
 

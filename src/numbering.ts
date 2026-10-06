@@ -14,7 +14,7 @@
  * | 本文件         | 编排：{@link numberHeadings} / {@link renumberContent}       |
  */
 
-import { hasSkipMarker, Heading, parseHeadings } from "./parser";
+import { computeSkipTreeMembers, hasSkipMarker, Heading, parseHeadings } from "./parser";
 import { scanSkipRegions } from "./scan";
 import { HeadingCounter } from "./count";
 import { buildPrefix } from "./render";
@@ -98,6 +98,9 @@ export function numberHeadings(
 	const bottom = normalizeBottomLevel(template.bottomLevel);
 	const skipNone = normalizeSkipFill(template.skipFill).mode === "none";
 
+	// 整节跳过标记（1.3.0）：带 `<!-- skip-tree -->` 的标题及其整棵子树都透明。
+	const skipTree = computeSkipTreeMembers(headings);
+
 	// D1：刚走出一个子树豁免块时置位；下一个参与计数的标题先整体重置计数器再 bump。
 	let pendingSubtreeReset = false;
 
@@ -139,7 +142,7 @@ export function numberHeadings(
 		// 子树块成员额外置位「块后重置」（决策 D1）；exact/partial 豁免与 skip 标记都不置位、
 		// 也不清位（夹在子树块与下一个编号标题之间的单标题豁免不打断重置语义）。
 		// **skip 标记只作用于本行、不含子树**（phase 1 定案，见 spec §3.21「未定项」）。
-		if (isWhitelisted(heading) || hasSkipMarker(heading.rawText)) {
+		if (isWhitelisted(heading) || hasSkipMarker(heading.rawText) || skipTree.has(heading)) {
 			if (isSubtreeMember(heading)) {
 				pendingSubtreeReset = true;
 			}
