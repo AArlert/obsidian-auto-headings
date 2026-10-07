@@ -388,45 +388,57 @@ export class NoteEntry {
 		const sw = readFileSwitch(await p.app.vault.cachedRead(file));
 		menu.addItem((i) =>
 			i
-				.setTitle("📍 " + (rule ? m.statusMenuRule(rule.pattern) : m.statusMenuNoRule))
+				.setTitle(rule ? m.statusMenuRule(rule.pattern) : m.statusMenuNoRule)
+				.setIcon("map-pin")
 				.setIsLabel(true),
 		);
 		menu.addSeparator();
-		const auto = (title: string, value: boolean | null) =>
+		const auto = (title: string, icon: string, value: boolean | null) =>
 			menu.addItem((i) =>
 				i
 					.setTitle(title)
+					.setIcon(icon)
 					.setChecked(sw === value)
 					.onClick(() => void this.setNoteAuto(file, value)),
 			);
-		auto("🔁 " + m.statusMenuAutoFollow, null);
-		auto("✅ " + m.statusMenuAutoOn, true);
-		auto("🚫 " + m.statusMenuAutoOff, false);
+		auto(m.statusMenuAutoFollow, "repeat", null);
+		auto(m.statusMenuAutoOn, "circle-check", true);
+		auto(m.statusMenuAutoOff, "ban", false);
 		menu.addSeparator();
 		menu.addItem((i) =>
-			i.setTitle("📄 " + m.statusMenuChangeTemplate).onClick(() => this.chooseTemplate(file)),
+			i
+				.setTitle(m.statusMenuChangeTemplate)
+				.setIcon("file-text")
+				.onClick(() => this.chooseTemplate(file)),
 		);
 		menu.addItem((i) =>
-			i.setTitle("🔄 " + m.statusMenuRenumber).onClick(() => p.renumberActiveNoteNow()),
+			i
+				.setTitle(m.statusMenuRenumber)
+				.setIcon("refresh-cw")
+				.onClick(() => p.renumberActiveNoteNow()),
 		);
 		menu.addItem((i) =>
-			i.setTitle("📋 " + m.statusMenuCopyOutline).onClick(() => {
-				const found = p.activeMarkdownContext();
-				if (found) {
-					void p.runCopyNumberedOutline(found.editor, file);
-				}
-			}),
+			i
+				.setTitle(m.statusMenuCopyOutline)
+				.setIcon("clipboard-list")
+				.onClick(() => {
+					const found = p.activeMarkdownContext();
+					if (found) {
+						void p.runCopyNumberedOutline(found.editor, file);
+					}
+				}),
 		);
 		if (p.isVirtualFile(file.path)) {
 			menu.addItem((i) =>
 				i
-					.setTitle("🧹 " + m.statusMenuClearStale)
+					.setTitle(m.statusMenuClearStale)
+					.setIcon("eraser")
 					.onClick(() => p.clearActiveFileStaleNumbering()),
 			);
 		}
 		if (onBack) {
 			menu.addSeparator();
-			menu.addItem((i) => i.setTitle("↩️ " + m.menuBack).onClick(onBack));
+			menu.addItem((i) => i.setTitle(m.menuBack).setIcon("undo-2").onClick(onBack));
 		}
 	}
 }

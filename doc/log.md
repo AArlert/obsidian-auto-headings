@@ -15,6 +15,29 @@
 
 ---
 
+## 2026-10-08 发版 1.2.3：笔记内入口（M16）+ 商店审查清理（交接：feat/1.3.0-note-entry → master，tag 1.2.3）
+
+### 做了什么
+
+- 用户在 test 库确认右键菜单正常后要求发版，**版本号按用户定为 1.2.3**（原计划 1.3.0），从 master 发。
+- 发版前最后一改：「本篇」菜单的系统 emoji 换成 Obsidian 原生 Lucide 图标（与标题菜单一致：map-pin / repeat / circle-check / ban / file-text / refresh-cw / clipboard-list / eraser / undo-2），spec 3.24、testplan S28 同步。
+- `npm run bump 1.2.3`；写 [`release-notes/1.2.3.md`](./release-notes/1.2.3.md)；testplan「未发版」→ 1.2.3。
+
+### 没做什么
+
+- 上两块列的真机未测项（历史弹窗、整节升级越界、手机端 ⋯、源码模式手柄、拖动向前 / 文末 / 自动滚动等）仍未逐项实测，用户已认可直接发版。
+- 1.13 声明式设置 API（`getSettingDefinitions`）未接，商店审查会继续给 Warning / Recommendation。
+
+### 下一步
+
+- master CI 绿后打 tag `1.2.3` 推送；用户到 Community Hub 维护者面板点「Check for new releases」送审。
+
+### 验证方式
+
+- `npm run preflight`；vitest 仅 `whitelist.test.ts:406` ICU 本机假红。
+
+---
+
 ## 2026-10-07 1.3.0 开发：商店审查告警清理；test 库右键菜单打不开查明（不 bump，交接：feat/1.3.0-note-entry，仅本地）
 
 ### 做了什么
@@ -83,30 +106,3 @@
 ### 验证方式
 
 - `npm run check`：全绿（Windows 本机 `whitelist.test.ts:406` ICU 假红除外）。
-
----
-
-## 2026-10-07 发版 1.2.2：设置面板视觉更新（交接：feat/1.2.2-visual-refresh → master，tag 1.2.2）
-
-### 做了什么
-
-- 用户在 iCloud 测试库实测桌面端与手机端全部通过（手机端观感受 Obsidian 移动端原生样式所限，接受），确认发版。
-- `npm run bump` 1.2.1 → 1.2.2；写 `doc/release-notes/1.2.2.md`（双语，含 M15 视觉更新 + 1.2.1 之后合入的属性链接 YAML
-  引号修复与 `**` 星号修复）；testplan「未发版」→ 1.2.2，M15 相关 🔲 手验场景按用户实测回填 ✅。
-- 合并 master、推送、等 CI 绿后打 tag `1.2.2`。
-
-### 没做什么
-
-- L31（离场提示条）没实测——只有固化编号后才出现，仍是 🔲。
-- Community Hub 送审需用户登录维护者面板点「Check for new releases」。
-
-### 下一步
-
-- **立即开发 1.3.0（Roadmap M16：笔记内入口与模板编辑增强），新开对话进行，不在本对话。** 范围见
-  `doc/spec/5-Roadmap.md` M16：标题手柄菜单、右键菜单两项、状态栏「本篇」菜单、新命令与命令改名、模板编辑增强
-  （快速套用含「最近用过的样式」、此模板的历史、草稿式保存）。画布样稿 1.3.0 各块见记忆 gui-redesign-plan-2026-10。
-- 开工前先读 `dev-cycle` 技能，testplan 先行；视觉 / 交互改动照旧部署 iCloud 测试库给用户看。
-
-### 验证方式
-
-- `npm run preflight` 全绿（Windows 本机 `whitelist.test.ts:406` ICU 假红除外）；master CI 绿后才打 tag。
