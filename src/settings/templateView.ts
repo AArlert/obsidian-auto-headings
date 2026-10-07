@@ -15,7 +15,7 @@ import {
 	stripWordJoiners,
 	type Template,
 } from "../numbering";
-import { hasSkipMarker, parseHeadings } from "../parser";
+import { computeSkipTreeMembers, hasSkipMarker, parseHeadings } from "../parser";
 import { resolvePathRule, ruleMode, type PathRule } from "../pathrules";
 
 // ───────────────────────── 上级编号合并列（testplan L37）─────────────────────────
@@ -125,6 +125,7 @@ export function buildPreviewLines(
 	const headings = parseHeadings(content);
 	const numbered = numberHeadings(headings, template, options);
 	const exempt = computeWhitelistExemptions(headings, template, options);
+	const skipTree = computeSkipTreeMembers(headings);
 	const top = normalizeTopLevel(template.topLevel);
 	const bottom = normalizeBottomLevel(template.bottomLevel);
 	return numbered.map((n, i) => {
@@ -134,7 +135,7 @@ export function buildPreviewLines(
 		if (n.prefix === null && inRange) {
 			if (exempt.has(heading)) {
 				tag = "whitelist";
-			} else if (hasSkipMarker(heading.rawText)) {
+			} else if (hasSkipMarker(heading.rawText) || skipTree.has(heading)) {
 				tag = "skip";
 			} else {
 				tag = "unnumbered";
@@ -143,7 +144,7 @@ export function buildPreviewLines(
 		return {
 			level: n.level,
 			label: n.prefix === null ? null : stripWordJoiners(n.prefix),
-			text: n.text.replace(/\s*<!--\s*skip\s*-->\s*$/i, ""),
+			text: n.text.replace(/\s*<!--\s*skip(?:-tree)?\s*-->\s*$/i, ""),
 			tag,
 			inRange,
 			indent: Math.max(0, n.level - top),

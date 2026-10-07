@@ -303,3 +303,79 @@ export function setIcon(_el: unknown, _icon: string): void {}
 export function normalizePath(path: string): string {
 	return path.replace(/\\/g, "/").replace(/\/+/g, "/");
 }
+
+/** `Menu` 替身（M16）：记录菜单项，供测试断言；`showAtMouseEvent` 为空实现。 */
+export interface MockMenuItemData {
+	title: string;
+	checked?: boolean;
+	label?: boolean;
+	click?: () => void;
+}
+
+/** 菜单项替身：链式 setter 记录到 `data`。 */
+export class MenuItem {
+	data: MockMenuItemData = { title: "" };
+	setTitle(t: string): this {
+		this.data.title = t;
+		return this;
+	}
+	setIcon(): this {
+		return this;
+	}
+	setChecked(c: boolean): this {
+		this.data.checked = c;
+		return this;
+	}
+	setIsLabel(l: boolean): this {
+		this.data.label = l;
+		return this;
+	}
+	setWarning(): this {
+		return this;
+	}
+	setSection(): this {
+		return this;
+	}
+	onClick(fn: () => void): this {
+		this.data.click = fn;
+		return this;
+	}
+}
+
+export class Menu {
+	items: MockMenuItemData[] = [];
+	addItem(cb: (item: MenuItem) => void): this {
+		const item = new MenuItem();
+		cb(item);
+		this.items.push(item.data);
+		return this;
+	}
+	addSeparator(): this {
+		return this;
+	}
+	showAtMouseEvent(): void {}
+	showAtPosition(): void {}
+}
+
+/** `FuzzySuggestModal` 替身（M16）：仅需可构造 + 记录实例。 */
+export class FuzzySuggestModal<T> {
+	static instances: FuzzySuggestModal<unknown>[] = [];
+	app: unknown;
+	constructor(app: unknown) {
+		this.app = app;
+		FuzzySuggestModal.instances.push(this as FuzzySuggestModal<unknown>);
+	}
+	setPlaceholder(): void {}
+	open(): void {}
+	close(): void {}
+	getItems(): T[] {
+		return [];
+	}
+}
+
+/** `Platform` 替身（M16）：单测按桌面处理。 */
+export const Platform = { isMobile: false };
+/** 单测按最新版 Obsidian 处理。 */
+export function requireApiVersion(_version: string): boolean {
+	return true;
+}

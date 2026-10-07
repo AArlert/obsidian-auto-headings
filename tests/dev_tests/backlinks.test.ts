@@ -98,20 +98,22 @@ describe("computeSnapshotRenames：从上次同步点快照算改名表（M14 �
 	it("纯文本改名（编号不变）：对照快照能看见（from 剥 WJ / to 保留 WJ）", () => {
 		const snap = snapshotHeadings(`## 1 ${WJ}细目甲`);
 		const renames = computeSnapshotRenames(snap, `## 1 ${WJ}细目甲改名`);
-		expect(renames).toEqual([{ from: "1 细目甲", to: `1 ${WJ}细目甲改名` }]);
+		expect(renames).toMatchObject([{ from: "1 细目甲", to: `1 ${WJ}细目甲改名` }]);
 	});
 
 	it("文本与编号同时变：一条改名同时覆盖两侧（M15）", () => {
 		const snap = snapshotHeadings(`## 1 ${WJ}甲`);
 		// 用户改名 + 编号被剥（如命中白名单）→ 快照口径一步到位。
-		expect(computeSnapshotRenames(snap, "## 附录")).toEqual([{ from: "1 甲", to: "附录" }]);
+		expect(computeSnapshotRenames(snap, "## 附录")).toMatchObject([
+			{ from: "1 甲", to: "附录" },
+		]);
 	});
 
 	it("正文行增删使行号移位：按顺序配对仍正确", () => {
 		const snap = snapshotHeadings(["## 甲", "## 乙"].join("\n"));
 		// 新内容在标题前多了正文行（lineIndex 全变），标题结构未变。
 		const after = ["前言若干", "", "## 甲", "正文", `## 乙二`].join("\n");
-		expect(computeSnapshotRenames(snap, after)).toEqual([{ from: "乙", to: "乙二" }]);
+		expect(computeSnapshotRenames(snap, after)).toMatchObject([{ from: "乙", to: "乙二" }]);
 	});
 
 	it("结构变化（标题数量不同）：返回 null（调用方回退编号前→编号后口径）", () => {

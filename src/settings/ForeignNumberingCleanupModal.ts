@@ -186,13 +186,13 @@ export class ForeignNumberingCleanupModal extends Modal {
 				this.render();
 			});
 
-			const diff = li.createEl("div", { cls: "ah-foreign-guard-diff" });
-			const before = diff.createEl("div", {
+			const diff = li.createDiv({ cls: "ah-foreign-guard-diff" });
+			const before = diff.createDiv({
 				cls: "ah-foreign-guard-line ah-foreign-guard-before",
 			});
 			before.createSpan({ cls: "ah-foreign-guard-marker", text: "−" });
 			before.createSpan({ cls: "ah-foreign-guard-text", text: item.before });
-			const after = diff.createEl("div", {
+			const after = diff.createDiv({
 				cls: "ah-foreign-guard-line ah-foreign-guard-after",
 			});
 			after.createSpan({ cls: "ah-foreign-guard-marker", text: "+" });

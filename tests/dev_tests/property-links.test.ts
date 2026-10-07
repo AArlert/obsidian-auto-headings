@@ -3,11 +3,11 @@
  * `rewriteBacklinksInContent` 在 YAML 属性里的改写结果。
  *
  * 属性里的链接改写后 frontmatter 必须仍是合法 YAML——写坏了，该文件的**全部属性**都会失效。故断言一律
- * 用 js-yaml 解析改写后的 frontmatter（Obsidian 的解析器同为 YAML 1.2，引号与转义规则一致），
+ * 用 yaml 包解析改写后的 frontmatter（Obsidian 的解析器同为 YAML 1.2，引号与转义规则一致），
  * 并以随机不变量覆盖「任意引号风格 × 含敏感字符的标题改名」。
  */
 import { describe, expect, it } from "vitest";
-import yaml from "js-yaml";
+import { parse as parseYaml } from "yaml";
 import {
 	computeHeadingRenames,
 	displayAnchor,
@@ -31,7 +31,7 @@ function rewrite(fm: string, oldH: string, newH: string, body = "正文。") {
 	const out = rewriteBacklinksInContent(`---\n${fm}\n---\n${body}`, "a", false, asMap(renames));
 	const m = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(out.content);
 	if (!m) throw new Error(`frontmatter 结构被破坏：${out.content}`);
-	return { count: out.count, fm: m[1], body: m[2], data: yaml.load(m[1]) };
+	return { count: out.count, fm: m[1], body: m[2], data: parseYaml(m[1]) };
 }
 
 describe("M29 属性里的标题链接：常见 YAML 写法都跟着改", () => {
@@ -266,7 +266,7 @@ describe("M30 属性链接的 YAML 引号安全：按所在引号风格还原匹
 				const fm = ctx.yaml(from);
 				let before: { k?: unknown } | undefined;
 				try {
-					before = yaml.load(fm) as { k?: unknown };
+					before = parseYaml(fm) as { k?: unknown };
 				} catch {
 					continue; // 原 YAML 本就不合法（如裸值里含 ": "）：不是有效输入
 				}
@@ -281,7 +281,7 @@ describe("M30 属性链接的 YAML 引号安全：按所在引号风格还原匹
 				const where = `seed=${seed} ${ctx.name} ${JSON.stringify(from)} → ${JSON.stringify(to)}`;
 				let after: { k?: unknown } | undefined;
 				expect(() => {
-					after = yaml.load(fmOut) as { k?: unknown };
+					after = parseYaml(fmOut) as { k?: unknown };
 				}, where).not.toThrow();
 				if (ctx.quoted) {
 					expect(after?.k, where).toEqual(ctx.value(to));

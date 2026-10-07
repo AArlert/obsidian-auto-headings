@@ -53,7 +53,7 @@ class VirtualNumberWidget extends WidgetType {
 	}
 
 	toDOM(): HTMLElement {
-		const span = document.createElement("span");
+		const span = createSpan();
 		span.className = this.stale
 			? "ah-virtual-number ah-virtual-number--stale"
 			: "ah-virtual-number";

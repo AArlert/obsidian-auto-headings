@@ -25,6 +25,7 @@ import {
 	planResumeFileSwitch,
 	readFileSwitch,
 	SWITCH_KEY,
+	TEMPLATE_KEY,
 	type SwitchEdit,
 } from "./frontmatter";
 import { renumberContent, WORD_JOINER, type Template } from "./numbering";
@@ -42,6 +43,7 @@ import {
 import {
 	computeHeadingRenames,
 	computeSnapshotRenames,
+	buildAliasMap,
 	rewriteBacklinksInContent,
 	snapshotHeadings,
 	type HeadingRename,
@@ -68,8 +70,15 @@ import { VirtualOutlineDecorator } from "./virtual/outlineView";
 import { VirtualReadingRenderer } from "./virtual/readingView";
 import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
+import {
+	pushSnapshot,
+	sanitizeHistory,
+	type TemplateSnapshot,
+	type TemplateStyle,
+} from "./templates/styles";
 import { summarizeTemplateUsage, type TemplateUsage } from "./settings/templateView";
 import { HeadingIndex } from "./headingindex";
+import { NoteEntry } from "./noteentry";
 import { HeadingLinkSuggest } from "./headingsuggest";
 import {
 	buildVcDictionaryJson,
@@ -291,6 +300,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 				return true;
 			},
 		});
+
+		// 笔记内入口（M16，spec §3.24）：跳过标记 / 整节升降级 / 单篇模板 / 右键菜单 / 状态栏。
+		new NoteEntry(this).register();
 
 		// 复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11）：接线在独立方法，纯逻辑在 copycommands.ts。
 		this.registerCopyCommands();
@@ -569,14 +581,25 @@ export default class AutoHeadingsPlugin extends Plugin {
 			// `false`。伪模板参与具体度解析并可胜出，故能压过更泛的根规则；已有编号冻结不动。
 			return null;
 		}
-		return this.templateStore.get(rule.template) ?? null;
+		// 单篇模板（M16，spec §3.24）：frontmatter 指向存在的模板则覆盖规则模板；指向不存在的忽略。
+		const override = this.noteTemplateName(filePath);
+		const overridden = override ? this.templateStore.get(override) : undefined;
+		return overridden ?? this.templateStore.get(rule.template) ?? null;
+	}
+
+	/** 读某文件 frontmatter 里的单篇模板名（走元数据缓存，同步；缺省 / 非字符串返回 `null`）。 */
+	noteTemplateName(filePath: string): string | null {
+		const cache = this.app.metadataCache as Partial<MetadataCache> | undefined;
+		const fm = cache?.getCache?.(filePath)?.frontmatter;
+		const v: unknown = fm?.[TEMPLATE_KEY];
+		return typeof v === "string" && v.trim() ? v.trim() : null;
 	}
 
 	/**
 	 * 某文件解析出的规则是否为「不编号」伪模板（M12，testplan K15）。
 	 * 供手动命令区分「路径设为不编号」与「未匹配任何规则」两种无模板情形，给出不误导的提示。
 	 */
-	private resolvesToNoNumbering(filePath: string | undefined | null): boolean {
+	resolvesToNoNumbering(filePath: string | undefined | null): boolean {
 		if (!filePath) {
 			return false;
 		}
@@ -592,7 +615,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/** 某文件是否为「仅显示」模式（M14）：所有编号写入路径据此跳过它。 */
-	private isVirtualFile(filePath: string | undefined | null): boolean {
+	isVirtualFile(filePath: string | undefined | null): boolean {
 		return this.numberingModeFor(filePath) === "virtual";
 	}
 
@@ -639,7 +662,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 注意：本判定仅决定「是否够格自动触发」，是否真正写入还取决于能否命中模板（见
 	 * {@link getTemplateForFile}）。手动命令不走此判定。
 	 */
-	private shouldAutoTrigger(content: string): boolean {
+	shouldAutoTrigger(content: string): boolean {
 		// 已交还所有权（M12「固化编号并交还所有权」）：**硬闸，必须在 frontmatter 判断之前**。
 		// `fm:true` 的文件本就绕开全局开关，若让它在此闸之后被检查，固化后一编辑就会在已成
 		// 普通文本的编号上再叠一层新前缀 → 双重编号。想恢复接管走设置面板的「恢复接管」。
@@ -973,6 +996,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const ok = await this.templateStore.rename(oldName, newName);
 		if (ok) {
 			let changed = false;
+			const history = this.settings.templateHistory;
+			if (history[oldName]) {
+				history[newName] = history[oldName];
+				delete history[oldName];
+				changed = true;
+			}
 			for (const rule of this.settings.pathRules) {
 				if (rule.template === oldName) {
 					rule.template = newName;
@@ -984,6 +1013,29 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 		}
 		return ok;
+	}
+
+	/** 某模板的样式历史（最新在前）；没有则空数组。 */
+	templateHistoryOf(name: string): TemplateSnapshot[] {
+		return this.settings.templateHistory?.[name] ?? [];
+	}
+
+	/**
+	 * 把某模板当前样式记进历史（M16，S21）。首次记录时若历史为空，调用方应先记「保存前」的样式再记新样式，
+	 * 这样用户总能回到第一次编辑之前的样子。
+	 */
+	async recordTemplateStyle(name: string, style: TemplateStyle): Promise<void> {
+		const history = (this.settings.templateHistory ??= {});
+		history[name] = pushSnapshot(history[name] ?? [], style, Date.now());
+		await this.saveSettings();
+	}
+
+	/** 模板被删除时清掉它的历史。 */
+	async dropTemplateHistory(name: string): Promise<void> {
+		if (this.settings.templateHistory?.[name]) {
+			delete this.settings.templateHistory[name];
+			await this.saveSettings();
+		}
 	}
 
 	/**
@@ -1324,7 +1376,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * （{@link clearPluginNumberingContent}），手写编号不动、不写 `fm:false`；以单一事务写回，
 	 * 并像其他清除一样同步别处指向这些标题的链接。
 	 */
-	private runClearStaleNumbering(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
+	runClearStaleNumbering(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
 		const { prefixes, suffixes } = this.strippableAffixes();
 		const oldContent = editor.getValue();
 		let newContent = clearPluginNumberingContent(oldContent, {
@@ -1429,11 +1481,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 原子读改写（不在撤销历史内，确认框已提示备份）。顺带同步指向这些标题的内链——同文件自
 	 * 链接随主事务折叠，跨文件反链汇总为一条 Notice（{@link notifyBacklinkTotal}）。
 	 */
-	async clearAllVaultNumbering(): Promise<void> {
-		// 先**持久关闭**「全局自动编号」（0.7.17，testplan H7）：清完全库却留着开关开，
-		// 一编辑又被编回去——「全开着却没一个被编号」不符合直觉。清库 = 用户明确表态
-		// 「现在不要编号」，故先关开关再清；想恢复时手动再开即可。
-		if (this.settings.autoNumber) {
+	async clearAllVaultNumbering(turnOffAutoNumber = true): Promise<void> {
+		// 默认先**持久关闭**「全局自动编号」（0.7.17，testplan H7；1.3.0 起确认框里有勾选项可不关，H20）：
+		// 清完全库却留着开关开，一编辑又被编回去——「全开着却没一个被编号」不符合直觉。
+		// 勾选 = 用户明确表态「现在不要编号」，故先关开关再清；想恢复时手动再开即可。
+		if (turnOffAutoNumber && this.settings.autoNumber) {
 			this.settings.autoNumber = false;
 			await this.saveSettings();
 			// 面板若开着，立即反映开关新状态（单测环境未挂设置面板，可选调用）。
@@ -1749,7 +1801,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 故回退到「按 `getActiveFile()` 在打开的 markdown 叶子里找同路径视图」（{@link markdownContextForPath}）。
 	 * 找不到返回 `null`。
 	 */
-	private activeMarkdownContext(): { editor: Editor; ctx: MarkdownFileInfo } | null {
+	activeMarkdownContext(): { editor: Editor; ctx: MarkdownFileInfo } | null {
 		const direct = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (direct?.editor) {
 			return { editor: direct.editor, ctx: direct };
@@ -1871,6 +1923,24 @@ export default class AutoHeadingsPlugin extends Plugin {
 				return true;
 			},
 		});
+		// 同一小节的嵌入形态（`![[文件#标题]]`），门控与上一条相同。
+		this.addCommand({
+			id: "copy-section-embed",
+			name: t.cmdCopySectionEmbed,
+			editorCheckCallback: (checking, editor, ctx) => {
+				const file = ctx.file;
+				const heading = file
+					? sectionHeadingAt(editor.getValue(), editor.getCursor().line)
+					: null;
+				if (!file || !heading) {
+					return false;
+				}
+				if (!checking) {
+					void this.runCopySectionLink(file, heading, "embed");
+				}
+				return true;
+			},
+		});
 	}
 
 	/**
@@ -1878,7 +1948,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * （{@link virtualNumberingFor}），拼装逻辑见 {@link buildNumberedOutline}。没有标题时只提示、
 	 * 不碰剪贴板；写剪贴板失败（权限受限等）时提示复制失败，不向上抛错。
 	 */
-	private async runCopyNumberedOutline(editor: Editor, file: TFile): Promise<void> {
+	async runCopyNumberedOutline(editor: Editor, file: TFile): Promise<void> {
 		const content = editor.getValue();
 		const labels = this.virtualNumberingFor(file.path, content);
 		const { text, count } = buildNumberedOutline(content, labels);
@@ -1899,13 +1969,31 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 「复制当前小节链接」命令的执行体（R4）：链接由 Obsidian 按用户的链接设置生成
 	 * （`generateMarkdownLink`），锚点 / 别名口径见 {@link sectionLinkParts}。
 	 */
-	private async runCopySectionLink(file: TFile, heading: Heading): Promise<void> {
+	async runCopySectionLink(
+		file: TFile,
+		heading: Heading,
+		variant: "link" | "embed" = "link",
+	): Promise<void> {
 		const { anchor, alias } = sectionLinkParts(heading);
-		const link = this.app.fileManager.generateMarkdownLink(file, "", "#" + anchor, alias);
 		const m = this.messages();
+		// 嵌入形态（`![[文件#标题]]`）：不带别名——wikilink 嵌入里 `|…` 的含义是尺寸，不是显示文字。
+		let link = this.app.fileManager.generateMarkdownLink(
+			file,
+			"",
+			"#" + anchor,
+			variant === "embed" ? undefined : alias,
+		);
+		if (variant === "embed") {
+			link = "!" + link.replace(/^!/, "").replace(/\|[^\]|]*\]\]$/, "]]");
+		}
 		try {
 			await navigator.clipboard.writeText(link);
-			new Notice(m.noticeSectionLinkCopied(alias ?? stripWordJoiners(anchor)));
+			const label = alias ?? stripWordJoiners(anchor);
+			new Notice(
+				variant === "embed"
+					? m.noticeSectionEmbedCopied(label)
+					: m.noticeSectionLinkCopied(label),
+			);
 		} catch {
 			new Notice(m.noticeCopyFailed);
 		}
@@ -1958,6 +2046,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (merged.headingSuggestWhenVcActive !== "own") {
 			merged.headingSuggestWhenVcActive = "yield";
 		}
+		merged.templateHistory = sanitizeHistory(data.templateHistory);
 		// 迁移：开关 `showOutlineNumbers`（1.2.0–1.2.1，大纲里显示仅显示模式的编号）自 1.2.2 移除，
 		// 大纲编号固定开启（用户定：仅显示模式本就该处处看得到编号）；旧字段随迁移清理。
 		delete merged.showOutlineNumbers;
@@ -2173,7 +2262,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * `false`，本命令在同一事务里把它移除——与「清除当前文件编号」的暂停构成对称闭环。只认
 	 * `false`，`true`（文件级强制 opt-in）不在本命令管辖范围内。
 	 */
-	private runImmediateRenumber(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
+	runImmediateRenumber(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void {
 		// 若有待处理的实时更新，先取消，避免随后重复触发。
 		const path = ctx.file?.path;
 		if (path) {
@@ -2263,7 +2352,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 切开会产生半个码位的坐标。故两端切点各回退一格避开。文本内容本身不受影响：无论切在哪，
 	 * 「公共前缀 + 中段 + 公共后缀」拼回来都逐字节等于新行。
 	 */
-	private lineChange(line: number, oldLine: string, newLine: string): EditorChange {
+	lineChange(line: number, oldLine: string, newLine: string): EditorChange {
 		const max = Math.min(oldLine.length, newLine.length);
 		let head = 0;
 		while (head < max && oldLine[head] === newLine[head]) {
@@ -2499,7 +2588,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		const basename = target.basename ?? linkBasename(target.path);
 		const map = new Map(renames.map((r) => [r.from, r.to]));
-		const result = rewriteBacklinksInContent(newContent, basename, true, map);
+		const result = rewriteBacklinksInContent(
+			newContent,
+			basename,
+			true,
+			map,
+			buildAliasMap(renames),
+		);
 		return { content: result.content, renames, selfCount: result.count };
 	}
 
@@ -2569,6 +2664,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		let total = selfCount;
 		const map = new Map(renames.map((r) => [r.from, r.to]));
+		const aliasMap = buildAliasMap(renames);
 		const vault = this.app.vault;
 		const basename = target.basename ?? linkBasename(target.path);
 		const editors = this.openEditorsByPath();
@@ -2580,7 +2676,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			if (editor) {
 				// 引用方正被打开：走它的编辑器，不读盘（见本方法上方的根因说明）。
 				const old = editor.getValue();
-				const result = rewriteBacklinksInContent(old, basename, false, map);
+				const result = rewriteBacklinksInContent(old, basename, false, map, aliasMap);
 				if (result.count > 0) {
 					this.writeLineDiff(editor, old, result.content);
 				}
@@ -2593,7 +2689,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 				continue;
 			}
 			await vault.process(file, (content) => {
-				const result = rewriteBacklinksInContent(content, basename, false, map);
+				const result = rewriteBacklinksInContent(content, basename, false, map, aliasMap);
 				total += result.count;
 				return result.content;
 			});

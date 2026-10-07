@@ -164,6 +164,7 @@ export class AutoHeadingsSettingTab extends PluginSettingTab {
 	/** 真正执行模板删除并刷新面板。供模板分区与删除对话框调用。 */
 	async deleteTemplate(name: string): Promise<void> {
 		await this.plugin.templateStore.delete(name);
+		await this.plugin.dropTemplateHistory(name);
 		this.display();
 	}
 }

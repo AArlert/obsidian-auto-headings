@@ -1583,3 +1583,34 @@ describe("renumberContent — 单标题跳过标记 <!-- skip -->（issue #6，t
 		expect(once.split("\n")[2]).toBe(`## ${p("1")}乙`);
 	});
 });
+
+describe("整节跳过 <!-- skip-tree -->（testplan E37–E39）", () => {
+	const bare = (s: string) => s.split(WORD_JOINER).join("");
+	it("标题及其整棵子树都不编号，其后同级编号连续", () => {
+		const doc = ["## 甲", "## 乙 <!-- skip-tree -->", "### 乙一", "#### 乙一一", "## 丙"].join(
+			"\n",
+		);
+		const out = bare(renumberContent(doc, DEFAULT_TEMPLATE)).split("\n");
+		expect(out).toEqual([
+			"## 1 甲",
+			"## 乙 <!-- skip-tree -->",
+			"### 乙一",
+			"#### 乙一一",
+			"## 2 丙",
+		]);
+	});
+	it("子树内已有的编号被剥掉（与单标题跳过一致）", () => {
+		const doc = [
+			"## 甲",
+			`## 乙 <!-- skip-tree -->`,
+			`### ${WORD_JOINER}2.1 ${WORD_JOINER}乙一`,
+		].join("\n");
+		const out = bare(renumberContent(doc, DEFAULT_TEMPLATE)).split("\n");
+		expect(out[2]).toBe("### 乙一");
+	});
+	it("单标题 <!-- skip --> 仍只跳过本行，不含子树", () => {
+		const doc = ["## 甲", "## 乙 <!-- skip -->", "### 乙一"].join("\n");
+		const out = bare(renumberContent(doc, DEFAULT_TEMPLATE)).split("\n");
+		expect(out).toEqual(["## 1 甲", "## 乙 <!-- skip -->", "### 1.1 乙一"]);
+	});
+});

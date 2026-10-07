@@ -233,8 +233,8 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 .ah-path-row {
 	display: grid;
 	/* 拖拽手柄 当前笔记圆点 路径模式 模板 编号模式 行尾操作 */
-	grid-template-columns: 18px 10px minmax(0, 1fr) minmax(0, 0.8fr) minmax(96px, 0.6fr) 60px;
-	column-gap: 10px;
+	grid-template-columns: 10px 18px minmax(0, 1fr) minmax(0, 0.8fr) minmax(96px, 0.6fr) 60px;
+	gap: 0 10px;
 	align-items: center;
 }
 
@@ -500,10 +500,10 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 	}
 
 	.ah-path-row {
-		grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 10px 44px;
+		grid-template-columns: 10px 18px minmax(0, 1fr) minmax(0, 1fr) 44px;
 		grid-template-areas:
-			"handle pattern pattern dot actions"
-			"tpl tpl mode mode mode";
+			"dot handle pattern pattern actions"
+			". tpl tpl mode mode";
 		row-gap: 8px;
 		padding: 10px 0;
 		border-top: 1px solid var(--background-modifier-border);
@@ -757,7 +757,7 @@ button.ah-danger-text {
 .ah-foreign-guard-item {
 	display: grid;
 	grid-template-columns: var(--ah-fg-check) minmax(0, 1fr);
-	column-gap: 12px;
+	gap: 0 12px;
 	align-items: start;
 	border-radius: var(--radius-s, 4px);
 	font-size: var(--font-ui-small);
@@ -1054,8 +1054,8 @@ button.ah-danger-text {
 
 /* 文件里还留着本插件以前写入的旧编号：虚线下划线提示，悬停有说明。 */
 .ah-virtual-number--stale {
-	text-decoration: underline dotted var(--text-muted);
-	text-underline-offset: 0.2em;
+	/* 用虚线下边框代替 text-decoration 的复合写法（旧版 Electron 只部分支持）。 */
+	border-bottom: 1px dotted var(--text-muted);
 	cursor: help;
 }
 
@@ -1166,6 +1166,10 @@ button.ah-danger-text {
 .modal.ah-template-modal {
 	width: min(1080px, 94vw);
 	max-width: 94vw;
+	/* 部分主题（半透明 / 毛玻璃）会让弹窗太透、字看不清：给编辑弹窗一个实色底（1.3.0） */
+	background-color: var(--background-primary);
+	opacity: 1;
+	backdrop-filter: none;
 }
 
 .ah-editor-title {
@@ -1248,6 +1252,40 @@ button.ah-editor-tab.is-active:hover {
 }
 
 .ah-editor-footer-note {
+	flex: 1;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+/* 快速套用 / 历史工具条（M16） */
+.ah-style-toolbar {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.ah-history-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.ah-history-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+}
+
+.ah-history-summary {
+	font-weight: var(--font-medium);
+}
+
+.ah-history-time,
+.ah-history-same {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 }
@@ -1302,7 +1340,7 @@ button.ah-editor-tab.is-active:hover {
 	grid-template-columns:
 		36px minmax(48px, 0.8fr) minmax(96px, 1.3fr) minmax(48px, 0.8fr) minmax(48px, 0.8fr)
 		minmax(48px, 0.8fr) minmax(84px, 1fr) minmax(96px, 1.4fr);
-	column-gap: 10px;
+	gap: 0 10px;
 	align-items: center;
 	min-height: 42px;
 	padding: 0 10px;
@@ -1477,4 +1515,60 @@ button.ah-preview-toggle.is-active {
 	.ah-fmt-row {
 		min-width: 640px;
 	}
+}
+
+/* 标题手柄（M16，spec §3.24）：仅手机端使用的行尾「⋯」浮层（桌面端复用原生折叠箭头） */
+.ah-heading-handle {
+	position: absolute;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	border-radius: var(--radius-s);
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+	letter-spacing: -2px;
+	cursor: pointer;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.12s ease;
+}
+.ah-heading-handle.is-visible {
+	opacity: 1;
+	pointer-events: auto;
+}
+.ah-heading-handle:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+/* 拖动整节时的落点横线与拖动态光标（桌面端，复用折叠箭头拖动） */
+.ah-drop-line {
+	position: absolute;
+	left: 0;
+	right: 0;
+	z-index: 6;
+	height: 2px;
+	background: var(--interactive-accent);
+	pointer-events: none;
+}
+body.ah-dragging-section,
+body.ah-dragging-section * {
+	cursor: grabbing !important;
+	user-select: none;
+}
+
+/* 清除全库确认框里的勾选项（1.3.0） */
+.ah-confirm-option {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-top: 12px;
+	font-size: var(--font-ui-small);
+}
+
+.ah-confirm-option-hint {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
 }

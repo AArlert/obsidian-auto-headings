@@ -22,6 +22,9 @@ export type FileSwitch = boolean | null;
 /** 插件读取的唯一 frontmatter 键；同时用于向 Obsidian 注册复选框属性类型。 */
 export const SWITCH_KEY = "obsidian-auto-headings";
 
+/** 单篇模板键（M16，spec §3.24）：字符串，值为模板名；与复选框类型的 {@link SWITCH_KEY} 分开。 */
+export const TEMPLATE_KEY = "obsidian-auto-headings-template";
+
 /**
  * 定位 frontmatter 区块的闭合行下标（开头恒为第 0 行的 `---`）。
  * 无 frontmatter、或有开头但**未闭合**（畸形）时返回 `-1`——两种情况都按「无 frontmatter」处理，

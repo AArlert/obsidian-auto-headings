@@ -5,6 +5,7 @@ import type { Template } from "../../numbering";
 import type { PathRule } from "../../pathrules";
 import { DEFAULT_TEMPLATE_NAME } from "../../templates/schema";
 import { cardPreviewLines } from "../templateView";
+import { markDestructive } from "../buttons";
 import { decorateHeadingButton, renderPathRules } from "./PathRules";
 import { TemplateEditorModal } from "./TemplateEditorModal";
 
@@ -174,12 +175,9 @@ class DeleteTemplateModal extends Modal {
 		new Setting(contentEl)
 			.addButton((btn) => btn.setButtonText(t.cancel).onClick(() => this.close()))
 			.addButton((btn) =>
-				btn
-					.setButtonText(t.confirmDelete)
-					.setWarning()
-					.onClick(async () => {
-						await this.applyAndClose(plugin);
-					}),
+				markDestructive(btn.setButtonText(t.confirmDelete)).onClick(async () => {
+					await this.applyAndClose(plugin);
+				}),
 			);
 	}
 

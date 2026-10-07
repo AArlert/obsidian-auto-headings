@@ -332,7 +332,7 @@ async function tryWriteViaLiveInstance(
 	if (!isValidVcSettingsShape(vc.settings)) {
 		return "invalid-shape";
 	}
-	const settings = vc.settings as VcSettingsShape;
+	const settings = vc.settings;
 	settings.customDictionaryPaths = mergeDictionaryPath(
 		settings.customDictionaryPaths,
 		dictionaryPath,
@@ -368,7 +368,7 @@ async function tryWriteViaAdapterFile(
 	if (!isValidVcSettingsShape(parsed)) {
 		return "invalid-shape";
 	}
-	const settings = parsed as VcSettingsShape;
+	const settings = parsed;
 	settings.customDictionaryPaths = mergeDictionaryPath(
 		settings.customDictionaryPaths,
 		dictionaryPath,

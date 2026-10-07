@@ -105,8 +105,8 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 	const table = containerEl.createDiv({ cls: "ah-path-table" });
 	const head = table.createDiv({ cls: "ah-path-row ah-path-head" });
 	for (const [label, cls] of [
-		["", "ah-path-c-handle"],
 		["", "ah-path-c-dot"],
+		["", "ah-path-c-handle"],
 		[t.pathColPattern, "ah-path-c-pattern"],
 		[t.pathColTemplate, "ah-path-c-template"],
 		[t.pathColMode, "ah-path-c-mode"],
@@ -145,20 +145,20 @@ function renderPathRuleRow(
 	const rules = plugin.settings.pathRules;
 	const row = table.createDiv({ cls: "ah-path-row" });
 
-	// 拖拽手柄（**仅手柄可发起拖拽**，整行不再 draggable——否则会妨碍路径输入框的文本选择）。
-	const handle = row.createDiv({ cls: "ah-path-cell ah-path-c-handle ah-path-handle" });
-	setIcon(handle, "grip-vertical");
-	handle.setAttr("draggable", "true");
-	handle.setAttr("aria-label", t.dragHandleTooltip);
-	handle.title = t.dragHandleTooltip;
-
-	// 当前笔记圆点（取代原行号列，testplan L32）。
+	// 当前笔记圆点（取代原行号列，testplan L32；1.3.0 起放在拖拽手柄之前）。
 	const dotCell = row.createDiv({ cls: "ah-path-cell ah-path-c-dot" });
 	if (isActive) {
 		const dot = dotCell.createSpan({ cls: "ah-path-dot" });
 		dot.setAttr("aria-label", t.activeRuleTooltip);
 		dot.title = t.activeRuleTooltip;
 	}
+
+	// 拖拽手柄（**仅手柄可发起拖拽**，整行不再 draggable——否则会妨碍路径输入框的文本选择）。
+	const handle = row.createDiv({ cls: "ah-path-cell ah-path-c-handle ah-path-handle" });
+	setIcon(handle, "grip-vertical");
+	handle.setAttr("draggable", "true");
+	handle.setAttr("aria-label", t.dragHandleTooltip);
+	handle.title = t.dragHandleTooltip;
 
 	// 路径模式输入（接建议弹窗 + 行内清空按钮）。
 	const patternCell = row.createDiv({
@@ -217,7 +217,7 @@ function renderPathRuleRow(
 
 	// 清空此路径的小按钮（只清空输入框文本，不删除整条规则）。桌面端悬停 / 聚焦时才出现，
 	// 触屏常显（styles.css，testplan L6）。
-	const clearBtn = patternCell.createEl("span", { cls: "ah-input-clear" });
+	const clearBtn = patternCell.createSpan({ cls: "ah-input-clear" });
 	setIcon(clearBtn, "x");
 	clearBtn.setAttr("aria-label", t.clearInputTooltip);
 	clearBtn.title = t.clearInputTooltip;
@@ -240,14 +240,11 @@ function renderPathRuleRow(
 			opt.selected = true;
 		}
 	}
-	// 「不编号」伪模板（M12，testplan K15）：固定排在真实模板之后的伪选项——文件夹级彻底关闭
-	// 编号，替代逐文件 frontmatter `false`（哨兵值不落模板文件，见 pathrules.ts）。
-	const noneOpt = select.createEl("option", {
-		value: NO_NUMBERING_TEMPLATE,
-		text: t.pathTemplateNone,
-	});
+	// 「不编号」（M12，testplan K15）：1.3.0 起挪到右边的「模式」下拉（S23），数据仍是伪模板哨兵。
+	// 这里只在规则处于「不编号」时放一个占位项并置灰，模板名没有意义。
 	if (rule.template === NO_NUMBERING_TEMPLATE) {
-		noneOpt.selected = true;
+		select.createEl("option", { value: NO_NUMBERING_TEMPLATE, text: "—" }).selected = true;
+		select.disabled = true;
 	}
 	// 规则引用的模板已不存在（理论上不应发生）时，补一个失效项以免静默改投（伪模板不算失效）。
 	if (rule.template !== NO_NUMBERING_TEMPLATE && !plugin.templateStore.has(rule.template)) {
@@ -271,17 +268,27 @@ function renderPathRuleRow(
 	const modeOptions: Array<[string, string]> = [
 		["write", t.pathModeWrite],
 		["virtual", t.pathModeVirtual],
+		["none", t.pathTemplateNone],
 	];
+	const currentMode = rule.template === NO_NUMBERING_TEMPLATE ? "none" : ruleMode(rule);
 	for (const [value, text] of modeOptions) {
 		const opt = modeSelect.createEl("option", { value, text });
-		if (ruleMode(rule) === value) {
+		if (currentMode === value) {
 			opt.selected = true;
 		}
 	}
-	modeSelect.disabled = rule.template === NO_NUMBERING_TEMPLATE;
 	modeSelect.addEventListener("change", () => {
 		const after = cloneRules(rules);
-		after[index].mode = modeSelect.value === "virtual" ? "virtual" : "write";
+		const picked = modeSelect.value;
+		if (picked === "none") {
+			after[index].template = NO_NUMBERING_TEMPLATE;
+		} else {
+			// 从「不编号」切回时模板名已无从恢复，退回默认模板；用户可再在左边挑别的。
+			if (after[index].template === NO_NUMBERING_TEMPLATE) {
+				after[index].template = DEFAULT_TEMPLATE_NAME;
+			}
+			after[index].mode = picked === "virtual" ? "virtual" : "write";
+		}
 		void commitRules(tab, after);
 	});
 
@@ -312,7 +319,7 @@ function renderPathRuleRow(
 
 	const actions = row.createDiv({ cls: "ah-path-cell ah-path-c-actions" });
 	// 桌面：两个图标按钮常驻。
-	const batch = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-batch" });
+	const batch = actions.createSpan({ cls: "ah-path-icon-btn ah-path-batch" });
 	setIcon(batch, "list-ordered");
 	if (batchBlocked) {
 		batch.addClass("ah-path-batch-disabled");
@@ -323,13 +330,13 @@ function renderPathRuleRow(
 		batch.title = t.batchRenumberTooltip;
 		batch.addEventListener("click", runBatch);
 	}
-	const del = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-del" });
+	const del = actions.createSpan({ cls: "ah-path-icon-btn ah-path-del" });
 	setIcon(del, "x");
 	del.setAttr("aria-label", t.deleteRuleTooltip);
 	del.title = t.deleteRuleTooltip;
 	del.addEventListener("click", deleteRule);
 	// 窄屏：同样两项收进 ⋯ 菜单（testplan L33；显隐由 styles.css 媒体查询切换）。
-	const more = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-more" });
+	const more = actions.createSpan({ cls: "ah-path-icon-btn ah-path-more" });
 	setIcon(more, "more-horizontal");
 	more.setAttr("aria-label", t.moreActionsTooltip);
 	more.addEventListener("click", (e) => {

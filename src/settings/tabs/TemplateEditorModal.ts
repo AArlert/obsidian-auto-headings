@@ -3,6 +3,7 @@ import type AutoHeadingsPlugin from "../../main";
 import type { Messages } from "../../i18n";
 import type { Template, WhitelistSortMode } from "../../numbering";
 import { DEFAULT_TEMPLATE_NAME } from "../../templates/schema";
+import { styleOf, stylesEqual, type TemplateStyle } from "../../templates/styles";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { renderFormatPane } from "./EditPanel";
 import { renderWhitelistEditor } from "./WhitelistEditor";
@@ -32,6 +33,8 @@ export interface TemplateEditorHost {
 	pendingFocus: string | null;
 	/** 整窗重绘（保留滚动位置）。 */
 	rerender(): void;
+	/** 模板被改动：立即存盘并重编已打开的笔记（改动即时生效，S22）。 */
+	persist(template: Template): Promise<void>;
 }
 
 /**
@@ -54,6 +57,8 @@ export class TemplateEditorModal extends Modal implements TemplateEditorHost {
 	private pane: EditorPane;
 	private templateName: string;
 	private renaming = false;
+	/** 打开时的样式；关闭时据此判断样式是否变过（决定要不要记历史，S21）。 */
+	private baseStyle: TemplateStyle | null = null;
 
 	constructor(
 		app: App,
@@ -80,12 +85,39 @@ export class TemplateEditorModal extends Modal implements TemplateEditorHost {
 
 	onOpen(): void {
 		this.modalEl.addClass("ah-template-modal");
+		const stored = this.plugin.templateStore.get(this.templateName);
+		this.baseStyle = stored ? styleOf(stored) : null;
 		this.render();
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
-		this.tab.display();
+		void this.recordHistory().finally(() => this.tab.display());
+	}
+
+	/**
+	 * 退出弹窗即视为一次保存（S21）：样式相对打开时变过，就把新样式记进历史；历史为空时先把打开时的
+	 * 样式记一份，保证能回到第一次编辑之前。只改白名单、样式没变则不记。
+	 */
+	private async recordHistory(): Promise<void> {
+		const tpl = this.plugin.templateStore.get(this.templateName);
+		if (!tpl || !this.baseStyle) {
+			return;
+		}
+		const next = styleOf(tpl);
+		if (stylesEqual(this.baseStyle, next)) {
+			return;
+		}
+		if (this.plugin.templateHistoryOf(tpl.name).length === 0) {
+			await this.plugin.recordTemplateStyle(tpl.name, this.baseStyle);
+		}
+		await this.plugin.recordTemplateStyle(tpl.name, next);
+		this.baseStyle = next;
+	}
+
+	async persist(template: Template): Promise<void> {
+		await this.plugin.templateStore.save(template);
+		this.plugin.renumberActiveFile();
 	}
 
 	rerender(): void {

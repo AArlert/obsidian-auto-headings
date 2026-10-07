@@ -83,8 +83,7 @@ export function renderWhitelistEditor(
 		const exists = template.whitelist.some((e) => e.text === text && e.match === "exact");
 		if (!exists) {
 			template.whitelist.push({ text, match: "exact" });
-			await plugin.templateStore.save(template);
-			plugin.renumberActiveFile();
+			await host.persist(template);
 		}
 		input.value = "";
 		host.pendingFocus = ".ah-wl-add"; // 重绘后光标留在添加框，便于连续添加。
@@ -113,8 +112,7 @@ export function renderWhitelistEditor(
 
 	/** 提交条目改动并整页重绘（保存模板 + 立即重编当前文件）。 */
 	const commit = async () => {
-		await plugin.templateStore.save(template);
-		plugin.renumberActiveFile();
+		await host.persist(template);
 		host.rerender();
 	};
 
@@ -122,12 +120,12 @@ export function renderWhitelistEditor(
 	const renderRows = () => {
 		rowsEl.empty();
 		if (template.whitelist.length === 0) {
-			rowsEl.createEl("span", { cls: "ah-section-desc", text: t.wlEmpty });
+			rowsEl.createSpan({ cls: "ah-section-desc", text: t.wlEmpty });
 			return;
 		}
 		const views = filterSortWhitelist(template.whitelist, host.wlFilter, host.wlSort);
 		if (views.length === 0) {
-			rowsEl.createEl("span", { cls: "ah-section-desc", text: t.wlFilterNoMatch });
+			rowsEl.createSpan({ cls: "ah-section-desc", text: t.wlFilterNoMatch });
 			return;
 		}
 		views.forEach(({ entry, index }) => {
@@ -135,7 +133,7 @@ export function renderWhitelistEditor(
 			const row = rowsEl.createDiv({ cls: "ah-wl-row" });
 
 			// 词语（点击行内编辑，testplan L18）。
-			const textEl = row.createEl("span", { cls: "ah-wl-row-text", text: entry.text });
+			const textEl = row.createSpan({ cls: "ah-wl-row-text", text: entry.text });
 			textEl.title = t.wlEditTitle;
 			textEl.addEventListener("click", () => {
 				// 挂在 row（textEl 的实际父节点）上创建，同文档、不必单独处理弹出窗口；
@@ -201,7 +199,7 @@ export function renderWhitelistEditor(
 			// 命中数角标（tooltip 列出命中标题，超过上限截断加计数，testplan L19）；命中 0 时不显示
 			// （L42），留空位保持各行对齐。
 			const hitCount = hit?.count ?? 0;
-			const count = row.createEl("span", {
+			const count = row.createSpan({
 				cls: hitCount > 0 ? "ah-wl-row-count" : "ah-wl-row-count is-empty",
 				text: hitCount > 0 ? String(hitCount) : "",
 			});
@@ -214,12 +212,12 @@ export function renderWhitelistEditor(
 
 			// ⚠ 含子标题告警（全部 / 部分命中却含子标题，应改用子树）。
 			if (hit?.warnHasChildren) {
-				const warn = row.createEl("span", { cls: "ah-wl-row-warn", text: "⚠" });
+				const warn = row.createSpan({ cls: "ah-wl-row-warn", text: "⚠" });
 				warn.title = t.wlChipWarnTitle;
 			}
 
 			// ✕ 删除（按原始下标写回存储数组，过滤 / 排序视图下也删对条目）。
-			const del = row.createEl("span", { cls: "ah-wl-row-del" });
+			const del = row.createSpan({ cls: "ah-wl-row-del" });
 			setIcon(del, "x");
 			del.setAttr("aria-label", t.deleteBtn);
 			del.title = t.deleteBtn;

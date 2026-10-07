@@ -150,7 +150,7 @@ export function decorateHeading(el: Element, label: VirtualHeadingLabel, tooltip
 		stripped = text.data.slice(0, end + 1);
 		text.data = text.data.slice(end + 1);
 	}
-	const span = el.ownerDocument.createElement("span");
+	const span = createSpan();
 	span.className = stale ? `${NUMBER_CLASS} ${STALE_CLASS}` : NUMBER_CLASS;
 	span.textContent = label.label;
 	if (stale) {

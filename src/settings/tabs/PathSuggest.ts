@@ -64,7 +64,7 @@ export class PathSuggestPopup {
 		inputEl.addEventListener("blur", () => {
 			// 延迟关闭：点击建议项的 mousedown 已 preventDefault 抢在 blur 之前触发选中，
 			// 这里的延时只是兜底，避免二者时序在个别环境下颠倒导致选中前弹窗已被关闭。
-			this.closeTimer = activeWindow.setTimeout(() => this.close(), 120);
+			this.closeTimer = window.setTimeout(() => this.close(), 120);
 		});
 	}
 
@@ -132,7 +132,7 @@ export class PathSuggestPopup {
 
 	private refresh(): void {
 		if (this.closeTimer !== null) {
-			activeWindow.clearTimeout(this.closeTimer);
+			window.clearTimeout(this.closeTimer);
 			this.closeTimer = null;
 		}
 		const candidates = this.getCandidates();
@@ -293,7 +293,7 @@ export class PathSuggestPopup {
 
 	private close(): void {
 		if (this.closeTimer !== null) {
-			activeWindow.clearTimeout(this.closeTimer);
+			window.clearTimeout(this.closeTimer);
 			this.closeTimer = null;
 		}
 		this.el?.remove();
