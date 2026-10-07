@@ -210,7 +210,6 @@ function siblingAfter(node: FakeEl | FakeText): FakeEl | FakeText | null {
 	return parent.children[parent.children.indexOf(node) + 1] ?? null;
 }
 const fakeDocument = {
-	createElement: (tag: string) => new FakeEl(tag.toUpperCase()),
 	createTreeWalker: (root: FakeEl) => {
 		const texts = [...root.walk()].filter((n) => n instanceof FakeText);
 		let i = 0;
@@ -221,6 +220,10 @@ const heading = (tag: string, text: string) => new FakeEl(tag).append(new FakeTe
 /** 阅读视图的一个段落：`<div>` 里包一个标题。 */
 const section = (tag: string, text: string) => new FakeEl("DIV").append(heading(tag, text));
 const asEl = (e: FakeEl) => e as unknown as HTMLElement;
+
+// 源码用 Obsidian 全局助手 createSpan 造编号 span；单测环境没有，换成 FakeEl（对本文件所有用例生效）。
+beforeEach(() => vi.stubGlobal("createSpan", () => new FakeEl("SPAN")));
+afterEach(() => vi.unstubAllGlobals());
 
 describe("阅读视图：给标题加 / 去编号（testplan V13 / V29）", () => {
 	it("编号 span 插在正文前；已加过的不重复加", () => {

@@ -234,7 +234,7 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 	display: grid;
 	/* 拖拽手柄 当前笔记圆点 路径模式 模板 编号模式 行尾操作 */
 	grid-template-columns: 10px 18px minmax(0, 1fr) minmax(0, 0.8fr) minmax(96px, 0.6fr) 60px;
-	column-gap: 10px;
+	gap: 0 10px;
 	align-items: center;
 }
 
@@ -757,7 +757,7 @@ button.ah-danger-text {
 .ah-foreign-guard-item {
 	display: grid;
 	grid-template-columns: var(--ah-fg-check) minmax(0, 1fr);
-	column-gap: 12px;
+	gap: 0 12px;
 	align-items: start;
 	border-radius: var(--radius-s, 4px);
 	font-size: var(--font-ui-small);
@@ -1054,8 +1054,8 @@ button.ah-danger-text {
 
 /* 文件里还留着本插件以前写入的旧编号：虚线下划线提示，悬停有说明。 */
 .ah-virtual-number--stale {
-	text-decoration: underline dotted var(--text-muted);
-	text-underline-offset: 0.2em;
+	/* 用虚线下边框代替 text-decoration 的复合写法（旧版 Electron 只部分支持）。 */
+	border-bottom: 1px dotted var(--text-muted);
 	cursor: help;
 }
 
@@ -1340,7 +1340,7 @@ button.ah-editor-tab.is-active:hover {
 	grid-template-columns:
 		36px minmax(48px, 0.8fr) minmax(96px, 1.3fr) minmax(48px, 0.8fr) minmax(48px, 0.8fr)
 		minmax(48px, 0.8fr) minmax(84px, 1fr) minmax(96px, 1.4fr);
-	column-gap: 10px;
+	gap: 0 10px;
 	align-items: center;
 	min-height: 42px;
 	padding: 0 10px;

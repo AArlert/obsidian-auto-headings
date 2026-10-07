@@ -15,6 +15,35 @@
 
 ---
 
+## 2026-10-07 1.3.0 开发：商店审查告警清理；test 库右键菜单打不开查明（不 bump，交接：feat/1.3.0-note-entry，仅本地）
+
+### 做了什么
+
+- **test 库右键失效**：不是代码问题——`F:\文档\Obsidian\test\test` 里装的是商店版 1.2.2（`main.js` 不含标题手柄），已把本分支构建部署过去（`data.json` 未动），Oblivion 库同步更新。
+- **按 Community Hub 审查报告修**（用官方 `eslint-plugin-obsidianmd` 0.4.2 在 scratchpad 本地复现，仓库 lint 配置未改）：
+  - `createEl("div"/"span")` → `createDiv` / `createSpan`；手机端手柄、两处编号 span 不再用 `document.createElement`（阅读视图单测给 `createSpan` 打桩）；
+  - 计时器 `activeWindow.*Timeout` → `window.*Timeout`；去掉两处多余类型断言、一个未用变量；落点线显隐改 `hide()` / `show()`；
+  - 破坏性按钮新增 `settings/buttons.ts` 的 `markDestructive`：1.13+ 用 `setDestructive`，旧版加 `mod-warning` 类（不再调废弃的 `setWarning`）；
+  - VC 词典路径复制去掉 `execCommand` 回退，失败提示「复制到剪贴板失败」（路径本就显示在说明里）；
+  - 单测用的 `js-yaml` 换成 `yaml`（锁文件已按 master 口径补回 npm 11 删掉的 vite-node 可选条目）；
+  - CSS：网格 `column-gap` → `gap: 0 Npx`；残留编号的虚线下划线改为 `border-bottom` 虚线；
+  - README 双语常见问题加「会访问哪些内容」（全库文件列举、剪贴板用途），回应审查的 Behavior 两条。
+
+### 没做什么
+
+- **有意保留**：`getSettingDefinitions` / `display()` 废弃（1.13 声明式设置 API，minAppVersion 1.8.7 下要整体重写设置页，留待以后）；`main.ts` 选区序列化的 `doc.createElement`（分离节点，已有注释说明；`Node.createDiv` 会挂到 document 上，不可用）。
+- 改动未真机验证；testplan 无行为变化，未改场景。
+
+### 下一步
+
+- 用户重载 test 库与 Oblivion 库后复查标题右键菜单、清库 / 删模板确认按钮的红色样式、残留编号虚线；然后照上一块的发版步骤走。
+
+### 验证方式
+
+- `tsc` / `eslint` / `prettier --check` 全绿；vitest 881/882（`whitelist.test.ts:406` ICU 假红）；官方规则集复跑只剩上述有意保留的项。
+
+---
+
 ## 2026-10-07 1.3.0 开发：M16 笔记内入口与模板编辑增强全部落地（不 bump，交接：feat/1.3.0-note-entry，仅本地）
 
 ### 做了什么
@@ -81,42 +110,3 @@
 ### 验证方式
 
 - `npm run preflight` 全绿（Windows 本机 `whitelist.test.ts:406` ICU 假红除外）；master CI 绿后才打 tag。
-
----
-
-## 2026-10-07 1.2.2 视觉风格更新：M15 全部落地（不 bump，交接：feat/1.2.2-visual-refresh，仅本地、未推送）
-
-### 做了什么
-
-- **第一块（外壳 + 全局设置）**：分区标题回原生、8 处弹窗原生 `setTitle`、TAB 四字名（编号维护图标 `wrench`）、
-  全局设置说明一行化（`i18n.test.ts` 守门）、防抖滑块常显数值、VC 三行缩进且按 VC 状态显隐、离场提示条中性化。
-  用户看过后定：外壳版本号**保留**；「在大纲中显示编号」开关**删除**、固定开启（旧字段加载时清理）。
-- **第二块（路径模板）**：规则表去行号改当前笔记圆点、添加规则挪到标题行、窄屏两行 + ⋯ 菜单（确认框拆到
-  `PathRuleModals.ts`）；模板卡片；新增模板编辑弹窗 `TemplateEditorModal.ts`（格式页 `EditPanel.ts` / 底部预览
-  `TemplatePreview.ts` / 白名单页图例）；纯逻辑 `templateView.ts` + `templateView.test.ts`。
-- **第三块**：编号维护 TAB（`DangerTab.ts` → `MaintenanceTab.ts`，两组、补「立即重新编号」「清除残留编号」入口、
-  全库确认框输入确认词 `confirmWordMatches`）；关于插件（双语简介、按钮链接、鸣谢一行名称 + 一行说明）；外来编号
-  弹窗（全选三态、已选计数、去卡片框、勾选框对齐、滚动条独立槽位、写明数量的确认按钮）与带处数的 Notice。
-- testplan：L9 / L10 / L12 / L13 / L20 / L23 改写，新增 L27–L45、J22–J24，Q10 / Q24 / V43 注明变化；spec 3.6 / 3.7 /
-  3.10 / 3.13 / 3.18 / 3.22 / 4 同步，Roadmap M15 全勾并写两条落地备注；使用指南补「标题链接建议」一节。
-
-- **用户实测后第二轮（同日）**：卡片预览改为 H1–H6 全部列出（不编号层级浅色、不带编号）；编辑弹窗底部预览每行标出
-  H 几；规则表下灰字对齐路径框；外来编号「全选」补半选横杠样式。我用电脑操作实机过了一遍全部 TAB、编辑弹窗、确认框、
-  外来编号提示与弹窗（测试笔记 `Claude测试/外来编号弹窗测试.md`，弹窗都点了取消，未改任何笔记）。
-- **第三轮（同日）**：用户定清库确认框不加「同时关闭自动编号」；编号维护的「清理非本插件编号」改为「检查…」，先弹
-  迁移守卫同款清理预览框（`reviewActiveFileForeignNumbering`，没命中模板时只剥编号，L12 + `main.test.ts` 三条）。
-- 快速套用要加「最近用过的样式」（记住该模板最近几次编辑，一键回到那个样式）——已记进 Roadmap M16，不在 1.2.2 做。
-
-### 没做什么
-
-- 新界面的 🔲 手验场景都还没过真机；没 bump、没写发布说明、没推送。
-
-### 下一步
-
-- 用户在 iCloud 测试库实测整套 1.2.2 → 按反馈改 → 用户确认后 bump 1.2.2、写 `doc/release-notes/1.2.2.md`、
-  testplan「未发版」换版本号、合并 master、推送、打 tag（期间仍不推送，见 [[release-1.2.2-local-first]] 记忆）。
-
-### 验证方式
-
-- `npm run check`：837 条测试仅 `whitelist.test.ts:406` Windows ICU 假红；tsc / eslint / prettier（本仓库文件）/ docs 守卫通过。
-- 构建已部署 iCloud 测试库（`release/` 2026-10-07 07:08）。

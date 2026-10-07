@@ -2,6 +2,7 @@ import { Modal, Setting, setIcon, type App } from "obsidian";
 import type AutoHeadingsPlugin from "../../main";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { confirmWordMatches } from "../model";
+import { markDestructive } from "../buttons";
 
 /**
  * 「编号维护」TAB（原「敏感操作」，1.2.2 改名与重排，见 spec.md §3.10 / §3.13、testplan L43）。分两组：
@@ -136,8 +137,9 @@ class VaultConfirmModal extends Modal {
 		new Setting(contentEl)
 			.addButton((btn) => btn.setButtonText(t.cancel).onClick(() => this.close()))
 			.addButton((btn) => {
-				btn.setButtonText(isClear ? t.confirmClearVault : t.confirmFreezeVault)
-					.setWarning()
+				markDestructive(
+					btn.setButtonText(isClear ? t.confirmClearVault : t.confirmFreezeVault),
+				)
 					.setDisabled(true)
 					.onClick(() => void run());
 				confirmBtn = btn.buttonEl;

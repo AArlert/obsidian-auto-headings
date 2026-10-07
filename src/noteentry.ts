@@ -130,7 +130,6 @@ export class NoteEntry {
 				if (!h || !file) {
 					return;
 				}
-				const m = p.messages();
 				this.addHeadingItems(menu, editor, file, h, false);
 			}),
 		);

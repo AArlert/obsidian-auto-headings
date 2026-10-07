@@ -590,8 +590,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/** 读某文件 frontmatter 里的单篇模板名（走元数据缓存，同步；缺省 / 非字符串返回 `null`）。 */
 	noteTemplateName(filePath: string): string | null {
 		const cache = this.app.metadataCache as Partial<MetadataCache> | undefined;
-		const fm = cache?.getCache?.(filePath)?.frontmatter as Record<string, unknown> | undefined;
-		const v = fm?.[TEMPLATE_KEY];
+		const fm = cache?.getCache?.(filePath)?.frontmatter;
+		const v: unknown = fm?.[TEMPLATE_KEY];
 		return typeof v === "string" && v.trim() ? v.trim() : null;
 	}
 

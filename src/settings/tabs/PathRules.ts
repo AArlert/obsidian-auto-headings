@@ -217,7 +217,7 @@ function renderPathRuleRow(
 
 	// 清空此路径的小按钮（只清空输入框文本，不删除整条规则）。桌面端悬停 / 聚焦时才出现，
 	// 触屏常显（styles.css，testplan L6）。
-	const clearBtn = patternCell.createEl("span", { cls: "ah-input-clear" });
+	const clearBtn = patternCell.createSpan({ cls: "ah-input-clear" });
 	setIcon(clearBtn, "x");
 	clearBtn.setAttr("aria-label", t.clearInputTooltip);
 	clearBtn.title = t.clearInputTooltip;
@@ -319,7 +319,7 @@ function renderPathRuleRow(
 
 	const actions = row.createDiv({ cls: "ah-path-cell ah-path-c-actions" });
 	// 桌面：两个图标按钮常驻。
-	const batch = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-batch" });
+	const batch = actions.createSpan({ cls: "ah-path-icon-btn ah-path-batch" });
 	setIcon(batch, "list-ordered");
 	if (batchBlocked) {
 		batch.addClass("ah-path-batch-disabled");
@@ -330,13 +330,13 @@ function renderPathRuleRow(
 		batch.title = t.batchRenumberTooltip;
 		batch.addEventListener("click", runBatch);
 	}
-	const del = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-del" });
+	const del = actions.createSpan({ cls: "ah-path-icon-btn ah-path-del" });
 	setIcon(del, "x");
 	del.setAttr("aria-label", t.deleteRuleTooltip);
 	del.title = t.deleteRuleTooltip;
 	del.addEventListener("click", deleteRule);
 	// 窄屏：同样两项收进 ⋯ 菜单（testplan L33；显隐由 styles.css 媒体查询切换）。
-	const more = actions.createEl("span", { cls: "ah-path-icon-btn ah-path-more" });
+	const more = actions.createSpan({ cls: "ah-path-icon-btn ah-path-more" });
 	setIcon(more, "more-horizontal");
 	more.setAttr("aria-label", t.moreActionsTooltip);
 	more.addEventListener("click", (e) => {

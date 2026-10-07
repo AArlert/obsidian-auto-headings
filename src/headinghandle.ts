@@ -56,12 +56,9 @@ export function headingHandleExtension(entry: NoteEntry, hint: () => string): Ex
 
 			constructor(private readonly view: EditorView) {
 				if (Platform.isMobile) {
-					this.el = document.createElement("div");
-					this.el.className = "ah-heading-handle";
-					this.el.textContent = "⋯";
+					this.el = view.scrollDOM.createDiv({ cls: "ah-heading-handle", text: "⋯" });
 					this.el.addEventListener("mousedown", (e) => e.preventDefault());
 					this.el.addEventListener("click", (e) => this.openAtLine(e, this.lineEl));
-					view.scrollDOM.appendChild(this.el);
 				} else {
 					this.el = null;
 					// 挂在 window 捕获阶段：其他插件（如 Outliner）也在捕获阶段拦 mousedown，
@@ -227,11 +224,11 @@ export function headingHandleExtension(entry: NoteEntry, hint: () => string): Ex
 				}
 				d.dest = best?.dest ?? null;
 				if (!best) {
-					this.dropEl.style.display = "none";
+					this.dropEl.hide();
 					return;
 				}
 				const s = this.view.scrollDOM.getBoundingClientRect();
-				this.dropEl.style.display = "";
+				this.dropEl.show();
 				this.dropEl.style.top = `${best.y - s.top + this.view.scrollDOM.scrollTop}px`;
 			}
 

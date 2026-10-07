@@ -17,25 +17,6 @@ import type AutoHeadingsPlugin from "../../main";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { readVcDescriptionOnSuggestion } from "../../vcintegration";
 
-/** 复制文本到剪贴板：优先 Clipboard API，失败回退临时 textarea + execCommand（移动端兜底）。 */
-async function copyToClipboard(text: string): Promise<void> {
-	try {
-		await navigator.clipboard.writeText(text);
-		return;
-	} catch {
-		/* 回退到 execCommand */
-	}
-	const ta = document.body.createEl("textarea");
-	ta.value = text;
-	ta.setCssStyles({ position: "fixed", opacity: "0" });
-	ta.select();
-	try {
-		document.execCommand("copy");
-	} finally {
-		document.body.removeChild(ta);
-	}
-}
-
 /**
  * 渲染 VC 联动设置区。下拉 onChange 本身不写 settings——根据目标值弹对应确认框；
  * 只有用户在框内点确认才真正调用插件方法。
@@ -85,8 +66,13 @@ export function renderVcIntegrationSection(
 			.setDesc(path)
 			.addButton((btn) =>
 				btn.setButtonText(t.vcCopyPathButton).onClick(async () => {
-					await copyToClipboard(path);
-					new Notice(t.noticeVcPathCopied);
+					try {
+						await navigator.clipboard.writeText(path);
+						new Notice(t.noticeVcPathCopied);
+					} catch {
+						// 不再回退已废弃的 execCommand：路径就在说明里，复制失败时可手动选取。
+						new Notice(t.noticeCopyFailed);
+					}
 				}),
 			);
 	}
@@ -114,8 +100,13 @@ class VcManualModeConfirmModal extends Modal {
 			.setDesc(path)
 			.addButton((btn) =>
 				btn.setButtonText(t.vcCopyPathButton).onClick(async () => {
-					await copyToClipboard(path);
-					new Notice(t.noticeVcPathCopied);
+					try {
+						await navigator.clipboard.writeText(path);
+						new Notice(t.noticeVcPathCopied);
+					} catch {
+						// 不再回退已废弃的 execCommand：路径就在说明里，复制失败时可手动选取。
+						new Notice(t.noticeCopyFailed);
+					}
 				}),
 			);
 		new Setting(contentEl)

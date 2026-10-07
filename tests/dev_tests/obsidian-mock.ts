@@ -375,3 +375,7 @@ export class FuzzySuggestModal<T> {
 
 /** `Platform` 替身（M16）：单测按桌面处理。 */
 export const Platform = { isMobile: false };
+/** 单测按最新版 Obsidian 处理。 */
+export function requireApiVersion(_version: string): boolean {
+	return true;
+}
