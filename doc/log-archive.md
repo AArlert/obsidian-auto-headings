@@ -8,6 +8,48 @@
 
 ---
 
+## 2026-10-07 1.3.0 开发：M16 笔记内入口与模板编辑增强全部落地（不 bump，交接：feat/1.3.0-note-entry，仅本地）
+
+### 做了什么
+
+- 规格 [3.24](./spec/3.24-笔记内入口.md) + testplan S 组（S1–S23）先行。
+- **纯函数**：`headingedit.ts`（`toggleSkipMarker` / `planSectionShift`，围栏内 `#` 不动、越界整体拒绝）、
+  `templates/styles.ts`（样式快照 / 历史 / 去重限额 / 五个预设）。
+- **接线**：`noteentry.ts`（5 条新命令、编辑器右键两项、状态栏「本篇」菜单、标题手柄菜单、单篇模板选择器）；
+  `headinghandle.ts`（桌面端**复用原生折叠箭头**：单击折叠、拖动移整节、右键开菜单；手机端行尾 ⋯ 浮层）；`main.ts` 的 `getTemplateForFile` 认 frontmatter
+  `obsidian-auto-headings-template`（只在规则命中且非「不编号」时生效，指向不存在的模板则忽略）。
+- **命令改名**（ID 不变）：统一「动词 + 对象」，README / 使用指南同步。
+- **模板编辑**：改动**即时生效**（用户 2026-10-07 定，草稿式保存已取消）；格式页顶部「快速套用」菜单（最近 4 份历史 + 预设）与
+  「历史」弹窗；退出编辑窗口时样式变过就记一份历史，存 `data.json` 的 `templateHistory`，改名迁移、删除清除。
+- 用户实测反馈后：标题手柄并入折叠箭头 + `moveSection` 整节拖动（S24）；本篇菜单从标题菜单进入时加「返回」；
+  Artifact 画布（HeadingMenu / NoteMenu / TemplateEditorNext / CommandPalette / MobileHeadingSheet 与 noteC/noteD）已对齐实现。
+- 路径规则「不编号」从模板下拉挪到「模式」下拉（S23，数据仍是 `$none`；切回退默认模板）。
+- 单测 +20：`headingedit.test.ts`、`templatestyles.test.ts`、`main.test.ts` S 组；mock 补 `Menu` / `FuzzySuggestModal` / `Platform`。
+
+- **二轮实测反馈（2026-10-07）**：链接 `|别名` 随标题改名同步（M33–M35）；复制本节嵌入 `![[…]]`（S27）；本篇菜单选项加 emoji（S28）；
+  跳过标记分两种——`<!-- skip -->` 单标题、`<!-- skip-tree -->` 整节含子树（E42–E44，S26）；模板编辑弹窗给实色底（L47）；
+  清库确认框加「同时关闭自动编号」勾选（H20）；路径规则圆点放到抓手之前（L46）；README / 使用指南 / spec / testplan / Artifact 画布（Version 30）同步。
+- **用户要求（2026-10-07）：先别发版，等用户校验**——所以本分支**没有 bump 1.3.0、没写 release notes、没合并 master、没打 tag**。用户确认后再走 dev-cycle 的发版步骤。
+
+### 没做什么
+
+- **真机只测了一部分**（桌面，Oblivion 库「Claude测试/基础」，操作后均已撤销 / 还原）：手柄悬停与菜单、跳过标记、整节降级、右键两项、状态栏菜单、单篇模板选择与清除、命令改名、模板弹窗快速套用 / 草稿取消。
+  **没测**：历史弹窗（需保存一次模板）、模板「保存」落盘、路径规则「模式」下拉里的「不编号」、自动编号三选一的写入、整节升级与越界提示、手机端 ⋯、源码模式下的手柄。
+- 实测发现并已修：窄边距下手柄左边放不下会压住折叠箭头 → 贴到标题文字末尾；单篇模板选择器没有「清除」→ 加「跟随路径规则」项；删光最后一个 frontmatter 键会留空 `---` 外壳 → 顺手清掉。
+- M8b 的「拖放重排」其余部分（侧栏大纲拖放等）未动；本版只有折叠箭头拖动整节。
+- 折叠箭头拖动在 Outliner 插件装着时需挂 window 捕获阶段才收得到 mousedown（已处理）；拖动手势只实测了向后移，向前移 / 文末 / 自动滚动待测。
+
+### 下一步
+
+- 已部署 iCloud 测试库（库内即本分支最新构建，用户重载 Obsidian 即可）；等用户校验，通过后 bump 1.3.0、写 release notes、合并、等 master CI 绿再打 tag。二轮新增项（skip-tree 菜单、嵌入链接、别名同步、emoji、实色弹窗、清库勾选、圆点次序）尚无真机验证；另需核对「带 skip 标记的标题，其链接锚点在 Obsidian 里是否含标记」（spec 3.21 旧遗留）。
+- 已知取舍：「不编号」切回写入 / 仅显示时模板退回默认，若用户嫌丢选择再加「记住上次模板」。
+
+### 验证方式
+
+- `npm run check`：全绿（Windows 本机 `whitelist.test.ts:406` ICU 假红除外）。
+
+---
+
 ## 2026-10-07 发版 1.2.2：设置面板视觉更新（交接：feat/1.2.2-visual-refresh → master，tag 1.2.2）
 
 ### 做了什么
