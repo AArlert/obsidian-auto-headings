@@ -15,6 +15,31 @@
 
 ---
 
+## 2026-10-08 登记 M17：仅显示模式固化 + 阅读视图 live TOC（仅文档，不 bump，交接：master）
+
+### 做了什么
+
+- 用户定下一批开发：①「固化编号并交还所有权」补齐仅显示模式（目标：运行后得到不含不可见字符的编号文本与标题，
+  插件不再管理，可安全退出）；② 阅读视图 live TOC 提上来。两项从 M9 升格为 [`spec/5-Roadmap.md`](./spec/5-Roadmap.md)
+  **M17**（下一版），M9 里的原条目已移除。
+- 核对现状：固化只对写入模式文件达标；仅显示文件没写过编号，固化后显示的编号直接消失（`freezeVaultNumbering` 末尾的
+  `refreshVirtualViews()`）。差距与 5 条实现约束写在 M17-A（写入顺序、链接同步、两模式并存、单文件版、确认框）。
+- 顺手把 Roadmap 执行顺序表里 M16 改为「已发版 1.2.3」（原写「下一版」，已过期）。
+
+### 没做什么
+
+- 没写 spec 节、testplan 行，没动代码；写入与 `retired` 的先后顺序留到立项时推演。
+
+### 下一步
+
+- M17 立项：先补 3.18 的仅显示模式节、2.2 的 live TOC 澄清，再写 testplan 行，按 dev-cycle 实现。
+
+### 验证方式
+
+- `npm run docs`（索引与链接 / 锚点一致性）。
+
+---
+
 ## 2026-10-08 登记路线图：从 Number Headings 迁移命令（仅文档，不 bump，交接：master）
 
 ### 做了什么
@@ -57,32 +82,3 @@
 ### 验证方式
 
 - `npm run preflight`；vitest 仅 `whitelist.test.ts:406` ICU 本机假红。
-
----
-
-## 2026-10-07 1.3.0 开发：商店审查告警清理；test 库右键菜单打不开查明（不 bump，交接：feat/1.3.0-note-entry，仅本地）
-
-### 做了什么
-
-- **test 库右键失效**：不是代码问题——`F:\文档\Obsidian\test\test` 里装的是商店版 1.2.2（`main.js` 不含标题手柄），已把本分支构建部署过去（`data.json` 未动），Oblivion 库同步更新。
-- **按 Community Hub 审查报告修**（用官方 `eslint-plugin-obsidianmd` 0.4.2 在 scratchpad 本地复现，仓库 lint 配置未改）：
-  - `createEl("div"/"span")` → `createDiv` / `createSpan`；手机端手柄、两处编号 span 不再用 `document.createElement`（阅读视图单测给 `createSpan` 打桩）；
-  - 计时器 `activeWindow.*Timeout` → `window.*Timeout`；去掉两处多余类型断言、一个未用变量；落点线显隐改 `hide()` / `show()`；
-  - 破坏性按钮新增 `settings/buttons.ts` 的 `markDestructive`：1.13+ 用 `setDestructive`，旧版加 `mod-warning` 类（不再调废弃的 `setWarning`）；
-  - VC 词典路径复制去掉 `execCommand` 回退，失败提示「复制到剪贴板失败」（路径本就显示在说明里）；
-  - 单测用的 `js-yaml` 换成 `yaml`（锁文件已按 master 口径补回 npm 11 删掉的 vite-node 可选条目）；
-  - CSS：网格 `column-gap` → `gap: 0 Npx`；残留编号的虚线下划线改为 `border-bottom` 虚线；
-  - README 双语常见问题加「会访问哪些内容」（全库文件列举、剪贴板用途），回应审查的 Behavior 两条。
-
-### 没做什么
-
-- **有意保留**：`getSettingDefinitions` / `display()` 废弃（1.13 声明式设置 API，minAppVersion 1.8.7 下要整体重写设置页，留待以后）；`main.ts` 选区序列化的 `doc.createElement`（分离节点，已有注释说明；`Node.createDiv` 会挂到 document 上，不可用）。
-- 改动未真机验证；testplan 无行为变化，未改场景。
-
-### 下一步
-
-- 用户重载 test 库与 Oblivion 库后复查标题右键菜单、清库 / 删模板确认按钮的红色样式、残留编号虚线；然后照上一块的发版步骤走。
-
-### 验证方式
-
-- `tsc` / `eslint` / `prettier --check` 全绿；vitest 881/882（`whitelist.test.ts:406` ICU 假红）；官方规则集复跑只剩上述有意保留的项。
