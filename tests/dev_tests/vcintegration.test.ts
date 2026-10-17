@@ -43,6 +43,7 @@ function makeApp(
 		enabled?: boolean;
 		liveSettings?: unknown;
 		liveSaveData?: (d: unknown) => Promise<void>;
+		liveSaveSettings?: (o: { customDictionary?: boolean }) => Promise<void>;
 		dataJson?: string;
 		commands?: { executeCommandById?: (id: string) => boolean };
 	} = {},
@@ -70,6 +71,7 @@ function makeApp(
 						"various-complements": {
 							settings: opts.liveSettings ?? {},
 							saveData: opts.liveSaveData,
+							saveSettings: opts.liveSaveSettings,
 						},
 					}
 				: {},
@@ -611,5 +613,26 @@ describe("词典路径的检测与移除（Q35 / Q36）", () => {
 		expect(await removeDictionaryFromVc(makeApp({ installed: true }), DICT)).toBe(
 			"unavailable",
 		);
+	});
+});
+
+describe("VC 设置的保存方式（2026-10-18 实测：移除路径后 VC 框里仍有标题）", () => {
+	it("VC 有 saveSettings 时走它并要求重读自定义词典，不只 saveData", async () => {
+		const saveData = vi.fn(async () => {});
+		const saveSettings = vi.fn(async (_o: { customDictionary?: boolean }) => {});
+		const liveSettings: Record<string, unknown> = { customDictionaryPaths: DICT };
+		const opts = {
+			installed: true,
+			enabled: true,
+			liveSettings,
+			liveSaveData: saveData,
+			liveSaveSettings: saveSettings,
+		};
+		expect(await removeDictionaryFromVc(makeApp(opts), DICT)).toBe("ok");
+		expect(saveSettings).toHaveBeenCalledWith({ customDictionary: true });
+		expect(saveData).not.toHaveBeenCalled();
+		await enableAutoIntegration(makeApp(opts), DICT);
+		expect(saveSettings).toHaveBeenCalledTimes(2);
+		expect(liveSettings.customDictionaryPaths).toBe(DICT);
 	});
 });

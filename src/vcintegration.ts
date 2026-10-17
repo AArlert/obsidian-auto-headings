@@ -333,20 +333,20 @@ export function readVcDescriptionOnSuggestion(app: App): string | null {
  * Plugin 基类继承的公开方法，语义上等价于「帮 VC 自己按一次保存」，不会跟 VC 尚未落盘的其它
  * 内存态修改产生竞态。`.settings` 公开字段已对照 VC 源码核实（`VariousComponents extends
  * Plugin`，标准 `this.settings`，见 doc/research/vc-source-verification.md）。
+ * 保存走 {@link persistVcSettings}——只 `saveData` 时 VC 不会刷新它缓存的词典路径。
  */
 async function tryWriteViaLiveInstance(
 	app: App,
 	dictionaryPath: string,
 ): Promise<"ok" | "unavailable" | "invalid-shape"> {
 	const registry = getPluginsRegistry(app);
-	const vc = registry?.plugins?.[VC_PLUGIN_ID] as
-		| { settings?: unknown; saveData?: (data: unknown) => Promise<void> }
-		| undefined;
-	if (!vc || typeof vc.saveData !== "function") {
-		return "unavailable";
-	}
-	if (!isValidVcSettingsShape(vc.settings)) {
+	const raw = registry?.plugins?.[VC_PLUGIN_ID] as { settings?: unknown } | undefined;
+	if (raw && !isValidVcSettingsShape(raw.settings)) {
 		return "invalid-shape";
+	}
+	const vc = liveVc(app);
+	if (!vc?.saveData) {
+		return "unavailable";
 	}
 	const settings = vc.settings;
 	settings.customDictionaryPaths = mergeDictionaryPath(
@@ -357,7 +357,7 @@ async function tryWriteViaLiveInstance(
 	applyTriggerThreshold(settings);
 	applyDisplayedTextSuffix(settings);
 	applyMaxSuggestions(settings);
-	await vc.saveData(settings);
+	await persistVcSettings(vc);
 	return "ok";
 }
 
@@ -493,19 +493,49 @@ export async function enableAutoIntegration(
 	return { outcome: "invalid-shape" };
 }
 
-/** 取 VC 活体实例的 settings 与 saveData（settings 形状不符返回 null；saveData 缺失时为 null）。 */
-function liveVc(app: App): {
+/** VC 活体实例里本插件用得到的部分。 */
+interface LiveVc {
 	settings: VcSettingsShape;
 	saveData: ((data: unknown) => Promise<void>) | null;
-} | null {
-	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as
-		| { settings?: unknown; saveData?: (data: unknown) => Promise<void> }
-		| undefined;
+	/** VC 自己的 `saveSettings(needUpdateTokens)`（`src/main.ts`），没有时为 null。 */
+	saveSettings: ((needUpdateTokens: { customDictionary?: boolean }) => Promise<void>) | null;
+}
+
+/** 运行时拿到的 VC 实例（未校验）。 */
+interface RawVc {
+	settings?: unknown;
+	saveData?: (data: unknown) => Promise<void>;
+	saveSettings?: (needUpdateTokens: { customDictionary?: boolean }) => Promise<void>;
+}
+
+/** 取 VC 活体实例的 settings 与保存方法（settings 形状不符返回 null）。 */
+function liveVc(app: App): LiveVc | null {
+	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as RawVc | undefined;
 	if (!vc || !isValidVcSettingsShape(vc.settings)) {
 		return null;
 	}
-	const saveData = typeof vc.saveData === "function" ? vc.saveData.bind(vc) : null;
-	return { settings: vc.settings, saveData };
+	return {
+		settings: vc.settings,
+		saveData: typeof vc.saveData === "function" ? vc.saveData.bind(vc) : null,
+		saveSettings: typeof vc.saveSettings === "function" ? vc.saveSettings.bind(vc) : null,
+	};
+}
+
+/**
+ * 保存改过的 VC 设置并让它立刻生效（2026-10-18 用户实测：移除词典路径后 VC 框里仍有标题）。
+ *
+ * VC 的词典提供者**缓存了一份路径列表**，只在它自己的 `updateSettings` 里刷新（`AutoCompleteSuggest.ts`
+ * `customDictionaryWordProvider.setSettings`）；只调 `saveData` 再执行「Reload custom dictionaries」，
+ * 重读的还是旧路径——移除的词典照旧加载，新加的词典要等重启才出现。VC 自己的设置页保存走
+ * `saveSettings({ customDictionary: true })`：存盘 + `updateSettings` + 重读词典一次做完，这里照用。
+ * 该方法不在官方 API 里，缺失时退回 `saveData`（调用方仍会执行 reload 命令兜底）。
+ */
+async function persistVcSettings(vc: LiveVc): Promise<void> {
+	if (vc.saveSettings) {
+		await vc.saveSettings({ customDictionary: true });
+	} else if (vc.saveData) {
+		await vc.saveData(vc.settings);
+	}
 }
 
 /**
@@ -539,7 +569,7 @@ export async function removeDictionaryFromVc(
 		vc.settings.customDictionaryPaths,
 		dictionaryPath,
 	);
-	await vc.saveData(vc.settings);
+	await persistVcSettings(vc);
 	return "ok";
 }
 

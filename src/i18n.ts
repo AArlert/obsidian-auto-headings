@@ -84,8 +84,13 @@ export interface Messages {
 	vcCoexistDesc: string;
 	vcCoexistYield: string;
 	vcCoexistOwn: string;
-	/** 选了让路但词典联动还没开：此时不会真让路，如实告知当前由本插件接管（1.0.31）。 */
+	/**
+	 * 选了让路但词典联动还没开：此时不会真让路（1.0.31）。2026-10-18 起从一句被动提示改为可操作的一行
+	 * （名称 + 说明 + 「开启词典联动」按钮）——用户的设计意图是「装了 VC 就让标题出现在 VC 框里」。
+	 */
+	vcCoexistFallbackName: string;
 	vcCoexistFallbackHint: string;
+	vcCoexistFallbackButton: string;
 
 	// —— 设置面板分区标题（1.0.29）——
 	sectionNumbering: string;
@@ -538,7 +543,9 @@ const zh: Messages = {
 	vcCoexistDesc: "两个插件共用一个建议框，只能留一个。",
 	vcCoexistYield: "让路给 Various Complements（推荐）",
 	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
-	vcCoexistFallbackHint: "词典联动未开启，目前仍由本插件接管建议框。",
+	vcCoexistFallbackName: "让标题建议出现在 VC 的建议框里",
+	vcCoexistFallbackHint: "需开启词典联动；未开启时由本插件的建议框提示标题。",
+	vcCoexistFallbackButton: "开启词典联动",
 
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
@@ -575,8 +582,7 @@ const zh: Messages = {
 	vcOffKeepButton: "保留",
 	vcOffRemoveButton: "从 VC 移除",
 	vcStaleDictName: "VC 仍在加载旧的标题词典",
-	vcStaleDictDesc:
-		"词典联动已关闭，这份词典不再更新，标题改名后可能插入失效的链接。移除只删 VC 里的这一条词典路径，VC 其他设置不动。",
+	vcStaleDictDesc: "这份词典已不再更新，标题改名后可能插入失效的链接。",
 	vcStaleDictRemoveButton: "移除",
 	noticeVcDictRemoved: "已从 Various Complements 移除本插件的标题词典。",
 	noticeVcDictRemoveFailed:
@@ -950,8 +956,10 @@ const en: Messages = {
 	vcCoexistDesc: "Both plugins share one suggestion popup, so only one can show it.",
 	vcCoexistYield: "Yield to Various Complements (recommended)",
 	vcCoexistOwn: "This plugin wins (hides VC's popup)",
+	vcCoexistFallbackName: "Show heading suggestions in VC's popup",
 	vcCoexistFallbackHint:
-		"Dictionary integration is off, so this plugin still serves suggestions.",
+		"Needs dictionary integration; until then this plugin shows headings in its own popup.",
+	vcCoexistFallbackButton: "Turn on integration",
 
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",
@@ -988,8 +996,7 @@ const en: Messages = {
 	vcOffKeepButton: "Keep",
 	vcOffRemoveButton: "Remove from VC",
 	vcStaleDictName: "VC still loads the old heading dictionary",
-	vcStaleDictDesc:
-		"Dictionary integration is off, so this dictionary is no longer updated and renamed headings may insert broken links. Removing only deletes this one dictionary path in VC; its other settings stay as they are.",
+	vcStaleDictDesc: "It is no longer updated; renamed headings may insert broken links.",
 	vcStaleDictRemoveButton: "Remove",
 	noticeVcDictRemoved: "Removed this plugin's heading dictionary from Various Complements.",
 	noticeVcDictRemoveFailed:

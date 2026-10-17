@@ -94,6 +94,7 @@ describe("getMessages 双语", () => {
 			"headingLinkSuggestDesc",
 			"vcCoexistDesc",
 			"vcCoexistFallbackHint",
+			"vcStaleDictDesc",
 			"vcModeDesc",
 			// 编号维护 TAB（1.2.2，testplan L43）
 			"renumberNowDesc",

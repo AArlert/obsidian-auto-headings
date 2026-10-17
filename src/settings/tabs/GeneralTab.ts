@@ -1,7 +1,11 @@
 import { Setting } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { DEBOUNCE_DEFAULT, DEBOUNCE_MAX, DEBOUNCE_MIN, clampDebounceDelay } from "../model";
-import { renderStaleVcDictionaryHint, renderVcIntegrationSection } from "./VcIntegrationSection";
+import {
+	openVcAutoModeConfirm,
+	renderStaleVcDictionaryHint,
+	renderVcIntegrationSection,
+} from "./VcIntegrationSection";
 import { detectVcStatus } from "../../vcintegration";
 
 /**
@@ -164,7 +168,17 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 			vcStatus === "enabled" &&
 			!vcIntegrationOn;
 		if (yieldPending) {
-			subEl.createEl("p", { cls: "ah-section-desc", text: t.vcCoexistFallbackHint });
+			// 用户的设计意图（2026-10-18）：装了 VC 就让标题出现在 VC 框里。联动要改 VC 的设置、必须用户确认，
+			// 所以不自动开，而是在这里给一个直达自动配置确认框的按钮。
+			new Setting(subEl)
+				.setName(t.vcCoexistFallbackName)
+				.setDesc(t.vcCoexistFallbackHint)
+				.addButton((btn) =>
+					btn
+						.setButtonText(t.vcCoexistFallbackButton)
+						.setCta()
+						.onClick(() => openVcAutoModeConfirm(tab)),
+				);
 		}
 	}
 

@@ -206,6 +206,11 @@ class VcManualModeConfirmModal extends Modal {
 	}
 }
 
+/** 打开「自动配置」确认框（常规页「让标题建议出现在 VC 的建议框里」一行的按钮用）。 */
+export function openVcAutoModeConfirm(tab: AutoHeadingsSettingTab): void {
+	new VcAutoModeConfirmModal(tab.plugin.app, tab.plugin, tab).open();
+}
+
 /** 「自动配置」确认框：明确告知会读写 VC 的配置文件（含开启其自定义词典补全）与安全回退承诺。 */
 class VcAutoModeConfirmModal extends Modal {
 	constructor(
