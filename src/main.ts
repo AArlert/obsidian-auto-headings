@@ -354,6 +354,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		});
 		this.registerDomEvent(activeDocument, "compositionend", () => {
 			this.imeComposing = false;
+			// 上屏后补触发一轮标题建议（testplan Q44）：拼字期间本插件按设计不弹，VC 却照常占位；
+			// 上屏若不改变文档（拼的就是英文字母），Obsidian 不会再触发，VC 的框就一直挂着。
+			window.setTimeout(() => this.headingSuggest?.retriggerAfterComposition(), 0);
 		});
 
 		// 剪贴板净化（M11，spec.md §2.8；1.0.16 起恒开无开关）：copy/cut 出口剥 WJ + editor-paste

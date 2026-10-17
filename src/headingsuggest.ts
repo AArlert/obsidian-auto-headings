@@ -14,6 +14,7 @@
 
 import {
 	EditorSuggest,
+	MarkdownView,
 	setIcon,
 	type Editor,
 	type EditorPosition,
@@ -103,6 +104,35 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 			return false; // 先看纯字段：onTrigger 每次按键都跑，免去 detectVcStatus 的探测
 		}
 		return shouldYieldSuggestToVc(detectVcStatus(this.plugin.app), vcIntegrationMode);
+	}
+
+	/**
+	 * 输入法上屏后让 Obsidian 按注册顺序重新触发一轮建议框（testplan Q44）。
+	 *
+	 * 为什么需要（test-vault 用 CDP 模拟输入法复现，2026-10-18）：拼字期间编辑器里已经有拼音字母，
+	 * Obsidian 照常触发，本插件因 `imeComposing` 返回 null，VC 便占了建议框；上屏若不改变文档内容
+	 * （拼的就是英文，如 `axi`），就不会再有编辑事件，本插件再没有机会，VC 的框一直挂着。
+	 *
+	 * 走 Obsidian 自己的 `editorSuggest.trigger(editor, file, true)`：顺序、互斥、关闭旧框都交给它，
+	 * 本插件匹配上就换成本插件的框，匹配不上 VC 照常。该入口不在官方 API 里，认不出就静默不做。
+	 */
+	retriggerAfterComposition(): void {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const registry = (
+			this.app.workspace as {
+				editorSuggest?: {
+					trigger?: (editor: Editor, file: TFile | null, open: boolean) => void;
+				};
+			}
+		).editorSuggest;
+		if (!view?.editor || typeof registry?.trigger !== "function") {
+			return;
+		}
+		try {
+			registry.trigger(view.editor, view.file, true);
+		} catch {
+			/* 内部结构变化：静默，下次键入照常触发 */
+		}
 	}
 
 	onTrigger(

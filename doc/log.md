@@ -41,6 +41,10 @@
 - 用户定简化模型（Q43）：只有本插件 = 一个开关；装了 VC = 一个「建议显示在」（本插件的建议框 / VC 的建议框）。
   删掉「VC 启用时」与「VC 联动」两个下拉和 `headingSuggestWhenVcActive` 字段（加载时迁移清理），让路只看联动开没开；
   选 VC 走自动配置确认框（框里另有「手动配置」），切回本插件走停止联动确认。上面 Q40/Q42 的两个过渡方案未发版即被取代。
+- 用户实测「快打 axi 是本插件，ax 停一下再打 i 一直是 VC」。把 VC 临时装进 loom test-vault，在 `editorSuggest.trigger`
+  与两边 `showSuggestions` 上挂日志，英文键入各种节奏都是本插件赢；用 CDP `Input.imeSetComposition` 模拟输入法才复现：
+  拼字期间本插件按 Q9 不弹、VC 占位，上屏不改文档就不再触发。改为 `compositionend` 后补触发一轮（Q44）。场景整理成
+  可重复跑的 `tests/probes/suggest-timing.js`（11 个场景全过）；test-vault 测完已停用 VC。
 - 顺手修 `extractTriggerToken` 遇星平面汉字（代理对）提前截断。
 - `test:fuzz` 的 M13 用例每 200 条让出一次事件循环，根治 vitest `onTaskUpdate` RPC 超时。
 - testplan Q27–Q38，Roadmap 登记 M18（置信分 + 淡色提示 + 历史反应），使用指南双语同步。
