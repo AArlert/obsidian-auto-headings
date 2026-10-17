@@ -5,6 +5,7 @@ import {
 	openVcAutoModeConfirm,
 	renderStaleVcDictionaryHint,
 	renderVcIntegrationSection,
+	stopVcIntegration,
 } from "./VcIntegrationSection";
 import { detectVcStatus } from "../../vcintegration";
 
@@ -156,6 +157,11 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 				dd.setValue(plugin.settings.headingSuggestWhenVcActive).onChange(async (value) => {
 					plugin.settings.headingSuggestWhenVcActive = value === "own" ? "own" : "yield";
 					await plugin.saveSettings();
+					// 「本插件优先」与词典联动互斥（Q42）：联动开着时 VC 框里也会出标题，两套建议混在一起。
+					if (value === "own" && plugin.settings.vcIntegrationMode !== "off") {
+						await stopVcIntegration(tab);
+						return;
+					}
 					tab.display(); // 重绘：下面的接管提示与联动区显隐取决于本项
 				});
 			});
@@ -178,6 +184,19 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 						.setButtonText(t.vcCoexistFallbackButton)
 						.setCta()
 						.onClick(() => openVcAutoModeConfirm(tab)),
+				);
+		}
+
+		// 「本插件优先」却还开着词典联动（旧版允许、或切换时选了保留）：给一个关掉的入口（Q42）。
+		if (plugin.settings.headingSuggestWhenVcActive === "own" && vcIntegrationOn) {
+			new Setting(subEl)
+				.setName(t.vcOwnWithDictName)
+				.setDesc(t.vcOwnWithDictDesc)
+				.addButton((btn) =>
+					btn
+						.setButtonText(t.vcOwnWithDictButton)
+						.setCta()
+						.onClick(() => stopVcIntegration(tab)),
 				);
 		}
 	}

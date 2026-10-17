@@ -16,6 +16,7 @@ import {
 	isDictionaryRegisteredInVc,
 	isValidVcSettingsShape,
 	mergeDictionaryPath,
+	moveBefore,
 	removeDictionaryFromVc,
 	removeDictionaryPath,
 	shouldYieldSuggestToVc,
@@ -634,5 +635,21 @@ describe("VC 设置的保存方式（2026-10-18 实测：移除路径后 VC 框�
 		await enableAutoIntegration(makeApp(opts), DICT);
 		expect(saveSettings).toHaveBeenCalledTimes(2);
 		expect(liveSettings.customDictionaryPaths).toBe(DICT);
+	});
+});
+
+describe("moveBefore：本插件建议框挪到 VC 前面（Q41）", () => {
+	it("在后面时挪到紧挨 VC 之前，其余顺序不变", () => {
+		const list = ["native", "vc", "other", "ah"];
+		expect(moveBefore(list, "ah", "vc")).toBe(true);
+		expect(list).toEqual(["native", "ah", "vc", "other"]);
+	});
+
+	it("已在前面、或有一方不在列表里：不动", () => {
+		const list = ["ah", "native", "vc"];
+		expect(moveBefore(list, "ah", "vc")).toBe(false);
+		expect(moveBefore(list, "ah", "missing")).toBe(false);
+		expect(moveBefore(list, "missing", "vc")).toBe(false);
+		expect(list).toEqual(["ah", "native", "vc"]);
 	});
 });

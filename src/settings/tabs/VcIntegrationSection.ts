@@ -41,13 +41,7 @@ export function renderVcIntegrationSection(
 					return;
 				}
 				if (target === "off") {
-					// VC 还挂着本插件词典时先问要不要一并移除（Q35）；否则直接切。
-					if (plugin.isVcDictionaryRegistered()) {
-						new VcOffConfirmModal(plugin.app, plugin, tab).open();
-						return;
-					}
-					await plugin.setVcIntegrationOff();
-					tab.display();
+					await stopVcIntegration(tab);
 					return;
 				}
 				if (target === "manual") {
@@ -204,6 +198,20 @@ class VcManualModeConfirmModal extends Modal {
 	onClose(): void {
 		this.contentEl.empty();
 	}
+}
+
+/**
+ * 停止词典联动：VC 还挂着本插件词典时先问要不要一并移除（Q35），否则直接切到「不联动」。
+ * 联动下拉切回「不联动」、切到「本插件优先」（Q42）共用。
+ */
+export async function stopVcIntegration(tab: AutoHeadingsSettingTab): Promise<void> {
+	const plugin = tab.plugin;
+	if (plugin.isVcDictionaryRegistered()) {
+		new VcOffConfirmModal(plugin.app, plugin, tab).open();
+		return;
+	}
+	await plugin.setVcIntegrationOff();
+	tab.display();
 }
 
 /** 打开「自动配置」确认框（常规页「让标题建议出现在 VC 的建议框里」一行的按钮用）。 */

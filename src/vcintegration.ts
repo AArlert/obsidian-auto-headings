@@ -501,6 +501,32 @@ interface LiveVc {
 	saveSettings: ((needUpdateTokens: { customDictionary?: boolean }) => Promise<void>) | null;
 }
 
+/**
+ * 把 `item` 挪到 `anchor` 之前（原地修改；`item` 本就在前面、或两者有一个不在列表里时不动）。返回是否挪动了。
+ *
+ * 用途（testplan Q41）：Obsidian 的 `editorSuggest.suggests` 按注册顺序取**第一个**触发的建议框，
+ * 「本插件优先」能不能兑现取决于两个插件谁先加载（重载过本插件它就排到 VC 后面）。只挪到 VC 前面、
+ * 不挪到最前——别的插件（`/` 命令、日期等）的建议框原本排在哪里就还在哪里。
+ */
+export function moveBefore<T>(list: T[], item: T, anchor: T): boolean {
+	const from = list.indexOf(item);
+	const to = list.indexOf(anchor);
+	if (from < 0 || to < 0 || from < to) {
+		return false;
+	}
+	list.splice(from, 1);
+	list.splice(to, 0, item);
+	return true;
+}
+
+/** 启用中的 VC 注册的建议框实例（`registerEditorSuggest(this.suggester)`），取不到返回 null。 */
+export function vcSuggestInstance(app: App): unknown {
+	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as
+		| { suggester?: unknown }
+		| undefined;
+	return vc?.suggester ?? null;
+}
+
 /** 运行时拿到的 VC 实例（未校验）。 */
 interface RawVc {
 	settings?: unknown;

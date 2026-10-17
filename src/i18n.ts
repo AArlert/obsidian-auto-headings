@@ -91,6 +91,10 @@ export interface Messages {
 	vcCoexistFallbackName: string;
 	vcCoexistFallbackHint: string;
 	vcCoexistFallbackButton: string;
+	/** 「本插件优先」却还开着词典联动：两套标题建议会混在一起，给关掉的入口（testplan Q42）。 */
+	vcOwnWithDictName: string;
+	vcOwnWithDictDesc: string;
+	vcOwnWithDictButton: string;
 
 	// —— 设置面板分区标题（1.0.29）——
 	sectionNumbering: string;
@@ -546,6 +550,9 @@ const zh: Messages = {
 	vcCoexistFallbackName: "让标题建议出现在 VC 的建议框里",
 	vcCoexistFallbackHint: "需开启词典联动；未开启时由本插件的建议框提示标题。",
 	vcCoexistFallbackButton: "开启词典联动",
+	vcOwnWithDictName: "本插件优先时不需要词典联动",
+	vcOwnWithDictDesc: "联动开着时 VC 的框里也会出标题，两边建议会混在一起。",
+	vcOwnWithDictButton: "关闭联动",
 
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
@@ -960,6 +967,9 @@ const en: Messages = {
 	vcCoexistFallbackHint:
 		"Needs dictionary integration; until then this plugin shows headings in its own popup.",
 	vcCoexistFallbackButton: "Turn on integration",
+	vcOwnWithDictName: "Not needed when this plugin takes precedence",
+	vcOwnWithDictDesc: "With integration on, VC's popup shows headings too, mixing both.",
+	vcOwnWithDictButton: "Turn off integration",
 
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",

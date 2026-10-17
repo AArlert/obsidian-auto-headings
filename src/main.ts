@@ -85,10 +85,12 @@ import {
 	buildVcDictionaryJson,
 	enableAutoIntegration,
 	isDictionaryRegisteredInVc,
+	moveBefore,
 	removeDictionaryFromVc,
 	tryReloadVcDictionaries,
 	VC_DICTIONARY_THROTTLE_MS,
 	vcDictionaryPath,
+	vcSuggestInstance,
 } from "./vcintegration";
 
 /** 批量改写单个文件的结果。 */
@@ -146,6 +148,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 刻意不加 private——HeadingLinkSuggest（另一个类）需要读它，与 imeComposing 完全同款先例。
 	 */
 	headingIndex = new HeadingIndex();
+	/** 标题链接建议框实例（排到 VC 前面用，见 prioritizeHeadingSuggest）。 */
+	private headingSuggest: HeadingLinkSuggest | null = null;
 	/** 标题被链接次数（短中文词门槛 + 候选排序的信号，见 headinglinks.ts）；与 headingIndex 同生同灭。 */
 	headingLinkCounts = new HeadingLinkCounts();
 	/** 标题索引增量更新的按文件去抖计时器（与 debounceTimers 同构，独立维护）。 */
@@ -249,7 +253,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 		// 标题链接建议（M13）：EditorSuggest 建议框。此处不依赖 headingIndex/vault 扫描是否已完成——
 		// onTrigger 只有在用户真正打字触发时才会被调用，届时 onload() 早已跑完。
-		this.registerEditorSuggest(new HeadingLinkSuggest(this));
+		this.headingSuggest = new HeadingLinkSuggest(this);
+		this.registerEditorSuggest(this.headingSuggest);
+		// VC 可能先于本插件加载：排到它前面，「本插件优先」才不受加载顺序左右（Q41）。
+		this.prioritizeHeadingSuggest();
+		this.app.workspace.onLayoutReady(() => this.prioritizeHeadingSuggest());
 
 		// 全局切换命令：与「全局自动编号」面板开关双向同步（统一经由 setAutoNumber）。
 		// 命令 ID 不含插件 ID（Obsidian 注册时自动加 `auto-headings:` 前缀，审核要求不重复）。
@@ -577,6 +585,20 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		// 清掉写盘缓存：用户可能在关闭期间手动删除/改动词典文件，下次开启必须重新落盘。
 		this.lastVcDictionaryJson = null;
+	}
+
+	/**
+	 * 把本插件的建议框排到 VC 的建议框之前（testplan Q41）。Obsidian 按注册顺序取第一个触发的建议框；
+	 * 让路给 VC 时本插件的 onTrigger 直接返回 null，排在前面也不抢，故无条件挪。`editorSuggest.suggests`
+	 * 不在官方 API 里，结构认不出就静默不动。
+	 */
+	private prioritizeHeadingSuggest(): void {
+		const registry = (this.app.workspace as { editorSuggest?: { suggests?: unknown } })
+			.editorSuggest;
+		const vc = vcSuggestInstance(this.app);
+		if (this.headingSuggest && vc && Array.isArray(registry?.suggests)) {
+			moveBefore(registry.suggests as unknown[], this.headingSuggest, vc);
+		}
 	}
 
 	/** 启用中的 VC 是否还挂着本插件的词典（切回「不联动」时问要不要移除、面板过期提示，Q35/Q36）。 */
