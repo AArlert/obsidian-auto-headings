@@ -15,6 +15,34 @@
 
 ---
 
+## 2026-10-18 发版 1.2.4：issue #10 标题链接建议按信号触发 + VC 联动收紧（交接：claude/recent-fix-test-release-012e07 → master，tag 1.2.4）
+
+### 做了什么
+
+- 用户要求按最近的修复（`fix/heading-suggest-signals`，下一块）多测后发版。该分支快进到本工作分支，复跑门槛并补真机探查：
+  - `npm run check` 唯一失败为已知 Windows ICU 排序假红；lint / 格式 / 构建全绿；`npm run test:fuzz` 3 组全绿（M13 44s，无 RPC 超时）。
+  - loom test-vault（Obsidian 1.14.4）部署新构建 + 临时放入 VC：`suggest-timing.js` 11/11；新写 `tests/probes/suggest-rules.js`
+    （Q7 / Q27–Q34 / Q46–Q48 共 27 项）全过。测完移走 VC、还原 test-vault 原 1.2.3 构建。
+- 用户截图问「在 `# haha` 里打字，VC 框出 healthca 是否正常」：核对是 VC 的框，`healthca` 是思特威那篇第 203 行的真实标题（测试残留），
+  被 VC 的 `fuzzyMatch`（用户库里开着）模糊命中；`healthcare` 来自 VC 的英文词表。行为符合 Q7 / Q48。问过用户是否在 VC 框里滤掉
+  「只靠模糊命中」的标题，用户选**保持现状**；使用指南双语补一句 VC 模糊匹配的说明。
+- bump 1.2.4，写 `doc/release-notes/1.2.4.md`，testplan / spec 的「未发版」回填为 1.2.4。
+
+### 没做什么
+
+- Q29（输入法拼字时按 Tab）、输入法下的空格误选仍只有用户手测结论，没自动化。
+- issue #10 的回复与关闭留给用户（回复要按新规则写，草稿见上一块「没做什么」）。
+
+### 下一步
+
+- 推 master 等 CI 绿 → 打 tag 1.2.4 → 到 Community Hub 维护者面板点「Check for new releases」；回复并关闭 issue #10。之后回到 M17。
+
+### 验证方式
+
+- 同上：`npm run check`、`npm run test:fuzz`、test-vault 两个探查脚本（共 38 项）全过。
+
+---
+
 ## 2026-10-18 issue #10 定稿：标题链接建议按信号触发 + VC 收紧（不 bump，交接：fix/heading-suggest-signals，仅本地、未推送）
 
 ### 做了什么
@@ -109,28 +137,3 @@
 ### 验证方式
 
 - `npm run check`（唯一失败为已知的 Windows ICU 排序假红 `whitelist.test.ts`），`npm run test:fuzz` 全绿无超时。
-
----
-
-## 2026-10-08 登记 M17：仅显示模式固化 + 阅读视图 live TOC（仅文档，不 bump，交接：master）
-
-### 做了什么
-
-- 用户定下一批开发：①「固化编号并交还所有权」补齐仅显示模式（目标：运行后得到不含不可见字符的编号文本与标题，
-  插件不再管理，可安全退出）；② 阅读视图 live TOC 提上来。两项从 M9 升格为 [`spec/5-Roadmap.md`](./spec/5-Roadmap.md)
-  **M17**（下一版），M9 里的原条目已移除。
-- 核对现状：固化只对写入模式文件达标；仅显示文件没写过编号，固化后显示的编号直接消失（`freezeVaultNumbering` 末尾的
-  `refreshVirtualViews()`）。差距与 5 条实现约束写在 M17-A（写入顺序、链接同步、两模式并存、单文件版、确认框）。
-- 顺手把 Roadmap 执行顺序表里 M16 改为「已发版 1.2.3」（原写「下一版」，已过期）。
-
-### 没做什么
-
-- 没写 spec 节、testplan 行，没动代码；写入与 `retired` 的先后顺序留到立项时推演。
-
-### 下一步
-
-- M17 立项：先补 3.18 的仅显示模式节、2.2 的 live TOC 澄清，再写 testplan 行，按 dev-cycle 实现。
-
-### 验证方式
-
-- `npm run docs`（索引与链接 / 锚点一致性）。
