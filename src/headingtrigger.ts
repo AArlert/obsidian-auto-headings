@@ -14,15 +14,34 @@ import { normalizeForWhitelist } from "./whitelist";
 const WORD_CHAR_RE = /[\p{L}\p{N}]/u;
 /** 触发词回溯扫描的安全上限（码点数），防御无标点大段文本的病态情形（方案 §3.4，可调常量）。 */
 export const MAX_TOKEN_LENGTH = 80;
-/** 最短触发长度：太短的前缀候选过多、噪音大（方案 §3.4，可调常量）。 */
-export const MIN_QUERY_LENGTH = 2;
+/**
+ * 最低触发权重（testplan Q27，issue #10）：中日韩字符记 2、其他字符记 1，合计不足即不触发——
+ * 中文至少 3 字、英文至少 6 字母。
+ *
+ * 为什么不是 1.0.29 的「至少 2 个字符」：本功能没有触发字符，正文里每次按键都在匹配；2 个字
+ * 的「项目」「总结」、4 个字母的「json」在稍大的库里几乎必然撞上某个标题开头，用户反馈
+ * 「随便打两三个字都弹框」。按字数加权而非统一码点数，是因为一个汉字的信息量约抵两三个字母：
+ * 统一按码点算，要么中文门槛太高，要么英文门槛太低。
+ */
+export const MIN_TRIGGER_WEIGHT = 6;
+
+const CJK_CHAR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/** 触发权重：中日韩字符记 2，其他（拉丁字母、数字等）记 1；按码点计。 */
+export function triggerWeight(text: string): number {
+	let w = 0;
+	for (const ch of text) {
+		w += CJK_CHAR_RE.test(ch) ? 2 : 1;
+	}
+	return w;
+}
 
 /**
  * 从「光标之前的整行文本」里提取候选触发词；返回词本身与其起始列偏移（UTF-16 code unit）。
  *
  * 规则：向左扫描，只要字符是 Unicode 字母或数字（`\p{L}`/`\p{N}`，天然覆盖中日韩 / 拉丁 /
  * 数字，无需手工列举标点黑名单）就继续纳入；遇到第一个非字母数字字符（含空白、标点、行首）
- * 即停止。长度不足 {@link MIN_QUERY_LENGTH} 或超过 {@link MAX_TOKEN_LENGTH} 时返回 null。
+ * 即停止。权重不足 {@link MIN_TRIGGER_WEIGHT} 或超过 {@link MAX_TOKEN_LENGTH} 时返回 null。
  *
  * 已知限制（v1 明确接受，见方案 §10）：标题内部含标点时只有标点之后的连续字母数字段能被匹配。
  */
@@ -37,7 +56,7 @@ export function extractTriggerToken(
 		steps++;
 	}
 	const token = s.slice(i);
-	if (token.length < MIN_QUERY_LENGTH) {
+	if (triggerWeight(token) < MIN_TRIGGER_WEIGHT) {
 		return null;
 	}
 	return { token, start: i };
@@ -45,13 +64,12 @@ export function extractTriggerToken(
 
 /**
  * 把触发词展开为「按用户已输入量从多到少」的匹配候选：整段优先，其后是逐字剥掉开头字符
- * 得到的各级后缀（长度 ≥ {@link MIN_QUERY_LENGTH}）。
+ * 得到的各级后缀（权重 ≥ {@link MIN_TRIGGER_WEIGHT}）。
  *
  * 为什么需要后缀（testplan Q22，用户实测「一笔事务」）：触发词提取只认「连续字母数字段」，
- * 而中文正文没有词边界——已有「一笔」再接着打「事务」会被整段吞成一个 token「一笔事务」，
- * 与标题【事务】的前缀匹配必然失败（换成「哈哈，事务」则因逗号断开而正常）。放宽到后缀即可
- * 命中；后缀下限沿用 {@link MIN_QUERY_LENGTH} 挡单字符噪音（打「交叉」不会因后缀「叉」
- * 命中【叉烧包】）。
+ * 而中文正文没有词边界——已有「一个」再接着打「交叉矩阵」会被整段吞成一个 token，与标题
+ * 【交叉矩阵】的前缀匹配必然失败（换成「哈哈，交叉矩阵」则因逗号断开而正常）。放宽到后缀
+ * 即可命中；后缀同样要过权重门槛。后缀怎样才算命中见 {@link resolveTriggerQuery}。
  *
  * `start` 是该候选在**原行**中的列偏移（UTF-16 code unit），由调用方用作替换区间起点。
  * 按**码点**切分（`Array.from`）而非 code unit，避免把代理对劈成半个字符。
@@ -62,36 +80,53 @@ export function suffixCandidates(
 ): Array<{ text: string; start: number }> {
 	const chars = Array.from(token);
 	const out: Array<{ text: string; start: number }> = [];
-	for (let cut = 0; cut <= chars.length - MIN_QUERY_LENGTH; cut++) {
+	for (let cut = 0; cut < chars.length; cut++) {
 		const text = chars.slice(cut).join("");
+		if (triggerWeight(text) < MIN_TRIGGER_WEIGHT) {
+			break; // 后缀越剥越短，权重单调不增
+		}
 		out.push({ text, start: tokenStart + (token.length - text.length) });
 	}
 	return out;
 }
 
+/** {@link resolveTriggerQuery} 需要的索引侧判定（`HeadingIndex` 的两个廉价查询）。 */
+export interface TriggerIndexProbe {
+	/** 是否存在 matchKey 以该串为前缀的标题。 */
+	hasAnyPrefixMatch(normalizedQuery: string): boolean;
+	/** 是否存在 matchKey 恰好等于该串的标题。 */
+	hasExactMatch(normalizedQuery: string): boolean;
+}
+
 /**
- * 在 {@link suffixCandidates} 里挑出「用户输入量最多、且索引中确有前缀匹配」的那一个，
+ * 在 {@link suffixCandidates} 里挑出「用户输入量最多、且索引中确有命中」的那一个，
  * 返回它的原文、替换起点与归一化查询串；全都落空时返回 null（onTrigger 让路）。
+ *
+ * **命中标准分两档**（testplan Q28，issue #10）：整段（从词边界开始，用户大概率是在打一个新词）
+ * 按**前缀**匹配，边打边出候选；从连写中间截出来的后缀只认**完整等于**某个标题。1.0.29 后缀
+ * 也按前缀匹配，于是任何一句话的末尾两三个字只要碰巧是某标题的开头就弹框（「当前项目」→
+ * 【项目级…】）——后缀本来就是猜测的词边界，再叠一层前缀猜测，误报成倍放大。
  *
  * **`start` 必须是被匹配上的那一段的起点，不是整个 token 的起点**——接受建议时
  * `selectSuggestion` 替换的是 `[start, 光标)` 区间，用整段起点会把没参与匹配的前半截
  * （「一笔事务」里的「一笔」）连带吃掉。同理，归一化查询串取的是**该后缀**而非整段，
  * 否则 {@link sortEntries} 的「精确匹配优先」判据永远不成立。
  *
- * @param hasAnyPrefixMatch 索引侧的廉价判定（`HeadingIndex.hasAnyPrefixMatch`），注入进来
- *   使本函数保持纯函数可测；onTrigger 每次按键都跑，故用它而非收集结果的 `queryPrefix`。
+ * @param probe 索引侧的廉价判定（`HeadingIndex` 本身即满足），注入进来使本函数保持纯函数
+ *   可测；onTrigger 每次按键都跑，故用它而非收集结果的 `queryPrefix`。
  */
 export function resolveTriggerQuery(
 	token: string,
 	tokenStart: number,
-	hasAnyPrefixMatch: (normalizedQuery: string) => boolean,
+	probe: TriggerIndexProbe,
 ): { text: string; start: number; query: string } | null {
 	for (const candidate of suffixCandidates(token, tokenStart)) {
 		const query = normalizeForWhitelist(candidate.text);
 		if (!query) {
 			continue;
 		}
-		if (hasAnyPrefixMatch(query)) {
+		const isWholeToken = candidate.start === tokenStart;
+		if (isWholeToken ? probe.hasAnyPrefixMatch(query) : probe.hasExactMatch(query)) {
 			return { ...candidate, query };
 		}
 	}

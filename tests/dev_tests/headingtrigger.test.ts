@@ -7,13 +7,15 @@
 import { describe, expect, it } from "vitest";
 import {
 	MAX_TOKEN_LENGTH,
-	MIN_QUERY_LENGTH,
+	MIN_TRIGGER_WEIGHT,
 	buildHeadingLink,
 	extractTriggerToken,
 	isBlockedContext,
 	resolveTriggerQuery,
 	sortEntries,
 	suffixCandidates,
+	triggerWeight,
+	type TriggerIndexProbe,
 } from "../../src/headingtrigger";
 import type { HeadingIndexEntry } from "../../src/headingindex";
 
@@ -41,7 +43,10 @@ describe("extractTriggerToken：触发词回溯提取", () => {
 			token: "交叉矩阵",
 			start: 8,
 		});
-		expect(extractTriggerToken("version 3.1 说明")).toEqual({ token: "说明", start: 12 });
+		expect(extractTriggerToken("version 3.1 使用说明")).toEqual({
+			token: "使用说明",
+			start: 12,
+		});
 	});
 
 	it("光标前是标点/空白：不触发（token 为空或不足最短长度）", () => {
@@ -49,11 +54,23 @@ describe("extractTriggerToken：触发词回溯提取", () => {
 		expect(extractTriggerToken("abc ")).toBeNull();
 	});
 
-	it(`最短触发长度 ${MIN_QUERY_LENGTH}：单字符不触发（噪音防护）`, () => {
-		expect(extractTriggerToken("交")).toBeNull();
-		expect(extractTriggerToken("交叉")).toEqual({ token: "交叉", start: 0 });
-		expect(extractTriggerToken("a")).toBeNull();
-		expect(extractTriggerToken("ab")).toEqual({ token: "ab", start: 0 });
+	it(`触发门槛 ${MIN_TRIGGER_WEIGHT}（Q27，issue #10）：中文 3 字、英文 6 字母起触发`, () => {
+		expect(extractTriggerToken("，项目")).toBeNull();
+		expect(extractTriggerToken("，项目级")).toEqual({ token: "项目级", start: 1 });
+		expect(extractTriggerToken(" json")).toBeNull();
+		expect(extractTriggerToken(" jsonc")).toBeNull();
+		expect(extractTriggerToken(" config")).toEqual({ token: "config", start: 1 });
+		// 中英混排按各自权重累加：2 + 2 + 1 + 1 = 6。
+		expect(extractTriggerToken("项目ab")).toEqual({ token: "项目ab", start: 0 });
+	});
+
+	it("triggerWeight：中日韩字符记 2、其他记 1，按码点计", () => {
+		expect(triggerWeight("项目")).toBe(4);
+		expect(triggerWeight("json")).toBe(4);
+		expect(triggerWeight("かな")).toBe(4);
+		expect(triggerWeight("한국")).toBe(4);
+		expect(triggerWeight("𠮷野家")).toBe(6); // 星平面汉字只算一个字
+		expect(triggerWeight("3.1")).toBe(3);
 	});
 
 	it(`回溯上限 ${MAX_TOKEN_LENGTH}：无标点大段文本只取末尾 ${MAX_TOKEN_LENGTH} 码点`, () => {
@@ -64,43 +81,56 @@ describe("extractTriggerToken：触发词回溯提取", () => {
 
 describe("suffixCandidates：整段 + 逐级后缀候选（Q22）", () => {
 	it("整段排第一，其后按用户输入量递减，start 指向各候选自身的起点", () => {
-		expect(suffixCandidates("一笔事务", 5)).toEqual([
-			{ text: "一笔事务", start: 5 },
-			{ text: "笔事务", start: 6 },
-			{ text: "事务", start: 7 },
+		expect(suffixCandidates("一个交叉矩阵", 5)).toEqual([
+			{ text: "一个交叉矩阵", start: 5 },
+			{ text: "个交叉矩阵", start: 6 },
+			{ text: "交叉矩阵", start: 7 },
+			{ text: "叉矩阵", start: 8 },
 		]);
 	});
 
-	it(`后缀下限 ${MIN_QUERY_LENGTH}：不产出单字符候选（噪音防护）`, () => {
-		expect(suffixCandidates("交叉", 0)).toEqual([{ text: "交叉", start: 0 }]);
-		expect(suffixCandidates("交叉", 0).some((c) => c.text.length < MIN_QUERY_LENGTH)).toBe(
-			false,
-		);
+	it(`后缀下限 ${MIN_TRIGGER_WEIGHT}：权重不足的尾巴不产出（Q27）`, () => {
+		expect(suffixCandidates("当前项目", 0).map((c) => c.text)).toEqual(["当前项目", "前项目"]);
+		expect(suffixCandidates("交叉", 0)).toEqual([]);
 	});
 
 	it("按码点切分：代理对不会被劈成半个字符", () => {
 		// 「𠮷」是星平面字符（2 个 code unit），后缀 start 用 UTF-16 偏移换算。
-		expect(suffixCandidates("𠮷野家", 0)).toEqual([
-			{ text: "𠮷野家", start: 0 },
-			{ text: "野家", start: 2 },
+		expect(suffixCandidates("一𠮷野家", 0)).toEqual([
+			{ text: "一𠮷野家", start: 0 },
+			{ text: "𠮷野家", start: 1 },
 		]);
 	});
 });
 
-describe("resolveTriggerQuery：挑选命中的候选（Q22 核心）", () => {
-	/** 用一组 matchKey 模拟索引侧的 hasAnyPrefixMatch。 */
-	const indexOf =
-		(...keys: string[]) =>
-		(q: string) =>
-			keys.some((k) => k.startsWith(q));
+describe("resolveTriggerQuery：挑选命中的候选（Q22 / Q28）", () => {
+	/** 用一组 matchKey 模拟索引侧的两个判定。 */
+	const indexOf = (...keys: string[]): TriggerIndexProbe => ({
+		hasAnyPrefixMatch: (q) => keys.some((k) => k.startsWith(q)),
+		hasExactMatch: (q) => keys.includes(q),
+	});
 
-	it("「一笔事务」：整段不命中时退到后缀「事务」，start 指向后缀起点而非整段起点", () => {
-		// 起点必须是 7（「事务」的位置）——若返回 5（整段起点），接受建议会把「一笔」一起吃掉。
-		expect(resolveTriggerQuery("一笔事务", 5, indexOf("事务"))).toEqual({
-			text: "事务",
+	it("「一个交叉矩阵」：整段不命中时退到后缀，start 指向后缀起点而非整段起点", () => {
+		// 起点必须是 7（「交叉矩阵」的位置）——若返回 5（整段起点），接受建议会把「一个」一起吃掉。
+		expect(resolveTriggerQuery("一个交叉矩阵", 5, indexOf("交叉矩阵"))).toEqual({
+			text: "交叉矩阵",
 			start: 7,
-			query: "事务",
+			query: "交叉矩阵",
 		});
+	});
+
+	it("整段从词边界开始：按前缀匹配，边打边出候选", () => {
+		expect(resolveTriggerQuery("项目级", 1, indexOf("项目级（影响当前项目）"))).toEqual({
+			text: "项目级",
+			start: 1,
+			query: "项目级",
+		});
+	});
+
+	it("行内后缀只认完整标题（Q28，issue #10）：标题前缀不触发", () => {
+		const idx = indexOf("项目级（影响当前项目）", "交叉矩阵");
+		expect(resolveTriggerQuery("即表示当前项目级", 0, idx)).toBeNull();
+		expect(resolveTriggerQuery("一个交叉矩", 0, idx)).toBeNull();
 	});
 
 	it("整段本身命中时优先整段，不退化到更短后缀", () => {
@@ -112,31 +142,34 @@ describe("resolveTriggerQuery：挑选命中的候选（Q22 核心）", () => {
 	});
 
 	it("整段与各级后缀全落空：返回 null（让路给原生补全）", () => {
-		expect(resolveTriggerQuery("一笔事务", 5, indexOf("交叉矩阵"))).toBeNull();
+		expect(resolveTriggerQuery("一个交叉矩阵", 5, indexOf("事务"))).toBeNull();
 	});
 
-	it(`长度 < ${MIN_QUERY_LENGTH} 的后缀不参与匹配：只有单字尾巴命中也不触发`, () => {
-		// 索引里只有【叉烧包】：打「交叉」不应因后缀「叉」而弹出建议。
-		expect(resolveTriggerQuery("交叉", 0, indexOf("叉烧包"))).toBeNull();
+	it("权重不足的完整标题不触发：【事务】【总结】这类两字标题不再弹框", () => {
+		expect(resolveTriggerQuery("一笔事务", 0, indexOf("事务"))).toBeNull();
+		expect(resolveTriggerQuery("这是总结", 0, indexOf("总结"))).toBeNull();
 	});
 
-	it("光标在行中间（「一笔事务|拆成」）：只看光标之前的文字，照样命中「事务」", () => {
-		// 提取只吃 lineTextBeforeCursor，光标后面还有字不影响；替换区间是 [事务起点, 光标)，
+	it("光标在行中间（「一个交叉矩阵|拆成」）：只看光标之前的文字，照样命中", () => {
+		// 提取只吃 lineTextBeforeCursor，光标后面还有字不影响；替换区间是 [交叉矩阵起点, 光标)，
 		// 「拆成」原样留在后面。
-		const line = "一笔事务拆成";
-		const cursorCh = 4; // 「务」之后、「拆」之前
+		const line = "一个交叉矩阵拆成";
+		const cursorCh = 6; // 「阵」之后、「拆」之前
 		const extracted = extractTriggerToken(line.slice(0, cursorCh));
-		expect(extracted).toEqual({ token: "一笔事务", start: 0 });
+		expect(extracted).toEqual({ token: "一个交叉矩阵", start: 0 });
 		expect(
-			resolveTriggerQuery(extracted!.token, extracted!.start, (q) => "事务".startsWith(q)),
-		).toEqual({ text: "事务", start: 2, query: "事务" });
+			resolveTriggerQuery(extracted!.token, extracted!.start, indexOf("交叉矩阵")),
+		).toEqual({ text: "交叉矩阵", start: 2, query: "交叉矩阵" });
 	});
 
 	it("查询串已归一化（大小写/全角）后再交给索引", () => {
 		const seen: string[] = [];
-		const hit = resolveTriggerQuery("ｘｘAPPENDIX", 0, (q) => {
-			seen.push(q);
-			return q === "appendix";
+		const hit = resolveTriggerQuery("ｘｘAPPENDIX", 0, {
+			hasAnyPrefixMatch: (q) => {
+				seen.push(q);
+				return false;
+			},
+			hasExactMatch: (q) => q === "appendix",
 		});
 		expect(hit).toEqual({ text: "APPENDIX", start: 2, query: "appendix" });
 		expect(seen[0]).toBe("xxappendix"); // NFKC 折全角 + 小写

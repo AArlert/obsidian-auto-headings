@@ -69,7 +69,12 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		super(plugin.app);
 		this.limit = SUGGEST_LIMIT;
 		// Tab 接受建议：[] = 只匹配不带任何修饰键的 Tab，不会误吃 Shift+Tab（大纲缩进等场景）。
-		this.scope.register([], "Tab", () => {
+		// 输入法组合中的 Tab 归输入法（testplan Q29）：返回 undefined 让按键继续传播，与 Obsidian
+		// 自带建议框 Enter 的 `!e.isComposing` 判定一致。
+		this.scope.register([], "Tab", (evt) => {
+			if (evt.isComposing) {
+				return;
+			}
 			const suggest = (
 				this as unknown as {
 					suggestions?: { useSelectedItem?: (evt: Partial<KeyboardEvent>) => unknown };
@@ -135,11 +140,9 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 			return null;
 		}
 
-		// 整段优先、其次逐级后缀（Q22「一笔事务」）；无任何候选命中就让路——礼貌规则，
+		// 整段按前缀、行内后缀只认完整标题（Q22/Q28）；无任何候选命中就让路——礼貌规则，
 		// onTrigger 每次按键都跑，尽早返回 null。
-		const hit = resolveTriggerQuery(token, start, (q) =>
-			this.plugin.headingIndex.hasAnyPrefixMatch(q),
-		);
+		const hit = resolveTriggerQuery(token, start, this.plugin.headingIndex);
 		if (!hit) {
 			return null;
 		}
