@@ -254,12 +254,15 @@ export function disambiguateVcDisplayed(entries: HeadingIndexEntry[]): string[] 
  *
  * **先截断、再消歧**：反过来会让被截掉的孪生条目给幸存者留下一个毫无意义的 `(文件名)` 后缀。
  */
-export function buildVcDictionaryJson(entries: HeadingIndexEntry[]): VcDictionaryOutput {
+export function buildVcDictionaryJson(
+	entries: HeadingIndexEntry[],
+	linktextOf: (entry: HeadingIndexEntry) => string = (e) => e.basename,
+): VcDictionaryOutput {
 	const total = entries.length;
 	const taken = entries.slice(0, MAX_VC_DICTIONARY_ENTRIES);
 	const displayedList = disambiguateVcDisplayed(taken);
 	const items = taken.map((e, i) => ({
-		value: `[[${e.basename}#${e.anchor}|${e.displayText}]]`,
+		value: `[[${linktextOf(e)}#${e.anchor}|${e.displayText}]]`, // 重名文件写路径（Q47）
 		displayed: displayedList[i],
 		description: e.path,
 	}));
@@ -528,6 +531,74 @@ interface VcDictionaryProvider {
 	words: Array<{ createdPath?: string }>;
 	clearWords(): void;
 	addWord(word: unknown, synonymOption: { emoji: boolean; accentsDiacritics: boolean }): void;
+}
+
+/** Obsidian 传给 `EditorSuggest.getSuggestions` 的上下文里本插件用得到的部分。 */
+interface VcSuggestContext {
+	editor?: { getLine(line: number): string };
+	start?: { line: number; ch: number };
+	end?: { line: number; ch: number };
+}
+
+/** VC 建议框实例里本插件要套过滤的部分（`AutoCompleteSuggest`，非公开结构）。 */
+interface VcSuggesterLike {
+	getSuggestions?: (context: VcSuggestContext) => unknown;
+	__autoHeadingsContextFilter?: () => void;
+}
+
+/**
+ * 给 VC 的建议框套一层过滤：在本插件规则判定为「不该建议标题」的位置（标题行、`[[` 里、`#` 标签后、
+ * 紧跟 `[`，见 headingtrigger.ts `isBlockedContext`），把候选里来自本插件词典的词去掉，VC 自己的
+ * 其他候选照常（testplan Q46）。
+ *
+ * 用户实测（2026-10-18）：在 `# haha` 标题行里打字，VC 框把正在写的这个标题本身列成候选，选中后
+ * 链接被插进标题，标题文字变了又被收录成新的候选，再选再套一层。本插件自己的建议框在标题行里从不
+ * 弹（Q7），但标题写进 VC 词典后由 VC 匹配，VC 不知道这条规则，词典格式也没有逐词的触发条件。
+ *
+ * 套的是实例上的 `getSuggestions`（Obsidian 每次取候选都调它，VC 返回 Promise）；已套过不重复。
+ * VC 重开会换一个新实例，调用方在每次键入时调本函数自检补上；返回的还原函数在本插件卸载时调用。
+ *
+ * @returns 本次新套上时返回还原函数；已套过 / VC 没启用 / 结构认不出返回 null。
+ */
+export function installVcContextFilter(
+	app: App,
+	dictionaryPath: string,
+	isBlocked: (line: string, before: string, tokenStart: number) => boolean,
+): (() => void) | null {
+	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as
+		| { suggester?: VcSuggesterLike }
+		| undefined;
+	const sg = vc?.suggester;
+	if (!sg || typeof sg.getSuggestions !== "function" || sg.__autoHeadingsContextFilter) {
+		return null;
+	}
+	const original = sg.getSuggestions;
+	const blockedAt = (ctx: VcSuggestContext): boolean => {
+		if (!ctx?.editor || !ctx.start || !ctx.end) {
+			return false;
+		}
+		const line = ctx.editor.getLine(ctx.end.line);
+		return isBlocked(line, line.slice(0, ctx.end.ch), ctx.start.ch);
+	};
+	const dropOurs = (words: unknown): unknown =>
+		Array.isArray(words)
+			? words.filter(
+					(w) => (w as { createdPath?: string } | null)?.createdPath !== dictionaryPath,
+				)
+			: words;
+	sg.getSuggestions = function (this: unknown, ctx: VcSuggestContext): unknown {
+		const result: unknown = original.call(this, ctx);
+		if (!blockedAt(ctx)) {
+			return result;
+		}
+		return result instanceof Promise ? result.then(dropOurs) : dropOurs(result);
+	};
+	const restore = (): void => {
+		sg.getSuggestions = original;
+		delete sg.__autoHeadingsContextFilter;
+	};
+	sg.__autoHeadingsContextFilter = restore;
+	return restore;
 }
 
 /** 运行时拿到的 VC 实例里与词典内存有关的部分（未校验）。 */

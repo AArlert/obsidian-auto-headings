@@ -287,6 +287,17 @@ describe("buildHeadingLink：链接构造（Q4 逻辑面）", () => {
 		);
 	});
 
+	it("重名文件：用调用方给的链接文本（路径），不然会链到另一篇同名笔记（Q47）", () => {
+		const e = entry({ path: "甲科技/02-速查卡.md", basename: "02-速查卡" });
+		expect(buildHeadingLink(e, "x.md", "甲科技/02-速查卡")).toBe(
+			"[[甲科技/02-速查卡#交叉矩阵|交叉矩阵]]",
+		);
+		// 同文件仍省略文件名，与链接文本无关
+		expect(buildHeadingLink(e, "甲科技/02-速查卡.md", "甲科技/02-速查卡")).toBe(
+			"[[#交叉矩阵|交叉矩阵]]",
+		);
+	});
+
 	it("已编号标题：锚点保留 WORD_JOINER（与 backlinks.ts displayAnchor 一致）", () => {
 		const wj = "\u2060";
 		expect(buildHeadingLink(entry({ anchor: `1.1 ${wj}交叉矩阵` }), "notes/a.md")).toBe(

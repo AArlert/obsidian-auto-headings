@@ -270,7 +270,21 @@ function makePlugin(
 	const metadataCache: {
 		getBacklinksForFile?: (target: { path: string }) => unknown;
 		resolvedLinks?: Record<string, Record<string, number>>;
-	} = { resolvedLinks: opts.resolvedLinks };
+		fileToLinktext?: (
+			file: { path: string },
+			sourcePath: string,
+			omitMdExtension?: boolean,
+		) => string;
+	} = {
+		resolvedLinks: opts.resolvedLinks,
+		// 照 Obsidian 的规则：文件名在库里唯一时写文件名，重名时写（不带 .md 的）路径（Q47）。
+		fileToLinktext: (file) => {
+			const base = (p: string) => p.split("/").pop()!.replace(/.md$/, "");
+			const dup =
+				[...vaultFiles.keys()].filter((p) => base(p) === base(file.path)).length > 1;
+			return dup ? file.path.replace(/.md$/, "") : base(file.path);
+		},
+	};
 	if (!opts.noBacklinkApi) {
 		metadataCache.getBacklinksForFile = (target: { path: string }) => {
 			const sources =

@@ -15,12 +15,12 @@
 import {
 	EditorSuggest,
 	MarkdownView,
+	TFile,
 	setIcon,
 	type Editor,
 	type EditorPosition,
 	type EditorSuggestContext,
 	type EditorSuggestTriggerInfo,
-	type TFile,
 } from "obsidian";
 import type AutoHeadingsPlugin from "./main";
 import type { HeadingIndexEntry } from "./headingindex";
@@ -143,6 +143,8 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		if (!this.plugin.settings.headingLinkSuggestEnabled) {
 			return null;
 		}
+		// 联动开着时给 VC 的框套上下文过滤（Q46）：本方法每次键入都先于 VC 跑，正好在这里自检补上。
+		this.plugin.ensureVcContextFilter();
 		if (!file) {
 			return null;
 		}
@@ -224,8 +226,14 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		if (!ctx) {
 			return;
 		}
-		// alias 恒为完整标题名（displayText），见 headingtrigger.ts buildHeadingLink。
-		const link = buildHeadingLink(entry, ctx.file.path);
+		// alias 恒为完整标题名（displayText），见 headingtrigger.ts buildHeadingLink。链接文本走 Obsidian 的
+		// fileToLinktext：重名文件写路径，否则会链到另一篇同名笔记（Q47）。
+		const target = this.app.vault.getAbstractFileByPath(entry.path);
+		const linktext =
+			target instanceof TFile
+				? this.app.metadataCache.fileToLinktext(target, ctx.file.path, true)
+				: entry.basename;
+		const link = buildHeadingLink(entry, ctx.file.path, linktext);
 		ctx.editor.replaceRange(link, ctx.start, ctx.end);
 		ctx.editor.setCursor({ line: ctx.start.line, ch: ctx.start.ch + link.length });
 	}

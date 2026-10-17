@@ -12,6 +12,7 @@ import {
 	detectVcStatus,
 	disambiguateVcDisplayed,
 	enableAutoIntegration,
+	installVcContextFilter,
 	hasDictionaryPath,
 	isDictionaryRegisteredInVc,
 	isValidVcSettingsShape,
@@ -24,6 +25,7 @@ import {
 	tryReloadVcDictionaries,
 	vcDictionaryPath,
 } from "../../src/vcintegration";
+import { isBlockedContext } from "../../src/headingtrigger";
 
 /** 假 adapter：内存 Map 承载 data.json（及其他文件）。 */
 function makeAdapter(initial?: Record<string, string>) {
@@ -148,6 +150,22 @@ describe("isValidVcSettingsShape：最小 schema 校验", () => {
 });
 
 describe("buildVcDictionaryJson：词典内容（Q11/Q12 逻辑面）", () => {
+	it("链接文本由 linktextOf 决定（重名文件写路径，Q47）；缺省回退文件名", () => {
+		const e = {
+			path: "甲/02-卡.md",
+			basename: "02-卡",
+			level: 2,
+			lineIndex: 0,
+			displayText: "haha",
+			matchKey: "haha",
+			anchor: "haha",
+		};
+		const withPath = JSON.parse(buildVcDictionaryJson([e], () => "甲/02-卡").json);
+		expect(withPath.words[0].value).toBe("[[甲/02-卡#haha|haha]]");
+		const fallback = JSON.parse(buildVcDictionaryJson([e]).json);
+		expect(fallback.words[0].value).toBe("[[02-卡#haha|haha]]");
+	});
+
 	it("顶层 words 数组（VC 当前版本要求的 JsonDictionary 形状），每条为 value（完整链接）+ displayed（干净原文）", () => {
 		const wj = "\u2060";
 		const out = buildVcDictionaryJson([
@@ -740,5 +758,55 @@ describe("replaceVcDictionaryWords：只换掉 VC 内存里本插件的词（Q45
 			"unavailable",
 		);
 		expect(provider.words).toHaveLength(1);
+	});
+});
+
+describe("installVcContextFilter：标题行等位置去掉 VC 候选里本插件的词（Q46）", () => {
+	const ours = { value: "haha", createdPath: DICT };
+	const theirs = { value: "healthcare", createdPath: "words.txt" };
+	const setup = () => {
+		const original = vi.fn(async () => [ours, theirs]);
+		const suggester: Record<string, unknown> = { getSuggestions: original };
+		const app = makeApp({ installed: true, enabled: true, liveSettings: {} });
+		(app.plugins!.plugins!["various-complements"] as Record<string, unknown>).suggester =
+			suggester;
+		return { app, suggester, original };
+	};
+	const ctx = (line: string) => ({
+		editor: { getLine: () => line },
+		start: { line: 0, ch: line.length - 4 },
+		end: { line: 0, ch: line.length },
+	});
+	type Get = (c: ReturnType<typeof ctx>) => Promise<unknown[]>;
+
+	it("标题行里：去掉本插件的词，VC 自己的词保留；正文里不动", async () => {
+		const { app, suggester } = setup();
+		expect(installVcContextFilter(app, DICT, isBlockedContext)).toBeTypeOf("function");
+		const get = suggester.getSuggestions as Get;
+		expect(await get(ctx("# haha"))).toEqual([theirs]);
+		expect(await get(ctx("正文 haha"))).toEqual([ours, theirs]);
+		expect(await get(ctx("见 [[haha"))).toEqual([theirs]); // 未闭合 [[ 同样屏蔽
+	});
+
+	it("已套过不重复套；还原后恢复 VC 原方法", () => {
+		const { app, suggester, original } = setup();
+		const restore = installVcContextFilter(app, DICT, isBlockedContext);
+		expect(installVcContextFilter(app, DICT, isBlockedContext)).toBeNull();
+		restore!();
+		expect(suggester.getSuggestions).toBe(original);
+		expect(installVcContextFilter(app, DICT, isBlockedContext)).toBeTypeOf("function"); // 还原后可再套
+	});
+
+	it("VC 没启用 / 没有 suggester：不动", () => {
+		expect(
+			installVcContextFilter(makeApp({ installed: true }), DICT, isBlockedContext),
+		).toBeNull();
+		expect(
+			installVcContextFilter(
+				makeApp({ installed: true, enabled: true }),
+				DICT,
+				isBlockedContext,
+			),
+		).toBeNull();
 	});
 });

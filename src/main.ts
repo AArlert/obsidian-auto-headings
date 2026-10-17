@@ -77,13 +77,15 @@ import {
 	type TemplateStyle,
 } from "./templates/styles";
 import { summarizeTemplateUsage, type TemplateUsage } from "./settings/templateView";
-import { HeadingIndex } from "./headingindex";
+import { HeadingIndex, type HeadingIndexEntry } from "./headingindex";
 import { HeadingLinkCounts, resolveLinkedHeadingKeys } from "./headinglinks";
 import { NoteEntry } from "./noteentry";
 import { HeadingLinkSuggest } from "./headingsuggest";
+import { isBlockedContext } from "./headingtrigger";
 import {
 	buildVcDictionaryJson,
 	enableAutoIntegration,
+	installVcContextFilter,
 	isDictionaryRegisteredInVc,
 	moveBefore,
 	removeDictionaryFromVc,
@@ -606,6 +608,25 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 	}
 
+	/**
+	 * 词典联动开着时，确保 VC 的建议框套着上下文过滤（testplan Q46，见 vcintegration.ts
+	 * `installVcContextFilter`）。由本插件建议框的 onTrigger 每次键入时调用——它总在 VC 之前跑，
+	 * VC 重开换了新实例也能当场补上；已套过时是一次属性判断。
+	 */
+	ensureVcContextFilter(): void {
+		if (this.settings.vcIntegrationMode === "off") {
+			return;
+		}
+		const restore = installVcContextFilter(
+			this.app,
+			this.vcDictionaryFilePath(),
+			isBlockedContext,
+		);
+		if (restore) {
+			this.register(restore); // 本插件卸载时还原 VC 的方法
+		}
+	}
+
 	/** 启用中的 VC 是否还挂着本插件的词典（切回「不联动」时问要不要移除、面板过期提示，Q35/Q36）。 */
 	isVcDictionaryRegistered(): boolean {
 		return isDictionaryRegisteredInVc(this.app, this.vcDictionaryFilePath());
@@ -999,8 +1020,17 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * `adapter.write`（标题无变化时同步零流量）。写失败静默，下次索引变更会重试。
 	 */
 	private async writeVcDictionary(): Promise<void> {
+		// 链接文本按 Obsidian 的规则：文件名唯一写文件名，重名写路径（Q47；词典不知道将来插在哪篇笔记里，
+		// 故以空源路径求，重名一律写完整路径）。
+		const linktextOf = (e: HeadingIndexEntry): string => {
+			const f = this.app.vault.getAbstractFileByPath(e.path);
+			return f instanceof TFile
+				? this.app.metadataCache.fileToLinktext(f, "", true)
+				: e.basename;
+		};
 		const { json, truncated, total } = buildVcDictionaryJson(
 			this.headingIndex.eligibleEntries(),
+			linktextOf,
 		);
 		if (json === this.lastVcDictionaryJson) {
 			return; // 内容未变：不写盘（避免 iCloud/同步无谓上传）
