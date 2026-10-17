@@ -80,22 +80,6 @@ export interface AutoHeadingsSettings {
 	 */
 	vcIntegrationMode: "off" | "manual" | "auto";
 	/**
-	 * Various Complements **已启用**时，本插件自己的建议框如何避让（M13，1.0.29）。
-	 *
-	 * 背景（用户实测）：Obsidian 的 `EditorSuggest` 同一时刻**只显示一个**弹框——先返回非
-	 * null 触发信息的那个赢。VC 与本插件都用普通 `EditorSuggest` 注册（VC 见其
-	 * `src/main.ts` registerEditorSuggest），于是本插件一旦命中，VC 自己的文件链接 / 词补全
-	 * 建议就整个看不见了。这不是可以「两个都显示」的取舍，是二选一。
-	 *
-	 * - "yield"（**默认**）：VC 启用时本插件不弹自己的框，把弹框位置让给 VC——标题建议改由
-	 *   VC 的框统一呈现（前提是词典联动 `vcIntegrationMode !== "off"` 已开，否则 VC 词典里
-	 *   没有标题条目，设置面板会就此明确提示）。
-	 * - "own"：本插件优先，保持 1.0.28 及以前的行为（会盖住 VC 的框）。
-	 *
-	 * VC 未安装 / 未启用时本字段无效——没有竞争者，本插件的框照常弹。
-	 */
-	headingSuggestWhenVcActive: "yield" | "own";
-	/**
 	 * 各模板的样式历史（M16，spec §3.24）：模板名 → 最近若干份保存快照（最新在前）。存在 data.json
 	 * 里、不另写文件；模板改名 / 删除时随之搬迁 / 清除。缺省视为空表。
 	 */
@@ -132,7 +116,6 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	retired: false,
 	headingLinkSuggestEnabled: true,
 	vcIntegrationMode: "off",
-	headingSuggestWhenVcActive: "yield",
 	templateHistory: {},
 };
 

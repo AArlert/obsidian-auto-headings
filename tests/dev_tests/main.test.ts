@@ -270,7 +270,21 @@ function makePlugin(
 	const metadataCache: {
 		getBacklinksForFile?: (target: { path: string }) => unknown;
 		resolvedLinks?: Record<string, Record<string, number>>;
-	} = { resolvedLinks: opts.resolvedLinks };
+		fileToLinktext?: (
+			file: { path: string },
+			sourcePath: string,
+			omitMdExtension?: boolean,
+		) => string;
+	} = {
+		resolvedLinks: opts.resolvedLinks,
+		// 照 Obsidian 的规则：文件名在库里唯一时写文件名，重名时写（不带 .md 的）路径（Q47）。
+		fileToLinktext: (file) => {
+			const base = (p: string) => p.split("/").pop()!.replace(/.md$/, "");
+			const dup =
+				[...vaultFiles.keys()].filter((p) => base(p) === base(file.path)).length > 1;
+			return dup ? file.path.replace(/.md$/, "") : base(file.path);
+		},
+	};
 	if (!opts.noBacklinkApi) {
 		metadataCache.getBacklinksForFile = (target: { path: string }) => {
 			const sources =
@@ -2299,6 +2313,30 @@ describe("空标题行编号写入的光标与行尾空白（2026-08-10 用户�
 	});
 });
 
+describe("编号恰好插在光标处时光标落在编号之后（2026-10-18 用户实测，testplan J22）", () => {
+	it("J22：快捷键把一行文字变成标题、光标在正文开头 → 光标挪到编号之后", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor("## 章一");
+		ed.setCursor(0, 3); // 「## 」之后、「章一」之前
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		const prefix = `${WORD_JOINER}1 ${WORD_JOINER}`;
+		expect(ed.getValue()).toBe(`## ${prefix}章一`);
+		expect(ed.lastSelection).toEqual({ from: { line: 0, ch: 3 + prefix.length } });
+	});
+
+	it("J22：光标在正文末尾时不覆盖（插入点在光标之前，CM6 的默认映射本就正确）", () => {
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor("## 章一");
+		ed.setCursor(0, 5);
+		p.scheduleRenumber(ed, fileInfo("a.md"));
+		vi.advanceTimersByTime(500);
+
+		expect(ed.lastSelection).toBeUndefined();
+	});
+});
+
 describe("光标所在行保护精确化（2026-08-09 用户体验反馈，testplan J16）", () => {
 	it("J16：光标所在行标题层级变化时立即生效，不必等光标移开", () => {
 		const { p } = makePlugin({ autoNumber: true });
@@ -2555,11 +2593,10 @@ describe("M13：VC 词典写盘（节流 / 去重 / 截断，Q11/Q20 逻辑面�
 		const promise = (
 			p as unknown as { syncVcDictionaryAfterStartup(): Promise<void> }
 		).syncVcDictionaryAfterStartup();
-		// 每个 timer 触发后需要多轮微任务恢复（C resolve → attempt 的 try 完成 → 挂起下一 timer），
-		// 放宽为 12 轮 advance+flush；无挂起 timer 时 advance 是 no-op。
-		for (let i = 0; i < 12; i++) {
-			vi.advanceTimersByTime(2000);
-			await Promise.resolve();
+		// advanceTimersByTimeAsync 推进时间的同时冲刷微任务：不必手数「每个 timer 之后要几轮微任务」
+		// （写词典后多了一步同步 VC 内存的异步调用，手数的轮数就不够了）。
+		for (let i = 0; i < 6; i++) {
+			await vi.advanceTimersByTimeAsync(2000);
 		}
 		await promise;
 		expect(executeCommandById).toHaveBeenCalledTimes(5);

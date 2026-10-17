@@ -68,9 +68,14 @@ describe("约束随机序列（UVM 风格状态转移压测）", () => {
 	 */
 	it(
 		`[M13] ${RUNS} 条 × ${OPS} 步：标题索引参考模型记分板全程一致`,
-		() => {
+		async () => {
 			for (let i = 0; i < RUNS; i++) {
 				runHeadingIndexSequence(BASE_SEED + i, OPS);
+				// 每 200 条让出一次事件循环：5000×80 要同步跑近一分钟，一直霸占线程会让 vitest 工作进程
+				// 发不出进度心跳，报「Timeout calling onTaskUpdate」（测试本身全过，却以未处理错误收场）。
+				if (i % 200 === 199) {
+					await new Promise((resolve) => setTimeout(resolve, 0));
+				}
 			}
 		},
 		TIMEOUT,

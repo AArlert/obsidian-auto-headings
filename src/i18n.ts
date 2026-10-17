@@ -79,26 +79,21 @@ export interface Messages {
 	headingSuggestThisFile: string;
 	/** 标题索引因 vault 规模过大未完整构建时的一次性 Notice。 */
 	noticeHeadingIndexTruncated: (indexed: number) => string;
-	/** VC 启用时的让路策略（1.0.29）。 */
-	vcCoexistName: string;
-	vcCoexistDesc: string;
-	vcCoexistYield: string;
-	vcCoexistOwn: string;
-	/** 选了让路但词典联动还没开：此时不会真让路，如实告知当前由本插件接管（1.0.31）。 */
-	vcCoexistFallbackHint: string;
+	/**
+	 * 装了 VC 时标题建议显示在哪（2026-10-18 用户定：一个选择取代原「VC 启用时」+「VC 联动」两个下拉）。
+	 * 本插件的建议框 = 不写 VC 词典、本插件的框排在 VC 前面；VC 的建议框 = 写进 VC 词典、本插件让路。
+	 */
+	vcTargetName: string;
+	vcTargetDesc: string;
+	vcTargetPlugin: string;
+	vcTargetVc: string;
 
 	// —— 设置面板分区标题（1.0.29）——
 	sectionNumbering: string;
 	sectionLinking: string;
 	sectionSuggest: string;
-	/** 「标题链接建议」分区的一句话导语：先说独立可用，再说什么时候才需要关心 VC 那两项。 */
 
 	// —— Various Complements 联动（M13）——
-	vcModeName: string;
-	vcModeDesc: string;
-	vcModeOff: string;
-	vcModeManual: string;
-	vcModeAuto: string;
 	/** 自动配置前置探测未检测到 VC 时的提示。 */
 	vcNotInstalledNotice: string;
 	vcDictionaryPathLabel: string;
@@ -110,6 +105,8 @@ export interface Messages {
 	vcAutoConfirmTitle: string;
 	vcAutoConfirmBody: string;
 	vcAutoConfirmButton: string;
+	/** 自动配置确认框里的「手动配置」：不想让插件改 VC 设置时自己填词典路径。 */
+	vcAutoManualButton: string;
 	noticeVcAutoWriteSuccess: string;
 	/** schema 校验失败、已整体放弃自动写入（未改动 VC 配置）时的提示。 */
 	noticeVcAutoWriteInvalidShape: string;
@@ -123,6 +120,17 @@ export interface Messages {
 	vcAutoConfirmPoints: string[];
 	/** VC 的 descriptionOnSuggestion 设为 None 时，来源路径行不显示的只读提示（1.0.32）。 */
 	vcDescriptionOffHint: string;
+	/** 切回「不联动」时 VC 仍挂着本插件词典：问要不要一并移除（testplan Q35）。 */
+	vcOffConfirmTitle: string;
+	vcOffConfirmBody: string;
+	vcOffKeepButton: string;
+	vcOffRemoveButton: string;
+	/** 「不联动」但 VC 仍挂着本插件的旧词典：面板提示 + 移除按钮（testplan Q36）。 */
+	vcStaleDictName: string;
+	vcStaleDictDesc: string;
+	vcStaleDictRemoveButton: string;
+	noticeVcDictRemoved: string;
+	noticeVcDictRemoveFailed: string;
 
 	// —— 路径规则 ——
 	pathRulesHeading: string;
@@ -523,21 +531,15 @@ const zh: Messages = {
 	headingSuggestThisFile: "（本文件）",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`vault 过大，标题索引未完整构建（已索引 ${indexed} 个）；建议功能在已索引范围内可用。`,
-	vcCoexistName: "Various Complements 启用时",
-	vcCoexistDesc: "两个插件共用一个建议框，只能留一个。",
-	vcCoexistYield: "让路给 Various Complements（推荐）",
-	vcCoexistOwn: "本插件优先（会盖住 VC 的建议框）",
-	vcCoexistFallbackHint: "词典联动未开启，目前仍由本插件接管建议框。",
+	vcTargetName: "建议显示在",
+	vcTargetDesc: "本插件的框会盖住 VC 的；选 VC 则标题与 VC 的词同框。",
+	vcTargetPlugin: "本插件的建议框",
+	vcTargetVc: "Various Complements 的建议框",
 
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
 	sectionSuggest: "标题链接建议",
 
-	vcModeName: "Various Complements 联动",
-	vcModeDesc: "把标题索引导出为 VC 的自定义词典。",
-	vcModeOff: "不联动",
-	vcModeManual: "手动配置",
-	vcModeAuto: "自动配置",
 	vcNotInstalledNotice:
 		"未检测到 Various Complements（未安装或未启用），自动配置已取消；请先安装并启用，或改用「手动配置」。",
 	vcDictionaryPathLabel: "词典文件路径",
@@ -552,13 +554,25 @@ const zh: Messages = {
 		"将生成标题词典并自动配置 VC（全程安全校验，写不了即放弃，不改动现有配置）。确认继续？",
 	vcAutoConfirmPoints: [
 		"生成/维护标题词典（上限 2 万条，超出截断）",
-		"写 VC 配置：词典路径 + 开「自定义词典补全」+ 触发阈值 1 字符",
+		"写 VC 配置：词典路径 + 开「自定义词典补全」+ 触发阈值至少 2 个字符",
 		"清空 VC「补全候选显示后缀」（全局项，其它词典候选同样生效）",
 		"VC「建议框最多显示条数」抬到至少 10（全局项，只抬不降）",
 		"写入后自动重载 VC 词典（失败会另行提示）",
 	],
 	vcDescriptionOffHint: "VC 关闭了候选来源行（Description on suggestion 为 None）。",
+	vcOffConfirmTitle: "停止词典联动",
+	vcOffConfirmBody:
+		"之后不再更新标题词典。Various Complements 里仍挂着这份词典，要一并移除吗？不移除的话，VC 会继续用这份不再更新的旧词典（标题改名后可能插入失效的链接）。",
+	vcOffKeepButton: "保留",
+	vcOffRemoveButton: "从 VC 移除",
+	vcStaleDictName: "VC 仍在加载旧的标题词典",
+	vcStaleDictDesc: "这份词典已不再更新，标题改名后可能插入失效的链接。",
+	vcStaleDictRemoveButton: "移除",
+	noticeVcDictRemoved: "已从 Various Complements 移除本插件的标题词典。",
+	noticeVcDictRemoveFailed:
+		"没能读取 Various Complements 的设置，请在 VC 设置里手动删除这条词典路径。",
 	vcAutoConfirmButton: "确认并自动配置",
+	vcAutoManualButton: "手动配置",
 	noticeVcAutoWriteSuccess: "已自动配置 Various Complements 联动。",
 	noticeVcAutoWriteInvalidShape:
 		"VC 配置格式与预期不符，已放弃自动写入（未改动其配置）；请改用「手动配置」或检查其配置文件。",
@@ -923,22 +937,15 @@ const en: Messages = {
 	headingSuggestThisFile: "(this file)",
 	noticeHeadingIndexTruncated: (indexed) =>
 		`Vault too large: heading index built partially (${indexed} headings indexed); suggestions work within the indexed range.`,
-	vcCoexistName: "When Various Complements is enabled",
-	vcCoexistDesc: "Both plugins share one suggestion popup, so only one can show it.",
-	vcCoexistYield: "Yield to Various Complements (recommended)",
-	vcCoexistOwn: "This plugin wins (hides VC's popup)",
-	vcCoexistFallbackHint:
-		"Dictionary integration is off, so this plugin still serves suggestions.",
+	vcTargetName: "Show suggestions in",
+	vcTargetDesc: "This plugin's popup covers VC's; with VC, headings join VC's popup.",
+	vcTargetPlugin: "This plugin's popup",
+	vcTargetVc: "Various Complements' popup",
 
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",
 	sectionSuggest: "Heading link suggestions",
 
-	vcModeName: "Various Complements integration",
-	vcModeDesc: "Export the heading index as a VC custom dictionary.",
-	vcModeOff: "Off",
-	vcModeManual: "Manual",
-	vcModeAuto: "Automatic",
 	vcNotInstalledNotice:
 		"Various Complements not detected (not installed or not enabled); automatic configuration cancelled. Install and enable it, or use Manual mode.",
 	vcDictionaryPathLabel: "Dictionary file path",
@@ -953,13 +960,25 @@ const en: Messages = {
 		"A heading dictionary will be generated and VC configured automatically (safety-checked; aborts without touching your VC settings if it can't write safely). Continue?",
 	vcAutoConfirmPoints: [
 		"Generate/maintain the heading dictionary (capped at 20,000 headings)",
-		'Write VC settings: dictionary path + "Custom dictionary complement" + trigger threshold of 1 character',
+		'Write VC settings: dictionary path + "Custom dictionary complement" + trigger threshold of at least 2 characters',
 		'Clear VC\'s "Displayed text suffix" (global: affects your other custom dictionaries too)',
 		'Raise VC\'s "Max number of suggestions" to at least 10 (global; only raised, never lowered)',
 		"Reload VC dictionaries after writing (failure is reported separately)",
 	],
 	vcDescriptionOffHint: "VC hides the candidate source line (Description on suggestion: None).",
+	vcOffConfirmTitle: "Stop dictionary integration",
+	vcOffConfirmBody:
+		"The heading dictionary will no longer be updated. Various Complements still loads it — remove it from VC too? If kept, VC keeps using this stale dictionary (renamed headings may insert broken links).",
+	vcOffKeepButton: "Keep",
+	vcOffRemoveButton: "Remove from VC",
+	vcStaleDictName: "VC still loads the old heading dictionary",
+	vcStaleDictDesc: "It is no longer updated; renamed headings may insert broken links.",
+	vcStaleDictRemoveButton: "Remove",
+	noticeVcDictRemoved: "Removed this plugin's heading dictionary from Various Complements.",
+	noticeVcDictRemoveFailed:
+		"Couldn't read Various Complements' settings. Please remove this dictionary path in VC's settings manually.",
 	vcAutoConfirmButton: "Confirm & configure",
+	vcAutoManualButton: "Manual setup",
 	noticeVcAutoWriteSuccess: "Various Complements integration configured automatically.",
 	noticeVcAutoWriteInvalidShape:
 		"VC's configuration shape did not match expectations; automatic write aborted (its settings untouched). Use Manual mode or inspect VC's config.",

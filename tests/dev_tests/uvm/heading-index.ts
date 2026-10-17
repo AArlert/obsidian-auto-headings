@@ -22,11 +22,17 @@
  */
 
 import {
+	GENERIC_FILE_COUNT,
 	HeadingIndex,
 	buildEntriesForFile,
 	type HeadingIndexEntry,
 } from "../../../src/headingindex";
-import { resolveTriggerQuery, suffixCandidates } from "../../../src/headingtrigger";
+import {
+	MIN_PREFIX_WEIGHT,
+	resolveTriggerQuery,
+	suffixCandidates,
+	triggerWeight,
+} from "../../../src/headingtrigger";
 import { normalizeForWhitelist } from "../../../src/whitelist";
 import { Rng } from "./rng";
 
@@ -51,7 +57,13 @@ const TITLE_POOL = [
 	"总结",
 	"Reference",
 	"参考文献",
+	"AXI",
+	"中断",
 ];
+
+/** 视作「被链接过」的标题（Q31：短中文词完整命中的条件之一）。 */
+const LINKED = new Set(["中断", "总结"]);
+const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 /** 对拍查询集：命中前缀 / 未命中 / 大小写变体 / 空串。 */
 const QUERIES = [
 	"交叉矩阵",
@@ -91,6 +103,12 @@ const TYPED_SAMPLES = [
 	"一个交叉矩",
 	"参考文献",
 	"这是总结的附录",
+	// Q30/Q31：短英文词 / 汉字后紧跟英文词 / 被链接过的短中文词 / 连写中的短中文词
+	"axi",
+	"用axi",
+	"中断",
+	"一笔中断",
+	"附录",
 ];
 
 /** 参考模型排序（与 DUT 的 sorted 同 key：matchKey 主键 + path 次级键）。 */
@@ -150,6 +168,26 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 
 	const check = (label: string): void => {
 		const flat = [...ref.values()].flat();
+		// 参考侧的套话判定：朴素地按文件去重数一遍（DUT 是增量维护的计数表）。
+		const files = new Map<string, Set<string>>();
+		for (const e of flat) {
+			if (!files.has(e.matchKey)) files.set(e.matchKey, new Set());
+			files.get(e.matchKey)!.add(e.path);
+		}
+		const generic = (k: string) => (files.get(k)?.size ?? 0) >= GENERIC_FILE_COUNT;
+		const eligible = flat.filter((e) => !generic(e.matchKey));
+		for (const [k, set] of files) {
+			if (dut.fileCountOf(k) !== set.size) {
+				throw new Error(
+					`[M13 压测] seed=${seed} ${label}：fileCountOf(${JSON.stringify(k)}) 不一致，DUT=${dut.fileCountOf(k)} 参考=${set.size}\n轨迹：${trace.join(" -> ")}`,
+				);
+			}
+		}
+		if (dut.eligibleEntries().length !== eligible.length) {
+			throw new Error(
+				`[M13 压测] seed=${seed} ${label}：eligibleEntries 数量不一致\n轨迹：${trace.join(" -> ")}`,
+			);
+		}
 		if (dut.size !== flat.length) {
 			throw new Error(
 				`[M13 压测] seed=${seed} ${label}：size 不一致，DUT=${dut.size} 参考=${flat.length}\n轨迹：${trace.join(" -> ")}`,
@@ -161,7 +199,7 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 			);
 		}
 		for (const q of QUERIES) {
-			const expected = refQuery(flat, q, 20);
+			const expected = refQuery(eligible, q, 20);
 			const actual = dut.queryPrefix(q, 20);
 			const key = (e: HeadingIndexEntry) => `${e.path}|${e.displayText}|${e.anchor}`;
 			if (actual.map(key).join("\n") !== expected.map(key).join("\n")) {
@@ -171,7 +209,7 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 						`轨迹：${trace.join(" -> ")}`,
 				);
 			}
-			if (dut.hasExactMatch(q) !== refHasExact(flat, q)) {
+			if (dut.hasExactMatch(q) !== refHasExact(eligible, q)) {
 				throw new Error(
 					`[M13 压测] seed=${seed} ${label}：hasExactMatch(${JSON.stringify(q)}) 不一致\n轨迹：${trace.join(" -> ")}`,
 				);
@@ -187,12 +225,20 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 		// 额外断言 start 自洽（`sample.slice(start) === text`）——这是「接受建议只替换被匹配上
 		// 的那一段、不吃掉前面已有的字」的地基，错了就是用户文本被吞。
 		for (const sample of TYPED_SAMPLES) {
-			const hit = resolveTriggerQuery(sample, 0, dut);
-			// 参考：整段（start 0）按前缀、行内后缀按完整标题（Q28）。
+			const hit = resolveTriggerQuery(sample, 0, {
+				hasAnyPrefixMatch: (q) => dut.hasAnyPrefixMatch(q),
+				hasExactMatch: (q) => dut.hasExactMatch(q),
+				isLinked: (q) => LINKED.has(q),
+			});
+			// 参考：按 spec §3.23 的规则表独立实现一遍，数据走全量扫描。
 			const expected =
 				suffixCandidates(sample, 0).find((c) => {
 					const q = normalizeForWhitelist(c.text);
-					return c.start === 0 ? refHasPrefix(flat, q) : refHasExact(flat, q);
+					const long = triggerWeight(c.text) >= MIN_PREFIX_WEIGHT;
+					if (c.boundary && long) return refHasPrefix(eligible, q);
+					if (!refHasExact(eligible, q)) return false;
+					if (c.boundary) return !CJK_RE.test(c.text) || LINKED.has(q);
+					return long || LINKED.has(q);
 				}) ?? null;
 			const shape = (v: { text: string; start: number } | null) =>
 				v ? `${v.text}@${v.start}` : "null";

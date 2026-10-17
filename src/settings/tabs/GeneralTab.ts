@@ -1,7 +1,7 @@
 import { Setting } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { DEBOUNCE_DEFAULT, DEBOUNCE_MAX, DEBOUNCE_MIN, clampDebounceDelay } from "../model";
-import { renderVcIntegrationSection } from "./VcIntegrationSection";
+import { renderVcTargetSection } from "./VcIntegrationSection";
 import { detectVcStatus } from "../../vcintegration";
 
 /**
@@ -69,6 +69,7 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 	// 1.2.2：滑块左侧常显当前值（testplan L29）。拖动中经 `input` 事件实时刷新数字，
 	// 保存仍走 onChange（与旧行为一致）。
 	let debounceValueEl: HTMLElement | null = null;
+	let nativeValueDisplay = false; // 滑块自带数值显示时不再加自己的（见下方 addSlider）
 	const showDebounce = (ms: number): void => {
 		debounceValueEl?.setText(`${ms} ms`);
 	};
@@ -84,6 +85,16 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 					plugin.settings.debounceDelay = clampDebounceDelay(value);
 					await plugin.saveSettings();
 				});
+			// 新版 Obsidian（实测 1.14.4）的滑块自带数值显示（`span.slider-value`）与 `setDisplayFormat`；
+			// 旧版没有，只在拖动时浮出提示——有原生的就用原生的、不再自己加，免得同一个数显示两遍。
+			const native = slider as unknown as {
+				setDisplayFormat?: (fmt: (v: number) => string) => unknown;
+			};
+			if (typeof native.setDisplayFormat === "function") {
+				native.setDisplayFormat((v) => `${v} ms`);
+				nativeValueDisplay = true;
+				return;
+			}
 			slider.sliderEl.addEventListener("input", () =>
 				showDebounce(Number(slider.sliderEl.value)),
 			);
@@ -98,9 +109,11 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 					tab.display();
 				}),
 		);
-	debounceValueEl = debounceSetting.controlEl.createSpan({ cls: "ah-slider-value" });
-	debounceSetting.controlEl.prepend(debounceValueEl);
-	showDebounce(plugin.settings.debounceDelay);
+	if (!nativeValueDisplay) {
+		debounceValueEl = debounceSetting.controlEl.createSpan({ cls: "ah-slider-value" });
+		debounceSetting.controlEl.prepend(debounceValueEl);
+		showDebounce(plugin.settings.debounceDelay);
+	}
 
 	// ==== 分区：链接维护 ====
 	new Setting(containerEl).setName(t.sectionLinking).setHeading();
@@ -129,47 +142,13 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 			}),
 		);
 
-	// —— Various Complements 相关的三行（1.2.2，testplan L30）——
-	// 缩进挂在「标题链接建议」开关之下（`.ah-sub-settings`）。只在 VC **已启用**时显示：没装 / 没开
-	// VC 的用户不存在这个取舍，多几行只是噪音（只影响显示，设置值不变）。例外：词典联动已经开着时
-	// 无论 VC 状态都显示——否则会留下「还在写词典、用户却看不见也关不掉」的隐身状态。
+	// —— 装了 VC 时：建议显示在哪（2026-10-18 用户定，testplan Q43）——
+	// 只在 VC **已启用**时显示（没装 / 没开 VC 的用户不存在这个选择）。例外：词典联动开着时无论 VC
+	// 状态都显示——否则会留下「还在写词典、用户却看不见也关不掉」的隐身状态。
 	const vcStatus = detectVcStatus(plugin.app);
-	const vcIntegrationOn = plugin.settings.vcIntegrationMode !== "off";
-	if (vcStatus !== "enabled" && !vcIntegrationOn) {
+	if (vcStatus !== "enabled" && plugin.settings.vcIntegrationMode === "off") {
 		return;
 	}
 	const subEl = containerEl.createDiv({ cls: "ah-sub-settings" });
-
-	// 共存策略（1.0.29）：VC 已安装才有意义（联动开着、VC 已卸载时不渲染）。
-	if (vcStatus !== "not-installed") {
-		new Setting(subEl)
-			.setName(t.vcCoexistName)
-			.setDesc(t.vcCoexistDesc)
-			.addDropdown((dd) => {
-				dd.addOption("yield", t.vcCoexistYield);
-				dd.addOption("own", t.vcCoexistOwn);
-				dd.setValue(plugin.settings.headingSuggestWhenVcActive).onChange(async (value) => {
-					plugin.settings.headingSuggestWhenVcActive = value === "own" ? "own" : "yield";
-					await plugin.saveSettings();
-					tab.display(); // 重绘：下面的接管提示与联动区显隐取决于本项
-				});
-			});
-
-		// 选了让路、但词典联动还没开：此时**不会真的让路**（见 shouldYieldSuggestToVc），
-		// 由本插件的建议框接管——如实告知当前谁在接管。
-		const yieldPending =
-			plugin.settings.headingLinkSuggestEnabled &&
-			plugin.settings.headingSuggestWhenVcActive === "yield" &&
-			vcStatus === "enabled" &&
-			!vcIntegrationOn;
-		if (yieldPending) {
-			subEl.createEl("p", { cls: "ah-section-desc", text: t.vcCoexistFallbackHint });
-		}
-	}
-
-	// 词典联动（M13）：「本插件优先」且联动本就关着时不渲染（这时 VC 的相关配置纯属噪音，testplan Q24）。
-	const hideVcSection = plugin.settings.headingSuggestWhenVcActive === "own" && !vcIntegrationOn;
-	if (!hideVcSection) {
-		renderVcIntegrationSection(tab, subEl);
-	}
+	renderVcTargetSection(tab, subEl);
 }

@@ -21,6 +21,58 @@ const MAX_HEADINGS_PER_FILE = 500;
 /** 全库标题索引总量上限（方案 §2.4，可调常量）；达到后停止收录后续文件并置 truncated。 */
 const MAX_INDEXED_HEADINGS = 50000;
 
+/**
+ * 「套话标题」门槛（testplan Q32）：同名标题（同一 matchKey）出现在这么多个文件里，就视为模板化的
+ * 小节名（【边界】【反问】【Summary】），不参与标题链接建议、不写进 VC 词典。
+ *
+ * 为什么是 3（用户主力库实测，2026-10-18）：1987 个不同标题里 85% 只在一个文件出现；出现在 2 个文件的
+ * 195 个多是真概念（`apb`、`cdc`），≥ 3 个文件的 102 个几乎全是面试模板小节。同名标题本来也
+ * 不是好的链接目标——十几个文件里都有【流程】，链到哪个都说不清。
+ */
+export const GENERIC_FILE_COUNT = 3;
+
+/**
+ * 是否 Excalidraw 绘图文件（testplan Q33）：文件名 `*.excalidraw.md`，或 frontmatter 带
+ * `excalidraw-plugin` 键。这类文件里的【Excalidraw Data】【Text Elements】是插件的存储结构，
+ * 不是用户写的标题——主力库实测各 48 个，原样收录会让它们成为头号「套话」。
+ */
+export function isExcalidrawFile(path: string, content: string): boolean {
+	if (/\.excalidraw\.md$/i.test(path)) {
+		return true;
+	}
+	const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+	return !!fm && /^excalidraw-plugin\s*:/m.test(fm[1]);
+}
+
+/**
+ * 查询时要排除的那一条：某文件的某一行（testplan Q7：正在写的标题不建议给它自己）。行号取自上次收录该文件时，
+ * 用户正在这一行打字时它基本不会漂移。
+ */
+export interface ExcludeAt {
+	path: string;
+	lineIndex: number;
+}
+
+const isExcluded = (e: HeadingIndexEntry, ex: ExcludeAt | undefined): boolean =>
+	!!ex && e.path === ex.path && e.lineIndex === ex.lineIndex;
+
+/** 「标题这一层」有没有变（只看会进词典的字段，不看行号——正文增删行只会让行号漂移）。 */
+function sameHeadings(a: readonly HeadingIndexEntry[], b: readonly HeadingIndexEntry[]): boolean {
+	if (a.length !== b.length) {
+		return false;
+	}
+	for (let i = 0; i < a.length; i++) {
+		if (
+			a[i].matchKey !== b[i].matchKey ||
+			a[i].anchor !== b[i].anchor ||
+			a[i].displayText !== b[i].displayText
+		) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /** vault 标题索引中的一条标题记录。 */
 export interface HeadingIndexEntry {
 	/** 文件的 vault 相对路径（含 .md 后缀），即 TFile.path。 */
@@ -52,6 +104,9 @@ export function buildEntriesForFile(
 	basename: string,
 	content: string,
 ): HeadingIndexEntry[] {
+	if (isExcalidrawFile(path, content)) {
+		return [];
+	}
 	const headings = parseHeadings(content);
 	const out: HeadingIndexEntry[] = [];
 	for (const h of headings) {
@@ -134,6 +189,8 @@ export class HeadingIndex {
 	private sorted: HeadingIndexEntry[] = [];
 	private totalCount = 0;
 	private truncated = false;
+	/** matchKey → 含该标题的**文件数**（同一文件里重复的同名标题只算一次），判定套话标题用。 */
+	private readonly keyFileCount = new Map<string, number>();
 
 	constructor(private readonly maxIndexed: number = MAX_INDEXED_HEADINGS) {}
 
@@ -144,6 +201,7 @@ export class HeadingIndex {
 	 */
 	loadInitial(files: Array<{ path: string; basename: string; content: string }>): void {
 		this.byFile.clear();
+		this.keyFileCount.clear();
 		this.sorted = [];
 		this.totalCount = 0;
 		this.truncated = false;
@@ -160,6 +218,7 @@ export class HeadingIndex {
 				this.truncated = true;
 			}
 			this.byFile.set(f.path, taken);
+			this.adjustKeyFileCount(taken, 1);
 			all.push(...taken);
 			this.totalCount += taken.length;
 		}
@@ -167,8 +226,11 @@ export class HeadingIndex {
 		this.sorted = all;
 	}
 
-	/** 增量：单文件内容变化（新建/修改）后调用，替换该文件在索引中的全部条目。 */
-	setFile(path: string, basename: string, content: string): void {
+	/**
+	 * 增量：单文件内容变化（新建/修改）后调用，替换该文件在索引中的全部条目。
+	 * @returns 该文件的标题（文本 / 锚点）是否真的变了——只改正文时为 false，调用方据此决定要不要同步 VC 词典。
+	 */
+	setFile(path: string, basename: string, content: string): boolean {
 		const entries = buildEntriesForFile(path, basename, content);
 		const old = this.byFile.get(path) ?? [];
 		const room = Math.max(0, this.maxIndexed - (this.totalCount - old.length));
@@ -177,6 +239,8 @@ export class HeadingIndex {
 			this.truncated = true;
 		}
 		this.byFile.set(path, taken);
+		this.adjustKeyFileCount(old, -1);
+		this.adjustKeyFileCount(taken, 1);
 		this.totalCount = this.totalCount - old.length + taken.length;
 		this.sorted = this.sorted.filter((e) => e.path !== path);
 		for (const e of taken) {
@@ -185,6 +249,7 @@ export class HeadingIndex {
 			// 同一文件时相同 key 的条目顺序反转，与参考模型稳定排序不一致）。
 			this.sorted.splice(upperBoundEntry(this.sorted, e), 0, e);
 		}
+		return !sameHeadings(old, taken);
 	}
 
 	/** 增量：文件删除。 */
@@ -194,6 +259,7 @@ export class HeadingIndex {
 			return;
 		}
 		this.byFile.delete(path);
+		this.adjustKeyFileCount(old, -1);
 		this.totalCount -= old.length;
 		this.sorted = this.sorted.filter((e) => e.path !== path);
 	}
@@ -215,6 +281,7 @@ export class HeadingIndex {
 			return; // 自身改名：无操作（Obsidian 的 rename 事件不会产生，防御边界）
 		}
 		const replaced = this.byFile.get(newPath) ?? [];
+		this.adjustKeyFileCount(replaced, -1); // 被覆盖文件的标题随之消失
 		this.byFile.delete(oldPath);
 		this.sorted = this.sorted.filter((e) => e.path !== oldPath && e.path !== newPath);
 		this.totalCount = this.totalCount - entries.length - replaced.length + entries.length;
@@ -226,43 +293,90 @@ export class HeadingIndex {
 		this.byFile.set(newPath, entries);
 	}
 
-	/** 前缀查询：返回 matchKey 以 normalizedQuery 为前缀的条目，最多 limit 条。 */
-	queryPrefix(normalizedQuery: string, limit: number): HeadingIndexEntry[] {
+	/** 前缀查询：返回 matchKey 以 normalizedQuery 为前缀的条目（排除 `exclude` 那一条），最多 limit 条。 */
+	queryPrefix(normalizedQuery: string, limit: number, exclude?: ExcludeAt): HeadingIndexEntry[] {
 		if (!normalizedQuery) {
 			return [];
 		}
 		const start = lowerBoundByKey(this.sorted, normalizedQuery);
 		const out: HeadingIndexEntry[] = [];
 		for (let i = start; i < this.sorted.length && out.length < limit; i++) {
-			if (!this.sorted[i].matchKey.startsWith(normalizedQuery)) {
+			const e = this.sorted[i];
+			if (!e.matchKey.startsWith(normalizedQuery)) {
 				break; // 排序保证一旦不匹配即可停止
 			}
-			out.push(this.sorted[i]);
+			if (!this.isGenericKey(e.matchKey) && !isExcluded(e, exclude)) {
+				out.push(e);
+			}
 		}
 		return out;
 	}
 
-	/** onTrigger 专用的廉价判定：是否存在至少一条前缀匹配（可提前退出，不收集结果）。 */
-	hasAnyPrefixMatch(normalizedQuery: string): boolean {
+	/**
+	 * onTrigger 专用的廉价判定：是否存在至少一条**非套话**的前缀匹配（不收集结果）。
+	 * 跳过套话标题时最坏要扫过同前缀的全部套话条目，规模受「同前缀标题数」约束，可接受。
+	 */
+	hasAnyPrefixMatch(normalizedQuery: string, exclude?: ExcludeAt): boolean {
 		if (!normalizedQuery) {
 			return false;
 		}
-		const idx = lowerBoundByKey(this.sorted, normalizedQuery);
-		return idx < this.sorted.length && this.sorted[idx].matchKey.startsWith(normalizedQuery);
+		for (let i = lowerBoundByKey(this.sorted, normalizedQuery); i < this.sorted.length; i++) {
+			const e = this.sorted[i];
+			if (!e.matchKey.startsWith(normalizedQuery)) {
+				return false;
+			}
+			if (!this.isGenericKey(e.matchKey) && !isExcluded(e, exclude)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
-	/** onTrigger 专用：是否存在 matchKey 恰好等于查询串的条目（行内后缀触发，testplan Q28）。 */
-	hasExactMatch(normalizedQuery: string): boolean {
-		if (!normalizedQuery) {
+	/** onTrigger 专用：是否存在 matchKey 恰好等于查询串的**非套话**条目（完整命中，testplan Q28/Q30）。 */
+	hasExactMatch(normalizedQuery: string, exclude?: ExcludeAt): boolean {
+		if (!normalizedQuery || this.isGenericKey(normalizedQuery)) {
 			return false;
 		}
-		const idx = lowerBoundByKey(this.sorted, normalizedQuery);
-		return idx < this.sorted.length && this.sorted[idx].matchKey === normalizedQuery;
+		for (let i = lowerBoundByKey(this.sorted, normalizedQuery); i < this.sorted.length; i++) {
+			const e = this.sorted[i];
+			if (e.matchKey !== normalizedQuery) {
+				return false;
+			}
+			if (!isExcluded(e, exclude)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
-	/** 全部条目（按 matchKey 排序的扁平视图副本），供 VC 词典生成等全量消费方使用。 */
+	/** 某文件里锚点为 `anchor` 的条目（VC 候选核对「这个标题还在不在」用，testplan Q48）。 */
+	findByAnchor(path: string, anchor: string): HeadingIndexEntry | undefined {
+		return this.byFile.get(path)?.find((e) => e.anchor === anchor);
+	}
+
+	/** 含该标题的文件数（0 = 索引里没有）。 */
+	fileCountOf(matchKey: string): number {
+		return this.keyFileCount.get(matchKey) ?? 0;
+	}
+
+	/** 是否套话标题（出现在 ≥ {@link GENERIC_FILE_COUNT} 个文件里，testplan Q32）。 */
+	isGenericKey(matchKey: string): boolean {
+		return this.fileCountOf(matchKey) >= GENERIC_FILE_COUNT;
+	}
+
+	/** 某文件的全部条目（只读视图；未收录返回空数组），供链接解析按目标文件比对标题。 */
+	entriesOf(path: string): readonly HeadingIndexEntry[] {
+		return this.byFile.get(path) ?? [];
+	}
+
+	/** 全部条目（按 matchKey 排序的扁平视图副本），含套话标题。 */
 	allEntries(): HeadingIndexEntry[] {
 		return [...this.sorted];
+	}
+
+	/** 参与建议的条目（剔除套话标题），供 VC 词典生成（testplan Q32：两个建议框同一套筛选）。 */
+	eligibleEntries(): HeadingIndexEntry[] {
+		return this.sorted.filter((e) => !this.isGenericKey(e.matchKey));
 	}
 
 	get size(): number {
@@ -274,8 +388,21 @@ export class HeadingIndex {
 		return this.truncated;
 	}
 
+	/** 按文件内**去重后**的 matchKey 增减文件计数（delta = ±1）。 */
+	private adjustKeyFileCount(entries: readonly HeadingIndexEntry[], delta: 1 | -1): void {
+		for (const key of new Set(entries.map((e) => e.matchKey))) {
+			const next = (this.keyFileCount.get(key) ?? 0) + delta;
+			if (next > 0) {
+				this.keyFileCount.set(key, next);
+			} else {
+				this.keyFileCount.delete(key);
+			}
+		}
+	}
+
 	clear(): void {
 		this.byFile.clear();
+		this.keyFileCount.clear();
 		this.sorted = [];
 		this.totalCount = 0;
 		this.truncated = false;

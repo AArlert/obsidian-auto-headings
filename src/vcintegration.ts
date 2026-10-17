@@ -27,6 +27,8 @@ const VC_DATA_REL_PATH = "plugins/various-complements/data.json";
 const VC_RELOAD_COMMAND_ID = "various-complements:reload-custom-dictionaries";
 /** VC 词典文件重写节流（方案 §5.8，可调常量）：重写整个 JSON 文件比更新内存索引昂贵得多。 */
 export const VC_DICTIONARY_THROTTLE_MS = 3000;
+/** 标题变化后同步进 VC 内存的最长等待（ms，testplan Q48）：只换本插件那部分词，便宜，要快。 */
+export const VC_MEMORY_SYNC_MS = 500;
 /**
  * VC 词典条数上限（可调常量）：VC 端会全量加载词典建索引（wordByValue + 首字母桶），
  * 独立于本插件内存索引上限（50,000）设更小值——20,000 条紧凑 JSON ≈ 2.2MB，控制 VC 侧
@@ -43,22 +45,18 @@ export type VcInstallStatus = "not-installed" | "disabled" | "enabled";
  * 而 VC 与本插件都以普通 `EditorSuggest` 注册——本插件一命中，VC 自己的文件链接/词补全建议
  * 就整个看不见。
  *
- * 让路要同时满足三个条件，缺一不可：
- * 1. 用户选了让路（`mode === "yield"`）；
- * 2. VC **确实已启用**——未安装/已禁用时没有竞争者，让路只会白丢功能；
- * 3. **词典联动确实开着**（`integrationMode !== "off"`）——否则 VC 的词典里根本没有标题条目，
- *    让路等于「让给一个也给不出标题候选的框」，用户什么都看不到。
+ * 让路 = VC **确实已启用**且**词典联动开着**（标题已写进 VC 词典，由 VC 的框呈现）。
  *
- * 第 3 条是 1.0.31 补上的（用户实测撞上）：让路默认开 + 词典联动默认关，两个默认叠在一起，
- * 装了 VC 的用户一开箱标题建议就整个消失。这种死角不能靠设置面板的警告去兜——用户不打开
- * 设置就看不到——只能从判定条件上消灭。
+ * 1.0.29–1.2.3 另有一个「让路 / 本插件优先」设置，与联动组合出「让路但没联动」（让给一个拿不出标题的框，
+ * 1.0.31 起靠判定条件兜住）和「优先却开着联动」（两边的框都出标题，2026-10-18 用户实测混在一起）两种自相
+ * 矛盾的状态。1.2.4 起合并成一个「建议显示在」选择：选 VC 就开联动，选本插件就关联动——让路与否完全由
+ * 联动状态决定，矛盾状态不复存在。
  */
 export function shouldYieldSuggestToVc(
-	mode: "yield" | "own",
 	status: VcInstallStatus,
 	integrationMode: "off" | "manual" | "auto",
 ): boolean {
-	return mode === "yield" && status === "enabled" && integrationMode !== "off";
+	return status === "enabled" && integrationMode !== "off";
 }
 
 /**
@@ -140,6 +138,22 @@ export function mergeDictionaryPath(existing: string | undefined, newPath: strin
 		return newPath;
 	}
 	return base.endsWith("\n") ? `${base}${newPath}` : `${base}\n${newPath}`;
+}
+
+/**
+ * 从 VC 的换行分隔路径字段里删掉本插件的词典路径（testplan Q35/Q36）；其余行**原样保留**
+ * （不重排、不改写空白）。路径本就不在时原样返回。
+ */
+export function removeDictionaryPath(existing: string | undefined, path: string): string {
+	const base = existing ?? "";
+	const lines = base.split("\n");
+	const kept = lines.filter((l) => l.trim() !== path);
+	return kept.length === lines.length ? base : kept.join("\n");
+}
+
+/** 换行分隔路径字段里是否含有该路径。 */
+export function hasDictionaryPath(existing: string | undefined, path: string): boolean {
+	return (existing ?? "").split("\n").some((l) => l.trim() === path);
 }
 
 /** 词典文件固定落在插件目录下（与 templates/*.json 同构），不进用户可见的文件树。 */
@@ -242,12 +256,15 @@ export function disambiguateVcDisplayed(entries: HeadingIndexEntry[]): string[] 
  *
  * **先截断、再消歧**：反过来会让被截掉的孪生条目给幸存者留下一个毫无意义的 `(文件名)` 后缀。
  */
-export function buildVcDictionaryJson(entries: HeadingIndexEntry[]): VcDictionaryOutput {
+export function buildVcDictionaryJson(
+	entries: HeadingIndexEntry[],
+	linktextOf: (entry: HeadingIndexEntry) => string = (e) => e.basename,
+): VcDictionaryOutput {
 	const total = entries.length;
 	const taken = entries.slice(0, MAX_VC_DICTIONARY_ENTRIES);
 	const displayedList = disambiguateVcDisplayed(taken);
 	const items = taken.map((e, i) => ({
-		value: `[[${e.basename}#${e.anchor}|${e.displayText}]]`,
+		value: `[[${linktextOf(e)}#${e.anchor}|${e.displayText}]]`, // 重名文件写路径（Q47）
 		displayed: displayedList[i],
 		description: e.path,
 	}));
@@ -317,20 +334,20 @@ export function readVcDescriptionOnSuggestion(app: App): string | null {
  * Plugin 基类继承的公开方法，语义上等价于「帮 VC 自己按一次保存」，不会跟 VC 尚未落盘的其它
  * 内存态修改产生竞态。`.settings` 公开字段已对照 VC 源码核实（`VariousComponents extends
  * Plugin`，标准 `this.settings`，见 doc/research/vc-source-verification.md）。
+ * 保存走 {@link persistVcSettings}——只 `saveData` 时 VC 不会刷新它缓存的词典路径。
  */
 async function tryWriteViaLiveInstance(
 	app: App,
 	dictionaryPath: string,
 ): Promise<"ok" | "unavailable" | "invalid-shape"> {
 	const registry = getPluginsRegistry(app);
-	const vc = registry?.plugins?.[VC_PLUGIN_ID] as
-		| { settings?: unknown; saveData?: (data: unknown) => Promise<void> }
-		| undefined;
-	if (!vc || typeof vc.saveData !== "function") {
-		return "unavailable";
-	}
-	if (!isValidVcSettingsShape(vc.settings)) {
+	const raw = registry?.plugins?.[VC_PLUGIN_ID] as { settings?: unknown } | undefined;
+	if (raw && !isValidVcSettingsShape(raw.settings)) {
 		return "invalid-shape";
+	}
+	const vc = liveVc(app);
+	if (!vc?.saveData) {
+		return "unavailable";
 	}
 	const settings = vc.settings;
 	settings.customDictionaryPaths = mergeDictionaryPath(
@@ -341,7 +358,7 @@ async function tryWriteViaLiveInstance(
 	applyTriggerThreshold(settings);
 	applyDisplayedTextSuffix(settings);
 	applyMaxSuggestions(settings);
-	await vc.saveData(settings);
+	await persistVcSettings(vc);
 	return "ok";
 }
 
@@ -382,14 +399,19 @@ async function tryWriteViaAdapterFile(
 }
 
 /**
- * 把自定义词典的触发阈值放宽到 1 字符（用户实测：只打一个字应能出标题建议）。
+ * 自动配置写给 VC 的自定义词典触发阈值（testplan Q37）。
  *
- * VC 默认 0 = 跟随全局/分词策略阈值（default 策略为 3，1–2 字符不触发）；置 1 后
- * VC 取 `min(全局阈值, 1)` = 1。仅当现值不是 1 才写（用户显式设为 1 则不动）。
+ * 1.0.27 起是 1（用户实测「只打一个『交』没有候选」）；issue #10 之后改为 2：VC 的匹配本插件管不到，
+ * 1 个字就弹的词典在联动模式下正是 issue #10 那种噪音，而本插件自己的建议框单字从不触发。
+ * VC 默认 0 = 跟随全局 / 分词策略阈值（default 策略为 3）；VC 取 `min(全局阈值, 本值)`。
  */
+export const VC_DICTIONARY_MIN_TRIGGER_CHARS = 2;
+
+/** 只在现值低于 {@link VC_DICTIONARY_MIN_TRIGGER_CHARS}（含 0 与旧版写入的 1）时写；用户设得更高则不动。 */
 function applyTriggerThreshold(settings: VcSettingsShape): void {
-	if (settings.customDictionaryMinNumberOfCharactersForTrigger !== 1) {
-		settings.customDictionaryMinNumberOfCharactersForTrigger = 1;
+	const current = settings.customDictionaryMinNumberOfCharactersForTrigger;
+	if (typeof current !== "number" || current < VC_DICTIONARY_MIN_TRIGGER_CHARS) {
+		settings.customDictionaryMinNumberOfCharactersForTrigger = VC_DICTIONARY_MIN_TRIGGER_CHARS;
 	}
 }
 
@@ -470,6 +492,312 @@ export async function enableAutoIntegration(
 		return { outcome: "disabled-and-no-file" };
 	}
 	return { outcome: "invalid-shape" };
+}
+
+/** VC 活体实例里本插件用得到的部分。 */
+interface LiveVc {
+	settings: VcSettingsShape;
+	saveData: ((data: unknown) => Promise<void>) | null;
+	/** VC 自己的 `saveSettings(needUpdateTokens)`（`src/main.ts`），没有时为 null。 */
+	saveSettings: ((needUpdateTokens: { customDictionary?: boolean }) => Promise<void>) | null;
+}
+
+/**
+ * 把 `item` 挪到 `anchor` 之前（原地修改；`item` 本就在前面、或两者有一个不在列表里时不动）。返回是否挪动了。
+ *
+ * 用途（testplan Q41）：Obsidian 的 `editorSuggest.suggests` 按注册顺序取**第一个**触发的建议框，
+ * 「本插件优先」能不能兑现取决于两个插件谁先加载（重载过本插件它就排到 VC 后面）。只挪到 VC 前面、
+ * 不挪到最前——别的插件（`/` 命令、日期等）的建议框原本排在哪里就还在哪里。
+ */
+export function moveBefore<T>(list: T[], item: T, anchor: T): boolean {
+	const from = list.indexOf(item);
+	const to = list.indexOf(anchor);
+	if (from < 0 || to < 0 || from < to) {
+		return false;
+	}
+	list.splice(from, 1);
+	list.splice(to, 0, item);
+	return true;
+}
+
+/** 启用中的 VC 注册的建议框实例（`registerEditorSuggest(this.suggester)`），取不到返回 null。 */
+export function vcSuggestInstance(app: App): unknown {
+	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as
+		| { suggester?: unknown }
+		| undefined;
+	return vc?.suggester ?? null;
+}
+
+/** VC 自定义词典提供者里本插件用得到的部分（`CustomDictionaryWordProvider`，非公开结构）。 */
+interface VcDictionaryProvider {
+	words: Array<{ createdPath?: string }>;
+	clearWords(): void;
+	addWord(word: unknown, synonymOption: { emoji: boolean; accentsDiacritics: boolean }): void;
+}
+
+/** Obsidian 传给 `EditorSuggest.getSuggestions` 的上下文里本插件用得到的部分。 */
+export interface VcSuggestContext {
+	editor?: { getLine(line: number): string };
+	file?: { path: string } | null;
+	start?: { line: number; ch: number };
+	end?: { line: number; ch: number };
+}
+
+/** VC 候选词里本插件用得到的部分（`CustomDictionaryWord`）。 */
+export interface VcWordLike {
+	value?: string;
+	description?: string;
+	insertedText?: string;
+	createdPath?: string;
+}
+
+/** VC 建议框实例里本插件要套过滤的部分（`AutoCompleteSuggest`，非公开结构）。 */
+interface VcSuggesterLike {
+	getSuggestions?: (context: VcSuggestContext) => unknown;
+	__autoHeadingsContextFilter?: () => void;
+}
+
+/**
+ * 从本插件词典词条的插入文本 `[[链接文本#锚点|标题]]` 里取出锚点（取不出返回 null）。
+ * 锚点经 `stripIllegal` 处理过，不含 `#` `|` `[` `]`，按第一个 `#` 与最后一个 `|` 切即可。
+ */
+export function anchorOfDictionaryLink(insertedText: string | undefined): string | null {
+	if (!insertedText?.startsWith("[[") || !insertedText.endsWith("]]")) {
+		return null;
+	}
+	const inner = insertedText.slice(2, -2);
+	const hash = inner.indexOf("#");
+	const pipe = inner.lastIndexOf("|");
+	return hash >= 0 && pipe > hash ? inner.slice(hash + 1, pipe) : null;
+}
+
+/**
+ * 给 VC 的建议框套一层过滤：对候选里**来自本插件词典**的每个词问一次 `shouldDrop`，为真就去掉；VC 自己的
+ * 其他候选原样保留（testplan Q46 / Q48）。
+ *
+ * 为什么需要：标题写进 VC 词典后由 VC 匹配、VC 弹框，VC 不知道本插件的规则，也只认它内存里那份词典——
+ * 用户实测两件事：在 `# haha` 标题行里打字，VC 把正在写的标题本身列成候选，选中后链接插进标题、越套越长；
+ * 改了标题后接着在正文打字，VC 框里还挂着已经不存在的旧标题。是否去掉由调用方（main.ts `shouldDropVcWord`）
+ * 对照实时索引判断：`[[` / `#` / `[` 上下文、正在写的那一条、已不在索引里（过期）。
+ *
+ * 套的是实例上的 `getSuggestions`（Obsidian 每次取候选都调它，VC 返回 Promise）；已套过不重复。VC 重开会
+ * 换一个新实例，调用方在每次键入时调本函数自检补上；返回的还原函数在本插件卸载时调用。
+ *
+ * @returns 本次新套上时返回还原函数；已套过 / VC 没启用 / 结构认不出返回 null。
+ */
+export function installVcContextFilter(
+	app: App,
+	dictionaryPath: string,
+	shouldDrop: (word: VcWordLike, ctx: VcSuggestContext) => boolean,
+): (() => void) | null {
+	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as
+		| { suggester?: VcSuggesterLike }
+		| undefined;
+	const sg = vc?.suggester;
+	if (!sg || typeof sg.getSuggestions !== "function" || sg.__autoHeadingsContextFilter) {
+		return null;
+	}
+	const original = sg.getSuggestions;
+	const filter = (words: unknown, ctx: VcSuggestContext): unknown =>
+		Array.isArray(words)
+			? words.filter(
+					(w: VcWordLike | null) =>
+						w?.createdPath !== dictionaryPath || !shouldDrop(w, ctx),
+				)
+			: words;
+	sg.getSuggestions = function (this: unknown, ctx: VcSuggestContext): unknown {
+		const result: unknown = original.call(this, ctx);
+		return result instanceof Promise
+			? result.then((words) => filter(words, ctx))
+			: filter(result, ctx);
+	};
+	const restore = (): void => {
+		sg.getSuggestions = original;
+		delete sg.__autoHeadingsContextFilter;
+	};
+	sg.__autoHeadingsContextFilter = restore;
+	return restore;
+}
+
+/** 运行时拿到的 VC 实例里与词典内存有关的部分（未校验）。 */
+interface RawVcWithSuggester {
+	settings?: unknown;
+	suggester?: {
+		customDictionaryWordProvider?: Partial<VcDictionaryProvider>;
+		refreshCustomDictionaryTokens?: () => Promise<void>;
+	};
+}
+
+/** 本插件词典 JSON 的形状（见 {@link buildVcDictionaryJson}）。 */
+interface HeadingDictionaryJson {
+	caretSymbol?: string;
+	ignoreSpaceAfterCompletion?: boolean;
+	words: Array<{ value: string; displayed?: string; description?: string; aliases?: string[] }>;
+}
+
+/**
+ * 把 VC 内存里来自本插件词典的词换成最新内容（testplan Q45），其他词典的词原样保留。
+ *
+ * 为什么需要（2026-10-18 用户实测：新写的标题在 VC 框里打不出来）：VC 只在启动、「Reload custom
+ * dictionaries」、保存设置时读词典文件；本插件之后改写词典文件，VC 并不知道——1.0.27 起只有开启联动那一刻
+ * 和重启后的标题能进 VC。整体重读又会把用户的其他词典（常见的是联网的英文词表）全部重新加载、重新下载。
+ *
+ * 做法照 VC 自己 `refreshCustomWords` 的结构：词典提供者的 `words` 是原始词条，`clearWords` + 逐个
+ * `addWord(词, 同义词选项)` 重建 `wordByValue` / `wordsByFirstLetter` 两个索引（VC 每次查询现取，替换即生效）。
+ * 新词条按 VC `jsonToWords` 的规则构造（`value` 用 displayed、`insertedText` 用 value，`createdPath` 为
+ * 词典路径），并套用 VC 的 `customDictionaryWordRegexPattern` 过滤。这些都是 VC 的非公开结构：**所有校验在
+ * 清空之前做完**，形状认不出就返回 `"unavailable"`、什么都不动；万一重建中途抛错，退回 VC 自己的整体重读。
+ */
+export async function replaceVcDictionaryWords(
+	app: App,
+	dictionaryPath: string,
+	json: string,
+): Promise<"ok" | "not-registered" | "unavailable"> {
+	const raw = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as RawVcWithSuggester | undefined;
+	if (detectVcStatus(app) !== "enabled" || !raw || !isValidVcSettingsShape(raw.settings)) {
+		return "unavailable";
+	}
+	const settings = raw.settings as VcSettingsShape & Record<string, unknown>;
+	if (
+		!settings.enableCustomDictionaryComplement ||
+		!hasDictionaryPath(settings.customDictionaryPaths, dictionaryPath)
+	) {
+		return "not-registered";
+	}
+	const provider = raw.suggester?.customDictionaryWordProvider;
+	if (
+		!provider ||
+		!Array.isArray(provider.words) ||
+		typeof provider.clearWords !== "function" ||
+		typeof provider.addWord !== "function"
+	) {
+		return "unavailable";
+	}
+	let parsed: HeadingDictionaryJson;
+	try {
+		parsed = JSON.parse(json) as HeadingDictionaryJson;
+	} catch {
+		return "unavailable";
+	}
+	if (!Array.isArray(parsed.words)) {
+		return "unavailable";
+	}
+	const caret =
+		parsed.caretSymbol ??
+		(typeof settings.caretLocationSymbolAfterComplement === "string" &&
+		settings.caretLocationSymbolAfterComplement
+			? settings.caretLocationSymbolAfterComplement
+			: undefined);
+	let pattern: RegExp | null = null;
+	if (
+		typeof settings.customDictionaryWordRegexPattern === "string" &&
+		settings.customDictionaryWordRegexPattern
+	) {
+		try {
+			pattern = new RegExp(settings.customDictionaryWordRegexPattern);
+		} catch {
+			pattern = null; // VC 那边同样会因非法正则失败，这里不过滤
+		}
+	}
+	const fresh = parsed.words
+		.map((x) => ({
+			value: x.displayed || x.value,
+			description: x.description,
+			aliases: x.aliases,
+			type: "customDictionary",
+			createdPath: dictionaryPath,
+			insertedText: x.displayed ? x.value : undefined,
+			caretSymbol: caret,
+			ignoreSpaceAfterCompletion: parsed.ignoreSpaceAfterCompletion,
+		}))
+		.filter((w) => !pattern || pattern.test(w.value));
+	const kept = provider.words.filter((w) => w?.createdPath !== dictionaryPath);
+	const synonym = {
+		emoji: settings.matchingWithoutEmoji === true,
+		accentsDiacritics: settings.treatAccentDiacriticsAsAlphabeticCharacters === true,
+	};
+	try {
+		provider.clearWords();
+		for (const w of [...kept, ...fresh]) {
+			provider.addWord(w, synonym);
+		}
+	} catch {
+		await raw.suggester?.refreshCustomDictionaryTokens?.(); // 重建失败：交还 VC 整体重读
+		return "unavailable";
+	}
+	return "ok";
+}
+
+/** 运行时拿到的 VC 实例（未校验）。 */
+interface RawVc {
+	settings?: unknown;
+	saveData?: (data: unknown) => Promise<void>;
+	saveSettings?: (needUpdateTokens: { customDictionary?: boolean }) => Promise<void>;
+}
+
+/** 取 VC 活体实例的 settings 与保存方法（settings 形状不符返回 null）。 */
+function liveVc(app: App): LiveVc | null {
+	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as RawVc | undefined;
+	if (!vc || !isValidVcSettingsShape(vc.settings)) {
+		return null;
+	}
+	return {
+		settings: vc.settings,
+		saveData: typeof vc.saveData === "function" ? vc.saveData.bind(vc) : null,
+		saveSettings: typeof vc.saveSettings === "function" ? vc.saveSettings.bind(vc) : null,
+	};
+}
+
+/**
+ * 保存改过的 VC 设置并让它立刻生效（2026-10-18 用户实测：移除词典路径后 VC 框里仍有标题）。
+ *
+ * VC 的词典提供者**缓存了一份路径列表**，只在它自己的 `updateSettings` 里刷新（`AutoCompleteSuggest.ts`
+ * `customDictionaryWordProvider.setSettings`）；只调 `saveData` 再执行「Reload custom dictionaries」，
+ * 重读的还是旧路径——移除的词典照旧加载，新加的词典要等重启才出现。VC 自己的设置页保存走
+ * `saveSettings({ customDictionary: true })`：存盘 + `updateSettings` + 重读词典一次做完，这里照用。
+ * 该方法不在官方 API 里，缺失时退回 `saveData`（调用方仍会执行 reload 命令兜底）。
+ */
+async function persistVcSettings(vc: LiveVc): Promise<void> {
+	if (vc.saveSettings) {
+		await vc.saveSettings({ customDictionary: true });
+	} else if (vc.saveData) {
+		await vc.saveData(vc.settings);
+	}
+}
+
+/**
+ * 启用中的 VC 是否还挂着本插件的词典（testplan Q36）。只看活体实例：VC 没启用时它不加载任何词典，
+ * 挂没挂着都不影响用户，不值得为此读盘。
+ */
+export function isDictionaryRegisteredInVc(app: App, dictionaryPath: string): boolean {
+	if (detectVcStatus(app) !== "enabled") {
+		return false;
+	}
+	return hasDictionaryPath(liveVc(app)?.settings.customDictionaryPaths, dictionaryPath);
+}
+
+/**
+ * 从启用中的 VC 里移除本插件的词典路径（testplan Q35/Q36）：只删那一行，VC 的其余设置（含自动配置
+ * 当初写的阈值 / 显示后缀 / 条数）**不回滚**——那些值之后可能被用户自己改过，回滚会误伤。
+ * 成功后由调用方重载 VC 词典。
+ */
+export async function removeDictionaryFromVc(
+	app: App,
+	dictionaryPath: string,
+): Promise<"ok" | "not-registered" | "unavailable"> {
+	const vc = liveVc(app);
+	if (!vc?.saveData) {
+		return "unavailable";
+	}
+	if (!hasDictionaryPath(vc.settings.customDictionaryPaths, dictionaryPath)) {
+		return "not-registered";
+	}
+	vc.settings.customDictionaryPaths = removeDictionaryPath(
+		vc.settings.customDictionaryPaths,
+		dictionaryPath,
+	);
+	await persistVcSettings(vc);
+	return "ok";
 }
 
 /**

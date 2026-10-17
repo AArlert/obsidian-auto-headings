@@ -14,12 +14,13 @@
 
 import {
 	EditorSuggest,
+	MarkdownView,
+	TFile,
 	setIcon,
 	type Editor,
 	type EditorPosition,
 	type EditorSuggestContext,
 	type EditorSuggestTriggerInfo,
-	type TFile,
 } from "obsidian";
 import type AutoHeadingsPlugin from "./main";
 import type { HeadingIndexEntry } from "./headingindex";
@@ -90,22 +91,48 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 	}
 
 	/**
-	 * VC 已启用且用户选择让路时返回 true——本插件放弃本次触发。
+	 * 标题建议显示在 VC 的框里（VC 已启用且词典联动开着）时返回 true——本插件放弃本次触发。
 	 *
 	 * 为什么必须二选一：Obsidian 的 `EditorSuggest` 同一时刻**只显示一个**弹框，先返回非
 	 * null 的那个赢。VC 与本插件都以普通 `EditorSuggest` 注册，本插件一命中，VC 的文件链接
-	 * 与词补全建议就整个看不见（用户实测截图确认）。
-	 *
-	 * 判定见 {@link shouldYieldSuggestToVc}：**词典联动关着时不让路**——让给一个拿不出标题
-	 * 候选的框，用户就什么都看不到了（1.0.31 用户实测撞上的死角）。
+	 * 与词补全建议就整个看不见（用户实测截图确认）。判定见 {@link shouldYieldSuggestToVc}。
 	 */
 	private shouldYieldToVc(): boolean {
 		// 先看两个纯字段（onTrigger 每次按键都跑）：任一不满足就免去 detectVcStatus 的探测。
-		const { headingSuggestWhenVcActive, vcIntegrationMode } = this.plugin.settings;
-		if (headingSuggestWhenVcActive !== "yield" || vcIntegrationMode === "off") {
-			return false;
+		const { vcIntegrationMode } = this.plugin.settings;
+		if (vcIntegrationMode === "off") {
+			return false; // 先看纯字段：onTrigger 每次按键都跑，免去 detectVcStatus 的探测
 		}
-		return shouldYieldSuggestToVc("yield", detectVcStatus(this.plugin.app), vcIntegrationMode);
+		return shouldYieldSuggestToVc(detectVcStatus(this.plugin.app), vcIntegrationMode);
+	}
+
+	/**
+	 * 输入法上屏后让 Obsidian 按注册顺序重新触发一轮建议框（testplan Q44）。
+	 *
+	 * 为什么需要（test-vault 用 CDP 模拟输入法复现，2026-10-18）：拼字期间编辑器里已经有拼音字母，
+	 * Obsidian 照常触发，本插件因 `imeComposing` 返回 null，VC 便占了建议框；上屏若不改变文档内容
+	 * （拼的就是英文，如 `axi`），就不会再有编辑事件，本插件再没有机会，VC 的框一直挂着。
+	 *
+	 * 走 Obsidian 自己的 `editorSuggest.trigger(editor, file, true)`：顺序、互斥、关闭旧框都交给它，
+	 * 本插件匹配上就换成本插件的框，匹配不上 VC 照常。该入口不在官方 API 里，认不出就静默不做。
+	 */
+	retriggerAfterComposition(): void {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const registry = (
+			this.app.workspace as {
+				editorSuggest?: {
+					trigger?: (editor: Editor, file: TFile | null, open: boolean) => void;
+				};
+			}
+		).editorSuggest;
+		if (!view?.editor || typeof registry?.trigger !== "function") {
+			return;
+		}
+		try {
+			registry.trigger(view.editor, view.file, true);
+		} catch {
+			/* 内部结构变化：静默，下次键入照常触发 */
+		}
 	}
 
 	onTrigger(
@@ -116,6 +143,8 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		if (!this.plugin.settings.headingLinkSuggestEnabled) {
 			return null;
 		}
+		// 联动开着时给 VC 的框套上下文过滤（Q46）：本方法每次键入都先于 VC 跑，正好在这里自检补上。
+		this.plugin.ensureVcContextFilter();
 		if (!file) {
 			return null;
 		}
@@ -136,13 +165,20 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 			return null;
 		}
 		const { token, start } = extracted;
-		if (isBlockedContext(line, before, start)) {
+		if (isBlockedContext(before, start)) {
 			return null;
 		}
 
-		// 整段按前缀、行内后缀只认完整标题（Q22/Q28）；无任何候选命中就让路——礼貌规则，
-		// onTrigger 每次按键都跑，尽早返回 null。
-		const hit = resolveTriggerQuery(token, start, this.plugin.headingIndex);
+		// 命中规则见 resolveTriggerQuery（Q27/Q28/Q30/Q31）；无任何候选命中就让路——礼貌规则，
+		// onTrigger 每次按键都跑，尽早返回 null。正在写的标题（当前文件当前行）不算命中（Q7）。
+		const index = this.plugin.headingIndex;
+		const links = this.plugin.headingLinkCounts;
+		const self = { path: file.path, lineIndex: cursor.line };
+		const hit = resolveTriggerQuery(token, start, {
+			hasAnyPrefixMatch: (q) => index.hasAnyPrefixMatch(q, self),
+			hasExactMatch: (q) => index.hasExactMatch(q, self),
+			isLinked: (q) => links.count(q) > 0,
+		});
 		if (!hit) {
 			return null;
 		}
@@ -162,8 +198,13 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 			return [];
 		}
 		// 稍多取一点再排序截断，保证排序规则（精确优先等）在截断前生效。
-		const matches = this.plugin.headingIndex.queryPrefix(query, this.limit * 4);
-		return sortEntries(matches, query).slice(0, this.limit);
+		// 排除正在写的标题本身（当前文件当前行，Q7）；同一篇笔记的其他标题照常。
+		const self = { path: context.file.path, lineIndex: context.start.line };
+		const matches = this.plugin.headingIndex.queryPrefix(query, this.limit * 4, self);
+		return sortEntries(matches, query, {
+			linkCount: (k) => this.plugin.headingLinkCounts.count(k),
+			activePath: context.file.path,
+		}).slice(0, this.limit);
 	}
 
 	renderSuggestion(entry: HeadingIndexEntry, el: HTMLElement): void {
@@ -188,8 +229,14 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		if (!ctx) {
 			return;
 		}
-		// alias 恒为完整标题名（displayText），见 headingtrigger.ts buildHeadingLink。
-		const link = buildHeadingLink(entry, ctx.file.path);
+		// alias 恒为完整标题名（displayText），见 headingtrigger.ts buildHeadingLink。链接文本走 Obsidian 的
+		// fileToLinktext：重名文件写路径，否则会链到另一篇同名笔记（Q47）。
+		const target = this.app.vault.getAbstractFileByPath(entry.path);
+		const linktext =
+			target instanceof TFile
+				? this.app.metadataCache.fileToLinktext(target, ctx.file.path, true)
+				: entry.basename;
+		const link = buildHeadingLink(entry, ctx.file.path, linktext);
 		ctx.editor.replaceRange(link, ctx.start, ctx.end);
 		ctx.editor.setCursor({ line: ctx.start.line, ch: ctx.start.ch + link.length });
 	}

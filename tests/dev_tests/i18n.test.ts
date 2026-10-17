@@ -92,9 +92,8 @@ describe("getMessages 双语", () => {
 			"autoNumberDesc",
 			"updateBacklinksDesc",
 			"headingLinkSuggestDesc",
-			"vcCoexistDesc",
-			"vcCoexistFallbackHint",
-			"vcModeDesc",
+			"vcTargetDesc",
+			"vcStaleDictDesc",
 			// 编号维护 TAB（1.2.2，testplan L43）
 			"renumberNowDesc",
 			"clearFileDesc",

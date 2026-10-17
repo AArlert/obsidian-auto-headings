@@ -72,7 +72,9 @@ class VirtualNumberWidget extends WidgetType {
 
 /**
  * 把一篇文档的虚拟编号转成装饰集（纯函数）。`labels` 须按行号升序（{@link computeVirtualNumbers} 的输出即是）。
- * - 无残留：在标题正文起点放 widget，`side: 1`（贴着正文、在 Obsidian 隐藏的 `## ` 标记之后）；
+ * - 无残留：在标题正文起点放 widget，`side: -1`（贴着前面的 `## ` 标记）。光标恰好停在正文起点时（刚打完
+ *   `## `、或用快捷键把一行变成标题）显示在编号**之后**，与写入模式下光标落在「1 」后面一致；`side: 1` 时
+ *   光标会落在编号前面（用户实测，testplan V46）。打字的位置不受影响——装饰每次编辑后按正文起点重算；
  * - 有残留且该标题要编号：用 widget **替换**残留区间，只显示一层编号，并标成残留样式；
  * - 有残留但该标题不编号（白名单等）：不动，让旧前缀照原样可见——宁可露出来，也不悄悄藏掉文件里的内容。
  */
@@ -104,7 +106,10 @@ export function buildVirtualDecorations(
 			builder.add(
 				pos,
 				pos,
-				Decoration.widget({ widget: new VirtualNumberWidget(l.label, false, ""), side: 1 }),
+				Decoration.widget({
+					widget: new VirtualNumberWidget(l.label, false, ""),
+					side: -1,
+				}),
 			);
 		}
 	}

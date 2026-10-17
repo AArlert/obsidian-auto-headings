@@ -8,12 +8,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { App } from "obsidian";
 import {
+	anchorOfDictionaryLink,
 	buildVcDictionaryJson,
 	detectVcStatus,
 	disambiguateVcDisplayed,
 	enableAutoIntegration,
+	installVcContextFilter,
+	hasDictionaryPath,
+	isDictionaryRegisteredInVc,
 	isValidVcSettingsShape,
 	mergeDictionaryPath,
+	moveBefore,
+	removeDictionaryFromVc,
+	removeDictionaryPath,
+	replaceVcDictionaryWords,
 	shouldYieldSuggestToVc,
 	tryReloadVcDictionaries,
 	vcDictionaryPath,
@@ -39,6 +47,7 @@ function makeApp(
 		enabled?: boolean;
 		liveSettings?: unknown;
 		liveSaveData?: (d: unknown) => Promise<void>;
+		liveSaveSettings?: (o: { customDictionary?: boolean }) => Promise<void>;
 		dataJson?: string;
 		commands?: { executeCommandById?: (id: string) => boolean };
 	} = {},
@@ -66,6 +75,7 @@ function makeApp(
 						"various-complements": {
 							settings: opts.liveSettings ?? {},
 							saveData: opts.liveSaveData,
+							saveSettings: opts.liveSaveSettings,
 						},
 					}
 				: {},
@@ -140,6 +150,22 @@ describe("isValidVcSettingsShape：最小 schema 校验", () => {
 });
 
 describe("buildVcDictionaryJson：词典内容（Q11/Q12 逻辑面）", () => {
+	it("链接文本由 linktextOf 决定（重名文件写路径，Q47）；缺省回退文件名", () => {
+		const e = {
+			path: "甲/02-卡.md",
+			basename: "02-卡",
+			level: 2,
+			lineIndex: 0,
+			displayText: "haha",
+			matchKey: "haha",
+			anchor: "haha",
+		};
+		const withPath = JSON.parse(buildVcDictionaryJson([e], () => "甲/02-卡").json);
+		expect(withPath.words[0].value).toBe("[[甲/02-卡#haha|haha]]");
+		const fallback = JSON.parse(buildVcDictionaryJson([e]).json);
+		expect(fallback.words[0].value).toBe("[[02-卡#haha|haha]]");
+	});
+
 	it("顶层 words 数组（VC 当前版本要求的 JsonDictionary 形状），每条为 value（完整链接）+ displayed（干净原文）", () => {
 		const wj = "\u2060";
 		const out = buildVcDictionaryJson([
@@ -269,7 +295,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		expect(result).toEqual({ outcome: "ok", via: "live-instance" });
 		expect(liveSettings.customDictionaryPaths).toBe(DICT);
 		expect(liveSettings.enableCustomDictionaryComplement).toBe(true);
-		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1); // 触发阈值放宽到 1 字符
+		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(2); // Q37：触发阈值至少 2 字符
 		expect(liveSettings.displayedTextSuffix).toBe(""); // 1.0.32：清空「 => ...」显示后缀
 		expect(liveSettings.maxNumberOfSuggestions).toBe(10); // 1.1.0：默认 5 会把同名标题挤出列表
 		expect(liveSettings.other).toBe(1); // 其余字段原样保留
@@ -277,8 +303,16 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		expect(app.vault.adapter.write).not.toHaveBeenCalled(); // 未走文件路径
 	});
 
-	it("触发阈值已是 1：保持不动（用户显式设置优先）", async () => {
+	it("触发阈值（Q37）：低于 2 的（含旧版写入的 1）抬到 2，用户设得更高的不动", async () => {
 		const saveData = vi.fn(async () => {});
+		const high: Record<string, unknown> = {
+			customDictionaryMinNumberOfCharactersForTrigger: 4,
+		};
+		await enableAutoIntegration(
+			makeApp({ installed: true, enabled: true, liveSettings: high, liveSaveData: saveData }),
+			DICT,
+		);
+		expect(high.customDictionaryMinNumberOfCharactersForTrigger).toBe(4);
 		const liveSettings: Record<string, unknown> = {
 			customDictionaryMinNumberOfCharactersForTrigger: 1,
 		};
@@ -289,7 +323,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 			liveSaveData: saveData,
 		});
 		await enableAutoIntegration(app, DICT);
-		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1);
+		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(2);
 	});
 
 	it("maxNumberOfSuggestions 只抬不降：用户设得更大时尊重原值", async () => {
@@ -370,7 +404,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		>;
 		expect(written.customDictionaryPaths).toBe(`p0\n${DICT}`);
 		expect(written.enableCustomDictionaryComplement).toBe(true);
-		expect(written.customDictionaryMinNumberOfCharactersForTrigger).toBe(1);
+		expect(written.customDictionaryMinNumberOfCharactersForTrigger).toBe(2);
 		expect(written.other).toEqual({ keep: 1 }); // 关键约束：绝不重建对象吞掉其余配置
 	});
 
@@ -459,26 +493,19 @@ describe("tryReloadVcDictionaries：reload 命令调用与兜底（Q14 逻辑面
 	});
 });
 
-describe("shouldYieldSuggestToVc：建议框共存策略（Q23；1.0.31 补第三个条件）", () => {
-	it("让路 + VC 已启用 + 词典联动开着：放弃触发，把唯一的弹框位置交给 VC", () => {
-		expect(shouldYieldSuggestToVc("yield", "enabled", "manual")).toBe(true);
-		expect(shouldYieldSuggestToVc("yield", "enabled", "auto")).toBe(true);
+describe("shouldYieldSuggestToVc：让路只看 VC 启用 + 词典联动开着（Q23 / Q43）", () => {
+	it("VC 已启用 + 联动开着（标题在 VC 词典里）：让路", () => {
+		expect(shouldYieldSuggestToVc("enabled", "manual")).toBe(true);
+		expect(shouldYieldSuggestToVc("enabled", "auto")).toBe(true);
 	});
 
-	it("让路 + VC 已启用，但词典联动关着：**不让路**——VC 词典里没有标题条目，让了就什么都看不到（1.0.31 死角修复，用户实测撞上）", () => {
-		expect(shouldYieldSuggestToVc("yield", "enabled", "off")).toBe(false);
+	it("联动关着：不让路，用本插件的框（VC 词典里没有标题，让了就什么都看不到）", () => {
+		expect(shouldYieldSuggestToVc("enabled", "off")).toBe(false);
 	});
 
-	it("让路模式但 VC 未安装 / 已禁用：没有竞争者，照常弹自己的框", () => {
-		expect(shouldYieldSuggestToVc("yield", "not-installed", "auto")).toBe(false);
-		expect(shouldYieldSuggestToVc("yield", "disabled", "auto")).toBe(false);
-	});
-
-	it("本插件优先模式：无论 VC 状态与联动模式都不让路（1.0.28 及以前的行为）", () => {
-		expect(shouldYieldSuggestToVc("own", "enabled", "auto")).toBe(false);
-		expect(shouldYieldSuggestToVc("own", "enabled", "off")).toBe(false);
-		expect(shouldYieldSuggestToVc("own", "disabled", "manual")).toBe(false);
-		expect(shouldYieldSuggestToVc("own", "not-installed", "off")).toBe(false);
+	it("VC 未安装 / 已禁用：没有竞争者，照常弹自己的框", () => {
+		expect(shouldYieldSuggestToVc("not-installed", "auto")).toBe(false);
+		expect(shouldYieldSuggestToVc("disabled", "auto")).toBe(false);
 	});
 });
 
@@ -536,5 +563,259 @@ describe("disambiguateVcDisplayed：同名标题消歧（Q25，1.0.32）", () =>
 	it("确定性：同一输入两次调用输出一致（保证内容未变时不重写词典文件）", () => {
 		const input = [e("axi.md", "交叉矩阵"), e("交叉矩阵.md", "交叉矩阵"), e("b.md", "引言")];
 		expect(disambiguateVcDisplayed(input)).toEqual(disambiguateVcDisplayed(input));
+	});
+});
+
+describe("词典路径的检测与移除（Q35 / Q36）", () => {
+	it("removeDictionaryPath：只删本插件那一行，其余行原样保留", () => {
+		const other = "https://example.com/words.txt";
+		expect(removeDictionaryPath(`${other}\n${DICT}`, DICT)).toBe(other);
+		expect(removeDictionaryPath(`${DICT}\n${other}\n`, DICT)).toBe(`${other}\n`);
+		expect(removeDictionaryPath(other, DICT)).toBe(other); // 本就不在：原样返回
+		expect(removeDictionaryPath(undefined, DICT)).toBe("");
+	});
+
+	it("hasDictionaryPath：按行比对（容忍行首尾空白）", () => {
+		expect(hasDictionaryPath(`a.txt\n  ${DICT} `, DICT)).toBe(true);
+		expect(hasDictionaryPath(`${DICT}.bak`, DICT)).toBe(false);
+		expect(hasDictionaryPath(undefined, DICT)).toBe(false);
+	});
+
+	it("isDictionaryRegisteredInVc：只看启用中的 VC 活体实例", () => {
+		const liveSettings = { customDictionaryPaths: `x.txt\n${DICT}` };
+		expect(
+			isDictionaryRegisteredInVc(
+				makeApp({ installed: true, enabled: true, liveSettings }),
+				DICT,
+			),
+		).toBe(true);
+		expect(isDictionaryRegisteredInVc(makeApp({ installed: true, liveSettings }), DICT)).toBe(
+			false,
+		);
+		expect(
+			isDictionaryRegisteredInVc(
+				makeApp({
+					installed: true,
+					enabled: true,
+					liveSettings: { customDictionaryPaths: "x.txt" },
+				}),
+				DICT,
+			),
+		).toBe(false);
+	});
+
+	it("removeDictionaryFromVc：删路径 + saveData，其余设置不回滚", async () => {
+		const saveData = vi.fn(async () => {});
+		const liveSettings: Record<string, unknown> = {
+			customDictionaryPaths: `x.txt\n${DICT}`,
+			customDictionaryMinNumberOfCharactersForTrigger: 2,
+			displayedTextSuffix: "",
+		};
+		const app = makeApp({
+			installed: true,
+			enabled: true,
+			liveSettings,
+			liveSaveData: saveData,
+		});
+		expect(await removeDictionaryFromVc(app, DICT)).toBe("ok");
+		expect(liveSettings.customDictionaryPaths).toBe("x.txt");
+		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(2);
+		expect(liveSettings.displayedTextSuffix).toBe("");
+		expect(saveData).toHaveBeenCalledOnce();
+		expect(await removeDictionaryFromVc(app, DICT)).toBe("not-registered");
+		expect(await removeDictionaryFromVc(makeApp({ installed: true }), DICT)).toBe(
+			"unavailable",
+		);
+	});
+});
+
+describe("VC 设置的保存方式（2026-10-18 实测：移除路径后 VC 框里仍有标题）", () => {
+	it("VC 有 saveSettings 时走它并要求重读自定义词典，不只 saveData", async () => {
+		const saveData = vi.fn(async () => {});
+		const saveSettings = vi.fn(async (_o: { customDictionary?: boolean }) => {});
+		const liveSettings: Record<string, unknown> = { customDictionaryPaths: DICT };
+		const opts = {
+			installed: true,
+			enabled: true,
+			liveSettings,
+			liveSaveData: saveData,
+			liveSaveSettings: saveSettings,
+		};
+		expect(await removeDictionaryFromVc(makeApp(opts), DICT)).toBe("ok");
+		expect(saveSettings).toHaveBeenCalledWith({ customDictionary: true });
+		expect(saveData).not.toHaveBeenCalled();
+		await enableAutoIntegration(makeApp(opts), DICT);
+		expect(saveSettings).toHaveBeenCalledTimes(2);
+		expect(liveSettings.customDictionaryPaths).toBe(DICT);
+	});
+});
+
+describe("moveBefore：本插件建议框挪到 VC 前面（Q41）", () => {
+	it("在后面时挪到紧挨 VC 之前，其余顺序不变", () => {
+		const list = ["native", "vc", "other", "ah"];
+		expect(moveBefore(list, "ah", "vc")).toBe(true);
+		expect(list).toEqual(["native", "ah", "vc", "other"]);
+	});
+
+	it("已在前面、或有一方不在列表里：不动", () => {
+		const list = ["ah", "native", "vc"];
+		expect(moveBefore(list, "ah", "vc")).toBe(false);
+		expect(moveBefore(list, "ah", "missing")).toBe(false);
+		expect(moveBefore(list, "missing", "vc")).toBe(false);
+		expect(list).toEqual(["ah", "native", "vc"]);
+	});
+});
+
+describe("replaceVcDictionaryWords：只换掉 VC 内存里本插件的词（Q45）", () => {
+	/** 模拟 VC 的 CustomDictionaryWordProvider：words 是原始词条，addWord 记录同义词选项。 */
+	const makeProvider = (words: Array<Record<string, unknown>>) => {
+		const p = {
+			words: [...words],
+			synonyms: [] as unknown[],
+			clearWords() {
+				p.words = [];
+			},
+			addWord(w: Record<string, unknown>, opt: unknown) {
+				p.words.push(w);
+				p.synonyms.push(opt);
+			},
+		};
+		return p;
+	};
+	const json = JSON.stringify({
+		words: [
+			{ value: "[[a#AXI|AXI]]", displayed: "AXI", description: "a.md" },
+			{ value: "[[b#中断|中断]]", displayed: "中断", description: "b.md" },
+		],
+	});
+	const setup = (settings: Record<string, unknown>, provider: unknown) => {
+		const app = makeApp({ installed: true, enabled: true, liveSettings: settings });
+		(app.plugins!.plugins!["various-complements"] as Record<string, unknown>).suggester = {
+			customDictionaryWordProvider: provider,
+			refreshCustomDictionaryTokens: vi.fn(async () => {}),
+		};
+		return app;
+	};
+	const base = {
+		customDictionaryPaths: `words.txt\n${DICT}`,
+		enableCustomDictionaryComplement: true,
+		matchingWithoutEmoji: true,
+		treatAccentDiacriticsAsAlphabeticCharacters: false,
+	};
+
+	it("旧的本插件词条换成新的，其他词典的词原样保留；词条按 VC jsonToWords 的规则构造", async () => {
+		const provider = makeProvider([
+			{ value: "apple", createdPath: "words.txt" },
+			{ value: "旧标题", createdPath: DICT },
+		]);
+		expect(await replaceVcDictionaryWords(setup(base, provider), DICT, json)).toBe("ok");
+		expect(provider.words.map((w) => w.value)).toEqual(["apple", "AXI", "中断"]);
+		expect(provider.words[1]).toMatchObject({
+			value: "AXI",
+			insertedText: "[[a#AXI|AXI]]",
+			description: "a.md",
+			type: "customDictionary",
+			createdPath: DICT,
+		});
+		expect(provider.synonyms[0]).toEqual({ emoji: true, accentsDiacritics: false });
+	});
+
+	it("套用 VC 的 customDictionaryWordRegexPattern 过滤", async () => {
+		const provider = makeProvider([]);
+		const app = setup({ ...base, customDictionaryWordRegexPattern: "^[A-Z]" }, provider);
+		await replaceVcDictionaryWords(app, DICT, json);
+		expect(provider.words.map((w) => w.value)).toEqual(["AXI"]);
+	});
+
+	it("路径没登记 / 自定义词典补全关着：不动", async () => {
+		const provider = makeProvider([{ value: "apple", createdPath: "words.txt" }]);
+		expect(
+			await replaceVcDictionaryWords(
+				setup({ ...base, customDictionaryPaths: "words.txt" }, provider),
+				DICT,
+				json,
+			),
+		).toBe("not-registered");
+		expect(
+			await replaceVcDictionaryWords(
+				setup({ ...base, enableCustomDictionaryComplement: false }, provider),
+				DICT,
+				json,
+			),
+		).toBe("not-registered");
+		expect(provider.words).toHaveLength(1);
+	});
+
+	it("结构认不出（缺 addWord）或 JSON 坏了：不清空 VC 的词", async () => {
+		const broken = {
+			words: [{ value: "apple", createdPath: "words.txt" }],
+			clearWords: vi.fn(),
+		};
+		expect(await replaceVcDictionaryWords(setup(base, broken), DICT, json)).toBe("unavailable");
+		expect(broken.clearWords).not.toHaveBeenCalled();
+		const provider = makeProvider([{ value: "apple", createdPath: "words.txt" }]);
+		expect(await replaceVcDictionaryWords(setup(base, provider), DICT, "{bad")).toBe(
+			"unavailable",
+		);
+		expect(provider.words).toHaveLength(1);
+	});
+});
+
+describe("installVcContextFilter：对 VC 候选里本插件的词逐个判断去留（Q46 / Q48）", () => {
+	const ours = {
+		value: "haha",
+		createdPath: DICT,
+		description: "a.md",
+		insertedText: "[[a#haha|haha]]",
+	};
+	const theirs = { value: "healthcare", createdPath: "words.txt" };
+	const setup = () => {
+		const original = vi.fn(async () => [ours, theirs]);
+		const suggester: Record<string, unknown> = { getSuggestions: original };
+		const app = makeApp({ installed: true, enabled: true, liveSettings: {} });
+		(app.plugins!.plugins!["various-complements"] as Record<string, unknown>).suggester =
+			suggester;
+		return { app, suggester, original };
+	};
+	type Get = (c: unknown) => Promise<unknown[]>;
+
+	it("只对本插件的词问 shouldDrop；VC 自己的词原样保留", async () => {
+		const { app, suggester } = setup();
+		const seen: unknown[] = [];
+		installVcContextFilter(app, DICT, (w) => {
+			seen.push(w);
+			return true;
+		});
+		expect(await (suggester.getSuggestions as Get)({})).toEqual([theirs]);
+		expect(seen).toEqual([ours]);
+	});
+
+	it("shouldDrop 为假时本插件的词保留", async () => {
+		const { app, suggester } = setup();
+		installVcContextFilter(app, DICT, () => false);
+		expect(await (suggester.getSuggestions as Get)({})).toEqual([ours, theirs]);
+	});
+
+	it("已套过不重复套；还原后恢复 VC 原方法", () => {
+		const { app, suggester, original } = setup();
+		const restore = installVcContextFilter(app, DICT, () => true);
+		expect(installVcContextFilter(app, DICT, () => true)).toBeNull();
+		restore!();
+		expect(suggester.getSuggestions).toBe(original);
+		expect(installVcContextFilter(app, DICT, () => true)).toBeTypeOf("function");
+	});
+
+	it("VC 没启用 / 没有 suggester：不动", () => {
+		expect(installVcContextFilter(makeApp({ installed: true }), DICT, () => true)).toBeNull();
+		expect(
+			installVcContextFilter(makeApp({ installed: true, enabled: true }), DICT, () => true),
+		).toBeNull();
+	});
+
+	it("anchorOfDictionaryLink：从词条插入文本取锚点", () => {
+		expect(anchorOfDictionaryLink("[[Dev/甲/02-卡#1 ⁠haha|haha]]")).toBe("1 ⁠haha");
+		expect(anchorOfDictionaryLink("[[a#b|c|d]]")).toBe("b|c");
+		expect(anchorOfDictionaryLink("plain")).toBeNull();
+		expect(anchorOfDictionaryLink(undefined)).toBeNull();
 	});
 });
