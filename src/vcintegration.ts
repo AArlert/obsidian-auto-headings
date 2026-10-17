@@ -142,6 +142,22 @@ export function mergeDictionaryPath(existing: string | undefined, newPath: strin
 	return base.endsWith("\n") ? `${base}${newPath}` : `${base}\n${newPath}`;
 }
 
+/**
+ * 从 VC 的换行分隔路径字段里删掉本插件的词典路径（testplan Q35/Q36）；其余行**原样保留**
+ * （不重排、不改写空白）。路径本就不在时原样返回。
+ */
+export function removeDictionaryPath(existing: string | undefined, path: string): string {
+	const base = existing ?? "";
+	const lines = base.split("\n");
+	const kept = lines.filter((l) => l.trim() !== path);
+	return kept.length === lines.length ? base : kept.join("\n");
+}
+
+/** 换行分隔路径字段里是否含有该路径。 */
+export function hasDictionaryPath(existing: string | undefined, path: string): boolean {
+	return (existing ?? "").split("\n").some((l) => l.trim() === path);
+}
+
 /** 词典文件固定落在插件目录下（与 templates/*.json 同构），不进用户可见的文件树。 */
 export function vcDictionaryPath(pluginDir: string): string {
 	return normalizePath(`${pluginDir}/vc-heading-dictionary.json`);
@@ -382,14 +398,19 @@ async function tryWriteViaAdapterFile(
 }
 
 /**
- * 把自定义词典的触发阈值放宽到 1 字符（用户实测：只打一个字应能出标题建议）。
+ * 自动配置写给 VC 的自定义词典触发阈值（testplan Q37）。
  *
- * VC 默认 0 = 跟随全局/分词策略阈值（default 策略为 3，1–2 字符不触发）；置 1 后
- * VC 取 `min(全局阈值, 1)` = 1。仅当现值不是 1 才写（用户显式设为 1 则不动）。
+ * 1.0.27 起是 1（用户实测「只打一个『交』没有候选」）；issue #10 之后改为 2：VC 的匹配本插件管不到，
+ * 1 个字就弹的词典在联动模式下正是 issue #10 那种噪音，而本插件自己的建议框单字从不触发。
+ * VC 默认 0 = 跟随全局 / 分词策略阈值（default 策略为 3）；VC 取 `min(全局阈值, 本值)`。
  */
+export const VC_DICTIONARY_MIN_TRIGGER_CHARS = 2;
+
+/** 只在现值低于 {@link VC_DICTIONARY_MIN_TRIGGER_CHARS}（含 0 与旧版写入的 1）时写；用户设得更高则不动。 */
 function applyTriggerThreshold(settings: VcSettingsShape): void {
-	if (settings.customDictionaryMinNumberOfCharactersForTrigger !== 1) {
-		settings.customDictionaryMinNumberOfCharactersForTrigger = 1;
+	const current = settings.customDictionaryMinNumberOfCharactersForTrigger;
+	if (typeof current !== "number" || current < VC_DICTIONARY_MIN_TRIGGER_CHARS) {
+		settings.customDictionaryMinNumberOfCharactersForTrigger = VC_DICTIONARY_MIN_TRIGGER_CHARS;
 	}
 }
 
@@ -470,6 +491,56 @@ export async function enableAutoIntegration(
 		return { outcome: "disabled-and-no-file" };
 	}
 	return { outcome: "invalid-shape" };
+}
+
+/** 取 VC 活体实例的 settings 与 saveData（settings 形状不符返回 null；saveData 缺失时为 null）。 */
+function liveVc(app: App): {
+	settings: VcSettingsShape;
+	saveData: ((data: unknown) => Promise<void>) | null;
+} | null {
+	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as
+		| { settings?: unknown; saveData?: (data: unknown) => Promise<void> }
+		| undefined;
+	if (!vc || !isValidVcSettingsShape(vc.settings)) {
+		return null;
+	}
+	const saveData = typeof vc.saveData === "function" ? vc.saveData.bind(vc) : null;
+	return { settings: vc.settings, saveData };
+}
+
+/**
+ * 启用中的 VC 是否还挂着本插件的词典（testplan Q36）。只看活体实例：VC 没启用时它不加载任何词典，
+ * 挂没挂着都不影响用户，不值得为此读盘。
+ */
+export function isDictionaryRegisteredInVc(app: App, dictionaryPath: string): boolean {
+	if (detectVcStatus(app) !== "enabled") {
+		return false;
+	}
+	return hasDictionaryPath(liveVc(app)?.settings.customDictionaryPaths, dictionaryPath);
+}
+
+/**
+ * 从启用中的 VC 里移除本插件的词典路径（testplan Q35/Q36）：只删那一行，VC 的其余设置（含自动配置
+ * 当初写的阈值 / 显示后缀 / 条数）**不回滚**——那些值之后可能被用户自己改过，回滚会误伤。
+ * 成功后由调用方重载 VC 词典。
+ */
+export async function removeDictionaryFromVc(
+	app: App,
+	dictionaryPath: string,
+): Promise<"ok" | "not-registered" | "unavailable"> {
+	const vc = liveVc(app);
+	if (!vc?.saveData) {
+		return "unavailable";
+	}
+	if (!hasDictionaryPath(vc.settings.customDictionaryPaths, dictionaryPath)) {
+		return "not-registered";
+	}
+	vc.settings.customDictionaryPaths = removeDictionaryPath(
+		vc.settings.customDictionaryPaths,
+		dictionaryPath,
+	);
+	await vc.saveData(vc.settings);
+	return "ok";
 }
 
 /**

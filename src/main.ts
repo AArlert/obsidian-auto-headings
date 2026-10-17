@@ -78,11 +78,14 @@ import {
 } from "./templates/styles";
 import { summarizeTemplateUsage, type TemplateUsage } from "./settings/templateView";
 import { HeadingIndex } from "./headingindex";
+import { HeadingLinkCounts, resolveLinkedHeadingKeys } from "./headinglinks";
 import { NoteEntry } from "./noteentry";
 import { HeadingLinkSuggest } from "./headingsuggest";
 import {
 	buildVcDictionaryJson,
 	enableAutoIntegration,
+	isDictionaryRegisteredInVc,
+	removeDictionaryFromVc,
 	tryReloadVcDictionaries,
 	VC_DICTIONARY_THROTTLE_MS,
 	vcDictionaryPath,
@@ -143,6 +146,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 刻意不加 private——HeadingLinkSuggest（另一个类）需要读它，与 imeComposing 完全同款先例。
 	 */
 	headingIndex = new HeadingIndex();
+	/** 标题被链接次数（短中文词门槛 + 候选排序的信号，见 headinglinks.ts）；与 headingIndex 同生同灭。 */
+	headingLinkCounts = new HeadingLinkCounts();
 	/** 标题索引增量更新的按文件去抖计时器（与 debounceTimers 同构，独立维护）。 */
 	private readonly headingIndexTimers = new Map<string, number>();
 	/** VC 词典文件重写的全局节流计时器（见 vcintegration.ts）。 */
@@ -412,6 +417,14 @@ export default class AutoHeadingsPlugin extends Plugin {
 		// 启动；且避免 vault.on("create") 在启动时为每个既存文件重放一遍（obsidian.d.ts 官方说明）。
 		// 监听器必须先于初始扫描注册：扫描期间发生的真实变更不能被漏掉（setFile 幂等，重叠无害）。
 		this.app.workspace.onLayoutReady(() => {
+			// 出链变化 → 重算该文件对「标题被链接次数」的贡献（metadataCache 解析完才有 links）。
+			this.registerEvent(
+				this.app.metadataCache.on("changed", (file) => {
+					if (this.settings.headingLinkSuggestEnabled) {
+						this.refreshHeadingLinkCounts(file.path);
+					}
+				}),
+			);
 			this.registerEvent(
 				this.app.vault.on("create", (f) => {
 					if (f instanceof TFile && f.extension === "md") {
@@ -429,14 +442,17 @@ export default class AutoHeadingsPlugin extends Plugin {
 			this.registerEvent(
 				this.app.vault.on("delete", (f) => {
 					this.headingIndex.removeFile(f.path);
+					this.headingLinkCounts.removeSource(f.path);
 				}),
 			);
 			this.registerEvent(
 				this.app.vault.on("rename", (f, oldPath) => {
 					if (f instanceof TFile && f.extension === "md") {
 						this.headingIndex.renameFile(oldPath, f.path, f.basename);
+						this.headingLinkCounts.renameSource(oldPath, f.path);
 					} else {
 						this.headingIndex.removeFile(oldPath);
+						this.headingLinkCounts.removeSource(oldPath);
 					}
 				}),
 			);
@@ -467,6 +483,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		this.headingIndexTimers.clear();
 		this.headingIndex.clear();
+		this.headingLinkCounts.clear();
 		if (this.vcDictionaryTimer !== null) {
 			window.clearTimeout(this.vcDictionaryTimer);
 			this.vcDictionaryTimer = null;
@@ -495,6 +512,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			void this.buildInitialHeadingIndex();
 		} else if (!enabled) {
 			this.headingIndex.clear();
+			this.headingLinkCounts.clear();
 			// 同 setVcIntegrationOff：清写盘缓存，下次开启必须重新落盘。
 			this.lastVcDictionaryJson = null;
 		}
@@ -546,8 +564,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	/**
 	 * 切回「不联动」（M13，见方案 §5.10）：停止后续词典文件维护。
-	 * **不删除**已生成的词典文件、**不撤销**已写入 VC 的配置（v1 明确不做反向清理——
-	 * 「这个值当初是不是我们改的」这类状态追踪复杂度与收益不成比例）。
+	 * **不删除**已生成的词典文件、**不撤销**已写入 VC 的其余配置（「这个值当初是不是我们改的」这类
+	 * 状态追踪复杂度与收益不成比例）。词典路径要不要从 VC 移除由设置面板先问用户（Q35），见
+	 * {@link removeVcDictionaryRegistration}——不移除的话 VC 会一直加载这份不再更新的旧词典。
 	 */
 	async setVcIntegrationOff(): Promise<void> {
 		this.settings.vcIntegrationMode = "off";
@@ -558,6 +577,29 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		// 清掉写盘缓存：用户可能在关闭期间手动删除/改动词典文件，下次开启必须重新落盘。
 		this.lastVcDictionaryJson = null;
+	}
+
+	/** 启用中的 VC 是否还挂着本插件的词典（切回「不联动」时问要不要移除、面板过期提示，Q35/Q36）。 */
+	isVcDictionaryRegistered(): boolean {
+		return isDictionaryRegisteredInVc(this.app, this.vcDictionaryFilePath());
+	}
+
+	/**
+	 * 从 VC 移除本插件的词典路径并重载 VC 词典（testplan Q35/Q36）。只删那一行，VC 其余设置不回滚
+	 * （理由见 vcintegration.ts removeDictionaryFromVc）。词典文件本身留在插件目录，不删。
+	 */
+	async removeVcDictionaryRegistration(): Promise<void> {
+		const t = this.messages();
+		const result = await removeDictionaryFromVc(this.app, this.vcDictionaryFilePath());
+		if (result === "unavailable") {
+			new Notice(t.noticeVcDictRemoveFailed);
+			return;
+		}
+		if (result === "ok" && !(await tryReloadVcDictionaries(this.app))) {
+			new Notice(t.noticeVcReloadFailed);
+			return;
+		}
+		new Notice(t.noticeVcDictRemoved);
 	}
 
 	/**
@@ -833,11 +875,35 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 		}
 		this.headingIndex.loadInitial(batch);
+		// 被链接次数要拿目标文件的索引条目比对锚点，故必须在索引建好之后统计。
+		this.headingLinkCounts.clear();
+		for (const f of files) {
+			this.refreshHeadingLinkCounts(f.path);
+		}
 		if (this.headingIndex.isTruncated) {
 			// 一次性告知，不做静默丢弃：默认开启的功能在超大 vault 下部分失效却不提示，
 			// 用户会把它当 bug 报告。
 			new Notice(this.messages().noticeHeadingIndexTruncated(this.headingIndex.size));
 		}
+	}
+
+	/**
+	 * 重算一个文件的出链对「标题被链接次数」的贡献（testplan Q31/Q34）。
+	 * 链接取 metadataCache 的 `links`（正文里的 wikilink / Markdown 链接），目标文件按 Obsidian 自己的
+	 * 解析规则（`getFirstLinkpathDest`）定位；元数据缓存不可用时静默跳过。
+	 */
+	private refreshHeadingLinkCounts(path: string): void {
+		const cache = this.app.metadataCache as Partial<MetadataCache> | undefined;
+		const links = (cache?.getCache?.(path)?.links ?? []).map((l) => l.link);
+		const keys = resolveLinkedHeadingKeys(
+			links,
+			(linkpath) =>
+				linkpath === ""
+					? path
+					: (cache?.getFirstLinkpathDest?.(linkpath, path)?.path ?? null),
+			(p) => this.headingIndex.entriesOf(p),
+		);
+		this.headingLinkCounts.setSource(path, keys);
 	}
 
 	/** M13：单文件增量索引（新建/修改后调用）。读取失败静默忽略，下次 modify 事件会重试。 */
@@ -906,7 +972,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * `adapter.write`（标题无变化时同步零流量）。写失败静默，下次索引变更会重试。
 	 */
 	private async writeVcDictionary(): Promise<void> {
-		const { json, truncated, total } = buildVcDictionaryJson(this.headingIndex.allEntries());
+		const { json, truncated, total } = buildVcDictionaryJson(
+			this.headingIndex.eligibleEntries(),
+		);
 		if (json === this.lastVcDictionaryJson) {
 			return; // 内容未变：不写盘（避免 iCloud/同步无谓上传）
 		}

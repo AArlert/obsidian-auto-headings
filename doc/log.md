@@ -15,6 +15,44 @@
 
 ---
 
+## 2026-10-18 issue #10 定稿：标题链接建议按信号触发 + VC 收紧（不 bump，交接：fix/heading-suggest-signals，仅本地、未推送）
+
+### 做了什么
+
+- 推翻上一块的「中文 3 字 / 英文 6 字母」长度门槛（会把 `axi`、`uart` 这类短术语全挡掉）。依据用户主力库
+  Oblivion 的只读统计（272 篇、1987 个不同标题、85% 只在一个文件、310 个被链接过、≥ 3 个文件的 102 个几乎
+  全是面试模板小节），改为按信号触发，规则表见 spec §3.23「触发规则：按信号而非长度」：
+  - 套话标题（同名出现在 ≥ 3 个文件）与 Excalidraw 绘图文件不参与建议、不进 VC 词典（`headingindex.ts`
+    增量维护 `keyFileCount`、`isExcalidrawFile`、`eligibleEntries`）；
+  - 新增 `headinglinks.ts`：metadataCache 出链 → 解析到目标文件 → 按索引条目锚点比对 → 「标题被链接次数」；
+  - `resolveTriggerQuery` 改为规则表：长词前缀 / 短英文词完整命中 / 短中文词完整命中且被链接过 / 连写后缀
+    完整命中且（够长或被链接过）；中日韩与其他字符的交界算词边界；排序加「被链接多 → 当前文件」；
+  - VC：词典只放 eligible 条目；自动配置阈值 1 → 2（只抬不降）；**推翻「切回不联动不做反向清理」**——
+    切回时问要不要从 VC 移除词典路径，「不联动」时发现残留在面板常驻提示 + 移除按钮（只删那一行）。
+- 顺手修 `extractTriggerToken` 遇星平面汉字（代理对）提前截断。
+- `test:fuzz` 的 M13 用例每 200 条让出一次事件循环，根治 vitest `onTaskUpdate` RPC 超时。
+- testplan Q27–Q38，Roadmap 登记 M18（置信分 + 淡色提示 + 历史反应），使用指南双语同步。
+- 在 loom 的 test-vault 用探查通道实测：Q27–Q34 全部按预期；Q38 在 Easy Typing（中英文加空格）下**未复现**
+  空格误选。test-vault 的插件测完已还原为原 1.2.3 构建。
+
+### 没做什么
+
+- 没推送、没打 tag：用户要求先在 Oblivion 本地实测，没问题再推 GitHub 发 tag（计划 1.2.4）。
+- 输入法拼字过程下的空格误选没测（模拟不了），等用户手测；VC 侧（Q35–Q37）只有单测。
+- issue #10 回复草稿里的规则描述已过时，发版时按新规则重写。
+
+### 下一步
+
+- 用户在 Oblivion 实测：Q27–Q34 打字观感；Q36 过期词典提示（主力库现状即此场景）与「移除」；输入法下的空格。
+- 实测通过后：合并回 master → bump 1.2.4 → 写发布说明 → 推送打 tag → 回复并关闭 issue #10。
+
+### 验证方式
+
+- `npm run check`（唯一失败为已知 Windows ICU 排序假红 `whitelist.test.ts`）、`npm run test:fuzz` 全绿无超时、
+  test-vault 探查 22 项全过。
+
+---
+
 ## 2026-10-18 修 issue #10：标题链接建议误触发（不 bump，交接：fix/heading-suggest-trigger → master）
 
 ### 做了什么
@@ -69,25 +107,3 @@
 ### 验证方式
 
 - `npm run docs`（索引与链接 / 锚点一致性）。
-
----
-
-## 2026-10-08 登记路线图：从 Number Headings 迁移命令（仅文档，不 bump，交接：master）
-
-### 做了什么
-
-- 用户提出：可以加一个「当前文件 / 全库从 Number Headings 迁移」的按钮 / 命令。本插件的跳过标记是 HTML 注释
-  `<!-- skip -->`，不会出现在阅读视图和侧栏大纲里，比 Number Headings 的 `^skipped` 块锚点更干净，属性也可一并迁移。
-- 已登记到 [`spec/5-Roadmap.md`](./spec/5-Roadmap.md) M9 候选池顶部（编号、跳过标记、属性三块迁移 + 约束）。
-
-### 没做什么
-
-- 未立项：没有写 spec 节、testplan 行，也没动任何代码；属性映射的具体落点留到立项时按 [3.20](./spec/3.20-单文件配置的落盘位置.md) 定。
-
-### 下一步
-
-- 立项时先补规格节 + testplan 行，再按 dev-cycle 实现；整库版要等 M11 的 H8 清库竞态保护。
-
-### 验证方式
-
-- `npm run docs`（索引与链接一致性校验）。

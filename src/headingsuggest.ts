@@ -140,9 +140,15 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 			return null;
 		}
 
-		// 整段按前缀、行内后缀只认完整标题（Q22/Q28）；无任何候选命中就让路——礼貌规则，
+		// 命中规则见 resolveTriggerQuery（Q27/Q28/Q30/Q31）；无任何候选命中就让路——礼貌规则，
 		// onTrigger 每次按键都跑，尽早返回 null。
-		const hit = resolveTriggerQuery(token, start, this.plugin.headingIndex);
+		const index = this.plugin.headingIndex;
+		const links = this.plugin.headingLinkCounts;
+		const hit = resolveTriggerQuery(token, start, {
+			hasAnyPrefixMatch: (q) => index.hasAnyPrefixMatch(q),
+			hasExactMatch: (q) => index.hasExactMatch(q),
+			isLinked: (q) => links.count(q) > 0,
+		});
 		if (!hit) {
 			return null;
 		}
@@ -163,7 +169,10 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		}
 		// 稍多取一点再排序截断，保证排序规则（精确优先等）在截断前生效。
 		const matches = this.plugin.headingIndex.queryPrefix(query, this.limit * 4);
-		return sortEntries(matches, query).slice(0, this.limit);
+		return sortEntries(matches, query, {
+			linkCount: (k) => this.plugin.headingLinkCounts.count(k),
+			activePath: context.file.path,
+		}).slice(0, this.limit);
 	}
 
 	renderSuggestion(entry: HeadingIndexEntry, el: HTMLElement): void {

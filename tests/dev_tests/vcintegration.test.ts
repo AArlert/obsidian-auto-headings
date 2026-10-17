@@ -12,8 +12,12 @@ import {
 	detectVcStatus,
 	disambiguateVcDisplayed,
 	enableAutoIntegration,
+	hasDictionaryPath,
+	isDictionaryRegisteredInVc,
 	isValidVcSettingsShape,
 	mergeDictionaryPath,
+	removeDictionaryFromVc,
+	removeDictionaryPath,
 	shouldYieldSuggestToVc,
 	tryReloadVcDictionaries,
 	vcDictionaryPath,
@@ -269,7 +273,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		expect(result).toEqual({ outcome: "ok", via: "live-instance" });
 		expect(liveSettings.customDictionaryPaths).toBe(DICT);
 		expect(liveSettings.enableCustomDictionaryComplement).toBe(true);
-		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1); // 触发阈值放宽到 1 字符
+		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(2); // Q37：触发阈值至少 2 字符
 		expect(liveSettings.displayedTextSuffix).toBe(""); // 1.0.32：清空「 => ...」显示后缀
 		expect(liveSettings.maxNumberOfSuggestions).toBe(10); // 1.1.0：默认 5 会把同名标题挤出列表
 		expect(liveSettings.other).toBe(1); // 其余字段原样保留
@@ -277,8 +281,16 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		expect(app.vault.adapter.write).not.toHaveBeenCalled(); // 未走文件路径
 	});
 
-	it("触发阈值已是 1：保持不动（用户显式设置优先）", async () => {
+	it("触发阈值（Q37）：低于 2 的（含旧版写入的 1）抬到 2，用户设得更高的不动", async () => {
 		const saveData = vi.fn(async () => {});
+		const high: Record<string, unknown> = {
+			customDictionaryMinNumberOfCharactersForTrigger: 4,
+		};
+		await enableAutoIntegration(
+			makeApp({ installed: true, enabled: true, liveSettings: high, liveSaveData: saveData }),
+			DICT,
+		);
+		expect(high.customDictionaryMinNumberOfCharactersForTrigger).toBe(4);
 		const liveSettings: Record<string, unknown> = {
 			customDictionaryMinNumberOfCharactersForTrigger: 1,
 		};
@@ -289,7 +301,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 			liveSaveData: saveData,
 		});
 		await enableAutoIntegration(app, DICT);
-		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(1);
+		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(2);
 	});
 
 	it("maxNumberOfSuggestions 只抬不降：用户设得更大时尊重原值", async () => {
@@ -370,7 +382,7 @@ describe("enableAutoIntegration：分层防御编排（Q12/Q13/Q10 逻辑面）"
 		>;
 		expect(written.customDictionaryPaths).toBe(`p0\n${DICT}`);
 		expect(written.enableCustomDictionaryComplement).toBe(true);
-		expect(written.customDictionaryMinNumberOfCharactersForTrigger).toBe(1);
+		expect(written.customDictionaryMinNumberOfCharactersForTrigger).toBe(2);
 		expect(written.other).toEqual({ keep: 1 }); // 关键约束：绝不重建对象吞掉其余配置
 	});
 
@@ -536,5 +548,68 @@ describe("disambiguateVcDisplayed：同名标题消歧（Q25，1.0.32）", () =>
 	it("确定性：同一输入两次调用输出一致（保证内容未变时不重写词典文件）", () => {
 		const input = [e("axi.md", "交叉矩阵"), e("交叉矩阵.md", "交叉矩阵"), e("b.md", "引言")];
 		expect(disambiguateVcDisplayed(input)).toEqual(disambiguateVcDisplayed(input));
+	});
+});
+
+describe("词典路径的检测与移除（Q35 / Q36）", () => {
+	it("removeDictionaryPath：只删本插件那一行，其余行原样保留", () => {
+		const other = "https://example.com/words.txt";
+		expect(removeDictionaryPath(`${other}\n${DICT}`, DICT)).toBe(other);
+		expect(removeDictionaryPath(`${DICT}\n${other}\n`, DICT)).toBe(`${other}\n`);
+		expect(removeDictionaryPath(other, DICT)).toBe(other); // 本就不在：原样返回
+		expect(removeDictionaryPath(undefined, DICT)).toBe("");
+	});
+
+	it("hasDictionaryPath：按行比对（容忍行首尾空白）", () => {
+		expect(hasDictionaryPath(`a.txt\n  ${DICT} `, DICT)).toBe(true);
+		expect(hasDictionaryPath(`${DICT}.bak`, DICT)).toBe(false);
+		expect(hasDictionaryPath(undefined, DICT)).toBe(false);
+	});
+
+	it("isDictionaryRegisteredInVc：只看启用中的 VC 活体实例", () => {
+		const liveSettings = { customDictionaryPaths: `x.txt\n${DICT}` };
+		expect(
+			isDictionaryRegisteredInVc(
+				makeApp({ installed: true, enabled: true, liveSettings }),
+				DICT,
+			),
+		).toBe(true);
+		expect(isDictionaryRegisteredInVc(makeApp({ installed: true, liveSettings }), DICT)).toBe(
+			false,
+		);
+		expect(
+			isDictionaryRegisteredInVc(
+				makeApp({
+					installed: true,
+					enabled: true,
+					liveSettings: { customDictionaryPaths: "x.txt" },
+				}),
+				DICT,
+			),
+		).toBe(false);
+	});
+
+	it("removeDictionaryFromVc：删路径 + saveData，其余设置不回滚", async () => {
+		const saveData = vi.fn(async () => {});
+		const liveSettings: Record<string, unknown> = {
+			customDictionaryPaths: `x.txt\n${DICT}`,
+			customDictionaryMinNumberOfCharactersForTrigger: 2,
+			displayedTextSuffix: "",
+		};
+		const app = makeApp({
+			installed: true,
+			enabled: true,
+			liveSettings,
+			liveSaveData: saveData,
+		});
+		expect(await removeDictionaryFromVc(app, DICT)).toBe("ok");
+		expect(liveSettings.customDictionaryPaths).toBe("x.txt");
+		expect(liveSettings.customDictionaryMinNumberOfCharactersForTrigger).toBe(2);
+		expect(liveSettings.displayedTextSuffix).toBe("");
+		expect(saveData).toHaveBeenCalledOnce();
+		expect(await removeDictionaryFromVc(app, DICT)).toBe("not-registered");
+		expect(await removeDictionaryFromVc(makeApp({ installed: true }), DICT)).toBe(
+			"unavailable",
+		);
 	});
 });

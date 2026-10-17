@@ -41,6 +41,11 @@ export function renderVcIntegrationSection(
 					return;
 				}
 				if (target === "off") {
+					// VC 还挂着本插件词典时先问要不要一并移除（Q35）；否则直接切。
+					if (plugin.isVcDictionaryRegistered()) {
+						new VcOffConfirmModal(plugin.app, plugin, tab).open();
+						return;
+					}
 					await plugin.setVcIntegrationOff();
 					tab.display();
 					return;
@@ -75,6 +80,74 @@ export function renderVcIntegrationSection(
 					}
 				}),
 			);
+	}
+}
+
+/**
+ * 过期词典提示行（testplan Q36）：「不联动」但启用中的 VC 仍挂着本插件词典时渲染，点「移除」只删
+ * VC 里的那一条路径。由常规页在 VC 子设置区顶部调用，不受「本插件优先」隐藏联动区的影响。
+ */
+export function renderStaleVcDictionaryHint(
+	tab: AutoHeadingsSettingTab,
+	containerEl: HTMLElement,
+): void {
+	const t = tab.t;
+	const plugin = tab.plugin;
+	if (plugin.settings.vcIntegrationMode !== "off" || !plugin.isVcDictionaryRegistered()) {
+		return;
+	}
+	new Setting(containerEl)
+		.setName(t.vcStaleDictName)
+		.setDesc(t.vcStaleDictDesc)
+		.addButton((btn) =>
+			btn.setButtonText(t.vcStaleDictRemoveButton).onClick(async () => {
+				await plugin.removeVcDictionaryRegistration();
+				tab.display();
+			}),
+		);
+}
+
+/** 切回「不联动」确认框（testplan Q35）：两个按钮都会停止联动，区别只在要不要从 VC 移除词典路径。 */
+class VcOffConfirmModal extends Modal {
+	constructor(
+		app: App,
+		private readonly plugin: AutoHeadingsPlugin,
+		private readonly tab: AutoHeadingsSettingTab,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		const t = this.plugin.messages();
+		contentEl.empty();
+		this.setTitle(t.vcOffConfirmTitle);
+		contentEl.createEl("p", { text: t.vcOffConfirmBody });
+		new Setting(contentEl)
+			.addButton((btn) =>
+				btn.setButtonText(t.vcOffKeepButton).onClick(async () => {
+					this.close();
+					await this.plugin.setVcIntegrationOff();
+					this.tab.display();
+				}),
+			)
+			.addButton((btn) =>
+				btn
+					.setButtonText(t.vcOffRemoveButton)
+					.setCta()
+					.onClick(async () => {
+						this.close();
+						await this.plugin.setVcIntegrationOff();
+						await this.plugin.removeVcDictionaryRegistration();
+						this.tab.display();
+					}),
+			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+		// 点遮罩 / Esc 关闭 = 什么都没做：重绘把下拉复位到原值。
+		this.tab.display();
 	}
 }
 

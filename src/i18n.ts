@@ -123,6 +123,17 @@ export interface Messages {
 	vcAutoConfirmPoints: string[];
 	/** VC 的 descriptionOnSuggestion 设为 None 时，来源路径行不显示的只读提示（1.0.32）。 */
 	vcDescriptionOffHint: string;
+	/** 切回「不联动」时 VC 仍挂着本插件词典：问要不要一并移除（testplan Q35）。 */
+	vcOffConfirmTitle: string;
+	vcOffConfirmBody: string;
+	vcOffKeepButton: string;
+	vcOffRemoveButton: string;
+	/** 「不联动」但 VC 仍挂着本插件的旧词典：面板提示 + 移除按钮（testplan Q36）。 */
+	vcStaleDictName: string;
+	vcStaleDictDesc: string;
+	vcStaleDictRemoveButton: string;
+	noticeVcDictRemoved: string;
+	noticeVcDictRemoveFailed: string;
 
 	// —— 路径规则 ——
 	pathRulesHeading: string;
@@ -552,12 +563,24 @@ const zh: Messages = {
 		"将生成标题词典并自动配置 VC（全程安全校验，写不了即放弃，不改动现有配置）。确认继续？",
 	vcAutoConfirmPoints: [
 		"生成/维护标题词典（上限 2 万条，超出截断）",
-		"写 VC 配置：词典路径 + 开「自定义词典补全」+ 触发阈值 1 字符",
+		"写 VC 配置：词典路径 + 开「自定义词典补全」+ 触发阈值至少 2 个字符",
 		"清空 VC「补全候选显示后缀」（全局项，其它词典候选同样生效）",
 		"VC「建议框最多显示条数」抬到至少 10（全局项，只抬不降）",
 		"写入后自动重载 VC 词典（失败会另行提示）",
 	],
 	vcDescriptionOffHint: "VC 关闭了候选来源行（Description on suggestion 为 None）。",
+	vcOffConfirmTitle: "停止词典联动",
+	vcOffConfirmBody:
+		"之后不再更新标题词典。Various Complements 里仍挂着这份词典，要一并移除吗？不移除的话，VC 会继续用这份不再更新的旧词典（标题改名后可能插入失效的链接）。",
+	vcOffKeepButton: "保留",
+	vcOffRemoveButton: "从 VC 移除",
+	vcStaleDictName: "VC 仍在加载旧的标题词典",
+	vcStaleDictDesc:
+		"词典联动已关闭，这份词典不再更新，标题改名后可能插入失效的链接。移除只删 VC 里的这一条词典路径，VC 其他设置不动。",
+	vcStaleDictRemoveButton: "移除",
+	noticeVcDictRemoved: "已从 Various Complements 移除本插件的标题词典。",
+	noticeVcDictRemoveFailed:
+		"没能读取 Various Complements 的设置，请在 VC 设置里手动删除这条词典路径。",
 	vcAutoConfirmButton: "确认并自动配置",
 	noticeVcAutoWriteSuccess: "已自动配置 Various Complements 联动。",
 	noticeVcAutoWriteInvalidShape:
@@ -953,12 +976,24 @@ const en: Messages = {
 		"A heading dictionary will be generated and VC configured automatically (safety-checked; aborts without touching your VC settings if it can't write safely). Continue?",
 	vcAutoConfirmPoints: [
 		"Generate/maintain the heading dictionary (capped at 20,000 headings)",
-		'Write VC settings: dictionary path + "Custom dictionary complement" + trigger threshold of 1 character',
+		'Write VC settings: dictionary path + "Custom dictionary complement" + trigger threshold of at least 2 characters',
 		'Clear VC\'s "Displayed text suffix" (global: affects your other custom dictionaries too)',
 		'Raise VC\'s "Max number of suggestions" to at least 10 (global; only raised, never lowered)',
 		"Reload VC dictionaries after writing (failure is reported separately)",
 	],
 	vcDescriptionOffHint: "VC hides the candidate source line (Description on suggestion: None).",
+	vcOffConfirmTitle: "Stop dictionary integration",
+	vcOffConfirmBody:
+		"The heading dictionary will no longer be updated. Various Complements still loads it — remove it from VC too? If kept, VC keeps using this stale dictionary (renamed headings may insert broken links).",
+	vcOffKeepButton: "Keep",
+	vcOffRemoveButton: "Remove from VC",
+	vcStaleDictName: "VC still loads the old heading dictionary",
+	vcStaleDictDesc:
+		"Dictionary integration is off, so this dictionary is no longer updated and renamed headings may insert broken links. Removing only deletes this one dictionary path in VC; its other settings stay as they are.",
+	vcStaleDictRemoveButton: "Remove",
+	noticeVcDictRemoved: "Removed this plugin's heading dictionary from Various Complements.",
+	noticeVcDictRemoveFailed:
+		"Couldn't read Various Complements' settings. Please remove this dictionary path in VC's settings manually.",
 	vcAutoConfirmButton: "Confirm & configure",
 	noticeVcAutoWriteSuccess: "Various Complements integration configured automatically.",
 	noticeVcAutoWriteInvalidShape:

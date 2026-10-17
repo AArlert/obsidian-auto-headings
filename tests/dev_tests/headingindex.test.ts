@@ -1,4 +1,4 @@
-/**
+﻿/**
  * M13 标题索引（headingindex.ts）纯函数 + 内存索引单测（对应 testplan Q 类的逻辑部分：
  * Q1 关闭即零成本 / Q2 剥前缀原文 / Q3 前缀匹配 / Q6 多文件同名 / Q16 截断 / Q18 改名删除）。
  *
@@ -7,7 +7,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { WORD_JOINER } from "../../src/numbering";
-import { HeadingIndex, buildEntriesForFile } from "../../src/headingindex";
+import {
+	GENERIC_FILE_COUNT,
+	HeadingIndex,
+	buildEntriesForFile,
+	isExcalidrawFile,
+} from "../../src/headingindex";
 
 /** 构造插件默认模板写入后的已编号标题行（render.ts buildPrefix 的字节形态）。 */
 const numbered = (num: string, title: string) => `## ${WORD_JOINER}${num} ${WORD_JOINER}${title}`;
@@ -193,5 +198,73 @@ describe("HeadingIndex：增量更新（setFile / removeFile / renameFile）", (
 		expect(all.map((e) => e.displayText)).toEqual(["甲"]);
 		all.push({} as never); // 修改副本不应影响内部
 		expect(idx.size).toBe(1);
+	});
+});
+
+describe("HeadingIndex：套话标题与 Excalidraw（Q32 / Q33）", () => {
+	const file = (path: string, content: string) => ({
+		path,
+		basename: path.replace(/\.md$/, ""),
+		content,
+	});
+
+	it(`同名标题出现在 ≥ ${GENERIC_FILE_COUNT} 个文件里即套话：前缀 / 完整查询都跳过`, () => {
+		const idx = new HeadingIndex();
+		idx.loadInitial([
+			file("a.md", "## 边界\n## 边界条件分析"),
+			file("b.md", "## 边界"),
+			file("c.md", "## 边界\n## 边界\n## AXI"), // 同一文件重复只算一个文件
+		]);
+		expect(idx.fileCountOf("边界")).toBe(3);
+		expect(idx.isGenericKey("边界")).toBe(true);
+		expect(idx.hasExactMatch("边界")).toBe(false);
+		expect(idx.queryPrefix("边界", 10).map((e) => e.matchKey)).toEqual(["边界条件分析"]);
+		expect(idx.hasAnyPrefixMatch("边界")).toBe(true); // 有非套话的【边界条件分析】
+		expect(idx.eligibleEntries().map((e) => e.matchKey)).toEqual(["axi", "边界条件分析"]);
+		expect(idx.allEntries()).toHaveLength(6); // allEntries 不过滤
+	});
+
+	it("只有套话标题以该串开头时：hasAnyPrefixMatch 为 false", () => {
+		const idx = new HeadingIndex();
+		idx.loadInitial([
+			file("a.md", "## 流程"),
+			file("b.md", "## 流程"),
+			file("c.md", "## 流程"),
+		]);
+		expect(idx.hasAnyPrefixMatch("流")).toBe(false);
+	});
+
+	it("文件计数随增量更新：setFile / removeFile / renameFile 覆盖", () => {
+		const idx = new HeadingIndex();
+		idx.loadInitial([file("a.md", "## 反问"), file("b.md", "## 反问")]);
+		expect(idx.isGenericKey("反问")).toBe(false);
+		idx.setFile("c.md", "c", "## 反问");
+		expect(idx.isGenericKey("反问")).toBe(true);
+		idx.removeFile("a.md");
+		expect(idx.fileCountOf("反问")).toBe(2);
+		idx.renameFile("b.md", "c.md", "c"); // 改名覆盖：被覆盖的 c.md 的标题随之消失
+		expect(idx.fileCountOf("反问")).toBe(1);
+		idx.setFile("c.md", "c", "## 别的");
+		expect(idx.fileCountOf("反问")).toBe(0);
+	});
+
+	it("Excalidraw 绘图文件不进索引（文件名或 frontmatter 识别）", () => {
+		expect(isExcalidrawFile("draw/x.excalidraw.md", "")).toBe(true);
+		expect(
+			isExcalidrawFile(
+				"x.md",
+				"---\nexcalidraw-plugin: parsed\ntags: []\n---\n## Text Elements",
+			),
+		).toBe(true);
+		expect(isExcalidrawFile("x.md", "---\ntags: [excalidraw-plugin]\n---\n")).toBe(false);
+		expect(isExcalidrawFile("x.md", "## excalidraw-plugin: 正文里提到")).toBe(false);
+		const idx = new HeadingIndex();
+		idx.loadInitial([
+			file("x.excalidraw.md", "# Excalidraw Data\n## Text Elements"),
+			file("note.md", "## Text Elements"),
+		]);
+		expect(idx.size).toBe(1);
+		expect(idx.entriesOf("x.excalidraw.md")).toEqual([]);
+		expect(idx.entriesOf("note.md").map((e) => e.matchKey)).toEqual(["text elements"]);
 	});
 });

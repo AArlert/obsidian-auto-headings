@@ -1,7 +1,7 @@
 import { Setting } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { DEBOUNCE_DEFAULT, DEBOUNCE_MAX, DEBOUNCE_MIN, clampDebounceDelay } from "../model";
-import { renderVcIntegrationSection } from "./VcIntegrationSection";
+import { renderStaleVcDictionaryHint, renderVcIntegrationSection } from "./VcIntegrationSection";
 import { detectVcStatus } from "../../vcintegration";
 
 /**
@@ -139,6 +139,7 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 		return;
 	}
 	const subEl = containerEl.createDiv({ cls: "ah-sub-settings" });
+	renderStaleVcDictionaryHint(tab, subEl); // Q36：放最前，不受下面「本插件优先」隐藏联动区影响
 
 	// 共存策略（1.0.29）：VC 已安装才有意义（联动开着、VC 已卸载时不渲染）。
 	if (vcStatus !== "not-installed") {
