@@ -43,22 +43,18 @@ export type VcInstallStatus = "not-installed" | "disabled" | "enabled";
  * 而 VC 与本插件都以普通 `EditorSuggest` 注册——本插件一命中，VC 自己的文件链接/词补全建议
  * 就整个看不见。
  *
- * 让路要同时满足三个条件，缺一不可：
- * 1. 用户选了让路（`mode === "yield"`）；
- * 2. VC **确实已启用**——未安装/已禁用时没有竞争者，让路只会白丢功能；
- * 3. **词典联动确实开着**（`integrationMode !== "off"`）——否则 VC 的词典里根本没有标题条目，
- *    让路等于「让给一个也给不出标题候选的框」，用户什么都看不到。
+ * 让路 = VC **确实已启用**且**词典联动开着**（标题已写进 VC 词典，由 VC 的框呈现）。
  *
- * 第 3 条是 1.0.31 补上的（用户实测撞上）：让路默认开 + 词典联动默认关，两个默认叠在一起，
- * 装了 VC 的用户一开箱标题建议就整个消失。这种死角不能靠设置面板的警告去兜——用户不打开
- * 设置就看不到——只能从判定条件上消灭。
+ * 1.0.29–1.2.3 另有一个「让路 / 本插件优先」设置，与联动组合出「让路但没联动」（让给一个拿不出标题的框，
+ * 1.0.31 起靠判定条件兜住）和「优先却开着联动」（两边的框都出标题，2026-10-18 用户实测混在一起）两种自相
+ * 矛盾的状态。1.2.4 起合并成一个「建议显示在」选择：选 VC 就开联动，选本插件就关联动——让路与否完全由
+ * 联动状态决定，矛盾状态不复存在。
  */
 export function shouldYieldSuggestToVc(
-	mode: "yield" | "own",
 	status: VcInstallStatus,
 	integrationMode: "off" | "manual" | "auto",
 ): boolean {
-	return mode === "yield" && status === "enabled" && integrationMode !== "off";
+	return status === "enabled" && integrationMode !== "off";
 }
 
 /**

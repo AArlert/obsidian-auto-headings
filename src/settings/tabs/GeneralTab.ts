@@ -1,12 +1,7 @@
 import { Setting } from "obsidian";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { DEBOUNCE_DEFAULT, DEBOUNCE_MAX, DEBOUNCE_MIN, clampDebounceDelay } from "../model";
-import {
-	openVcAutoModeConfirm,
-	renderStaleVcDictionaryHint,
-	renderVcIntegrationSection,
-	stopVcIntegration,
-} from "./VcIntegrationSection";
+import { renderVcTargetSection } from "./VcIntegrationSection";
 import { detectVcStatus } from "../../vcintegration";
 
 /**
@@ -134,76 +129,13 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 			}),
 		);
 
-	// —— Various Complements 相关的三行（1.2.2，testplan L30）——
-	// 缩进挂在「标题链接建议」开关之下（`.ah-sub-settings`）。只在 VC **已启用**时显示：没装 / 没开
-	// VC 的用户不存在这个取舍，多几行只是噪音（只影响显示，设置值不变）。例外：词典联动已经开着时
-	// 无论 VC 状态都显示——否则会留下「还在写词典、用户却看不见也关不掉」的隐身状态。
+	// —— 装了 VC 时：建议显示在哪（2026-10-18 用户定，testplan Q43）——
+	// 只在 VC **已启用**时显示（没装 / 没开 VC 的用户不存在这个选择）。例外：词典联动开着时无论 VC
+	// 状态都显示——否则会留下「还在写词典、用户却看不见也关不掉」的隐身状态。
 	const vcStatus = detectVcStatus(plugin.app);
-	const vcIntegrationOn = plugin.settings.vcIntegrationMode !== "off";
-	if (vcStatus !== "enabled" && !vcIntegrationOn) {
+	if (vcStatus !== "enabled" && plugin.settings.vcIntegrationMode === "off") {
 		return;
 	}
 	const subEl = containerEl.createDiv({ cls: "ah-sub-settings" });
-	renderStaleVcDictionaryHint(tab, subEl); // Q36：放最前，不受下面「本插件优先」隐藏联动区影响
-
-	// 共存策略（1.0.29）：VC 已安装才有意义（联动开着、VC 已卸载时不渲染）。
-	if (vcStatus !== "not-installed") {
-		new Setting(subEl)
-			.setName(t.vcCoexistName)
-			.setDesc(t.vcCoexistDesc)
-			.addDropdown((dd) => {
-				dd.addOption("yield", t.vcCoexistYield);
-				dd.addOption("own", t.vcCoexistOwn);
-				dd.setValue(plugin.settings.headingSuggestWhenVcActive).onChange(async (value) => {
-					plugin.settings.headingSuggestWhenVcActive = value === "own" ? "own" : "yield";
-					await plugin.saveSettings();
-					// 「本插件优先」与词典联动互斥（Q42）：联动开着时 VC 框里也会出标题，两套建议混在一起。
-					if (value === "own" && plugin.settings.vcIntegrationMode !== "off") {
-						await stopVcIntegration(tab);
-						return;
-					}
-					tab.display(); // 重绘：下面的接管提示与联动区显隐取决于本项
-				});
-			});
-
-		// 选了让路、但词典联动还没开：此时**不会真的让路**（见 shouldYieldSuggestToVc），
-		// 由本插件的建议框接管——如实告知当前谁在接管。
-		const yieldPending =
-			plugin.settings.headingLinkSuggestEnabled &&
-			plugin.settings.headingSuggestWhenVcActive === "yield" &&
-			vcStatus === "enabled" &&
-			!vcIntegrationOn;
-		if (yieldPending) {
-			// 用户的设计意图（2026-10-18）：装了 VC 就让标题出现在 VC 框里。联动要改 VC 的设置、必须用户确认，
-			// 所以不自动开，而是在这里给一个直达自动配置确认框的按钮。
-			new Setting(subEl)
-				.setName(t.vcCoexistFallbackName)
-				.setDesc(t.vcCoexistFallbackHint)
-				.addButton((btn) =>
-					btn
-						.setButtonText(t.vcCoexistFallbackButton)
-						.setCta()
-						.onClick(() => openVcAutoModeConfirm(tab)),
-				);
-		}
-
-		// 「本插件优先」却还开着词典联动（旧版允许、或切换时选了保留）：给一个关掉的入口（Q42）。
-		if (plugin.settings.headingSuggestWhenVcActive === "own" && vcIntegrationOn) {
-			new Setting(subEl)
-				.setName(t.vcOwnWithDictName)
-				.setDesc(t.vcOwnWithDictDesc)
-				.addButton((btn) =>
-					btn
-						.setButtonText(t.vcOwnWithDictButton)
-						.setCta()
-						.onClick(() => stopVcIntegration(tab)),
-				);
-		}
-	}
-
-	// 词典联动（M13）：「本插件优先」且联动本就关着时不渲染（这时 VC 的相关配置纯属噪音，testplan Q24）。
-	const hideVcSection = plugin.settings.headingSuggestWhenVcActive === "own" && !vcIntegrationOn;
-	if (!hideVcSection) {
-		renderVcIntegrationSection(tab, subEl);
-	}
+	renderVcTargetSection(tab, subEl);
 }

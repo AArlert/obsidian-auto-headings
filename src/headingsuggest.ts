@@ -90,22 +90,19 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 	}
 
 	/**
-	 * VC 已启用且用户选择让路时返回 true——本插件放弃本次触发。
+	 * 标题建议显示在 VC 的框里（VC 已启用且词典联动开着）时返回 true——本插件放弃本次触发。
 	 *
 	 * 为什么必须二选一：Obsidian 的 `EditorSuggest` 同一时刻**只显示一个**弹框，先返回非
 	 * null 的那个赢。VC 与本插件都以普通 `EditorSuggest` 注册，本插件一命中，VC 的文件链接
-	 * 与词补全建议就整个看不见（用户实测截图确认）。
-	 *
-	 * 判定见 {@link shouldYieldSuggestToVc}：**词典联动关着时不让路**——让给一个拿不出标题
-	 * 候选的框，用户就什么都看不到了（1.0.31 用户实测撞上的死角）。
+	 * 与词补全建议就整个看不见（用户实测截图确认）。判定见 {@link shouldYieldSuggestToVc}。
 	 */
 	private shouldYieldToVc(): boolean {
 		// 先看两个纯字段（onTrigger 每次按键都跑）：任一不满足就免去 detectVcStatus 的探测。
-		const { headingSuggestWhenVcActive, vcIntegrationMode } = this.plugin.settings;
-		if (headingSuggestWhenVcActive !== "yield" || vcIntegrationMode === "off") {
-			return false;
+		const { vcIntegrationMode } = this.plugin.settings;
+		if (vcIntegrationMode === "off") {
+			return false; // 先看纯字段：onTrigger 每次按键都跑，免去 detectVcStatus 的探测
 		}
-		return shouldYieldSuggestToVc("yield", detectVcStatus(this.plugin.app), vcIntegrationMode);
+		return shouldYieldSuggestToVc(detectVcStatus(this.plugin.app), vcIntegrationMode);
 	}
 
 	onTrigger(

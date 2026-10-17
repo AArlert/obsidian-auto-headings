@@ -474,26 +474,19 @@ describe("tryReloadVcDictionaries：reload 命令调用与兜底（Q14 逻辑面
 	});
 });
 
-describe("shouldYieldSuggestToVc：建议框共存策略（Q23；1.0.31 补第三个条件）", () => {
-	it("让路 + VC 已启用 + 词典联动开着：放弃触发，把唯一的弹框位置交给 VC", () => {
-		expect(shouldYieldSuggestToVc("yield", "enabled", "manual")).toBe(true);
-		expect(shouldYieldSuggestToVc("yield", "enabled", "auto")).toBe(true);
+describe("shouldYieldSuggestToVc：让路只看 VC 启用 + 词典联动开着（Q23 / Q43）", () => {
+	it("VC 已启用 + 联动开着（标题在 VC 词典里）：让路", () => {
+		expect(shouldYieldSuggestToVc("enabled", "manual")).toBe(true);
+		expect(shouldYieldSuggestToVc("enabled", "auto")).toBe(true);
 	});
 
-	it("让路 + VC 已启用，但词典联动关着：**不让路**——VC 词典里没有标题条目，让了就什么都看不到（1.0.31 死角修复，用户实测撞上）", () => {
-		expect(shouldYieldSuggestToVc("yield", "enabled", "off")).toBe(false);
+	it("联动关着：不让路，用本插件的框（VC 词典里没有标题，让了就什么都看不到）", () => {
+		expect(shouldYieldSuggestToVc("enabled", "off")).toBe(false);
 	});
 
-	it("让路模式但 VC 未安装 / 已禁用：没有竞争者，照常弹自己的框", () => {
-		expect(shouldYieldSuggestToVc("yield", "not-installed", "auto")).toBe(false);
-		expect(shouldYieldSuggestToVc("yield", "disabled", "auto")).toBe(false);
-	});
-
-	it("本插件优先模式：无论 VC 状态与联动模式都不让路（1.0.28 及以前的行为）", () => {
-		expect(shouldYieldSuggestToVc("own", "enabled", "auto")).toBe(false);
-		expect(shouldYieldSuggestToVc("own", "enabled", "off")).toBe(false);
-		expect(shouldYieldSuggestToVc("own", "disabled", "manual")).toBe(false);
-		expect(shouldYieldSuggestToVc("own", "not-installed", "off")).toBe(false);
+	it("VC 未安装 / 已禁用：没有竞争者，照常弹自己的框", () => {
+		expect(shouldYieldSuggestToVc("not-installed", "auto")).toBe(false);
+		expect(shouldYieldSuggestToVc("disabled", "auto")).toBe(false);
 	});
 });
 

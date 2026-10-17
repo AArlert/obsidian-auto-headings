@@ -101,10 +101,12 @@ Type the text of a heading (its words without the number) and matching headings 
 
 Exact matches are listed first, then headings linked more often, then headings in the current note. Self-contained and on by default — no other plugin needed. Turn it off in **Settings → General → Heading link suggestions** and no heading index is built at all, so memory and CPU cost drop to zero.
 
-**Alongside Various Complements (VC):** both plugins share Obsidian's single suggestion popup, so only one can show at a time. These settings appear only while VC is enabled:
+**Alongside Various Complements (VC):** both plugins share Obsidian's single suggestion popup, so only one can show at a time. With VC installed you get one extra setting:
 
--   **When Various Complements is enabled**: by default this plugin yields to VC; together with the dictionary integration below, both sides' candidates appear in one popup — the most complete setup. It only truly yields while the dictionary integration is on; otherwise VC's dictionary holds no headings and yielding would leave you with nothing, so this plugin keeps serving and the settings page says so. "This plugin wins" hides VC's popup instead.
--   **Various Complements integration**: exports the heading index as a VC custom dictionary — the only official way to merge both sides. Off by default, and nothing is written while off; enabling asks for confirmation first. "Manual" only generates the dictionary file and you add its path to VC; "Automatic" edits VC's settings for you (the confirmation lists every change). The dictionary leaves out template sections and Excalidraw headings, using the same rules as this plugin's own suggestions. When you switch back to Off while VC still loads the dictionary, you're asked whether to remove it from VC too; if you keep it, VC goes on using a dictionary that's no longer updated, and settings keep reminding you.
+-   **Show suggestions in**: appears only while VC is enabled; pick one.
+    -   **This plugin's popup** (default): heading suggestions use this plugin's own popup, which takes precedence over VC's; VC shows only its own words.
+    -   **Various Complements' popup**: headings are written into a VC custom dictionary and show up alongside VC's other candidates; this plugin stops showing its popup. A confirmation lists every VC setting that will change; if you'd rather not let this plugin edit VC, choose "Manual setup" there to only generate the dictionary file and add its path to VC yourself. Template sections and Excalidraw headings are left out of the dictionary; when VC's popup appears and how it ranks candidates is up to VC.
+    -   Switching back from VC's popup while VC still loads the dictionary asks whether to remove it from VC too; if you keep it, VC goes on using a dictionary that's no longer updated, and settings keep reminding you.
 -   If VC's "Description on suggestion" is set to None, the source-path line under candidates in VC's popup is hidden. That's a global VC display preference this plugin won't change; same-named headings can still be told apart by the file name in parentheses.
 
 ### Fully customizable templates

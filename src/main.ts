@@ -2131,11 +2131,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (merged.vcIntegrationMode !== "manual" && merged.vcIntegrationMode !== "auto") {
 			merged.vcIntegrationMode = "off";
 		}
-		// 1.0.29：VC 启用时的让路策略。默认 "yield"——EditorSuggest 同一时刻只显示一个弹框，
-		// 老行为（本插件恒优先）会把 VC 自己的文件链接建议整个盖掉（用户实测）。
-		if (merged.headingSuggestWhenVcActive !== "own") {
-			merged.headingSuggestWhenVcActive = "yield";
-		}
+		// 迁移：`headingSuggestWhenVcActive`（1.0.29 起，「VC 启用时：让路 / 本插件优先」）自 1.2.4 移除——
+		// 是否让路只看词典联动开没开（用户定的三种情况，spec §3.23），旧字段随迁移清理。
+		delete (merged as { headingSuggestWhenVcActive?: unknown }).headingSuggestWhenVcActive;
 		merged.templateHistory = sanitizeHistory(data.templateHistory);
 		// 迁移：开关 `showOutlineNumbers`（1.2.0–1.2.1，大纲里显示仅显示模式的编号）自 1.2.2 移除，
 		// 大纲编号固定开启（用户定：仅显示模式本就该处处看得到编号）；旧字段随迁移清理。
