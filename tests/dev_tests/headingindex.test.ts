@@ -268,3 +268,24 @@ describe("HeadingIndex：套话标题与 Excalidraw（Q32 / Q33）", () => {
 		expect(idx.entriesOf("note.md").map((e) => e.matchKey)).toEqual(["text elements"]);
 	});
 });
+
+describe("HeadingIndex：排除正在写的那一条 / 识别标题是否真的变了（Q7 / Q48）", () => {
+	it("exclude 指定文件 + 行：前缀与完整查询都跳过它，同文件其他标题照常", () => {
+		const idx = new HeadingIndex();
+		idx.loadInitial([{ path: "a.md", basename: "a", content: "## haha\n正文\n## haha 二" }]);
+		const self = { path: "a.md", lineIndex: 0 };
+		expect(idx.hasExactMatch("haha", self)).toBe(false);
+		expect(idx.hasExactMatch("haha")).toBe(true);
+		expect(idx.hasAnyPrefixMatch("haha", self)).toBe(true); // 第 3 行的「haha 二」
+		expect(idx.queryPrefix("haha", 10, self).map((e) => e.lineIndex)).toEqual([2]);
+		expect(idx.findByAnchor("a.md", "haha")?.lineIndex).toBe(0);
+	});
+
+	it("setFile 返回标题是否变了：只改正文（含行号漂移）为 false，改标题 / 加删标题为 true", () => {
+		const idx = new HeadingIndex();
+		expect(idx.setFile("a.md", "a", "## 甲\n正文")).toBe(true);
+		expect(idx.setFile("a.md", "a", "新增一行\n## 甲\n正文改了")).toBe(false);
+		expect(idx.setFile("a.md", "a", "## 乙")).toBe(true);
+		expect(idx.setFile("a.md", "a", "## 乙\n## 丙")).toBe(true);
+	});
+});

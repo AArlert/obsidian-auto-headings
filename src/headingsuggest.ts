@@ -165,17 +165,18 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 			return null;
 		}
 		const { token, start } = extracted;
-		if (isBlockedContext(line, before, start)) {
+		if (isBlockedContext(before, start)) {
 			return null;
 		}
 
 		// 命中规则见 resolveTriggerQuery（Q27/Q28/Q30/Q31）；无任何候选命中就让路——礼貌规则，
-		// onTrigger 每次按键都跑，尽早返回 null。
+		// onTrigger 每次按键都跑，尽早返回 null。正在写的标题（当前文件当前行）不算命中（Q7）。
 		const index = this.plugin.headingIndex;
 		const links = this.plugin.headingLinkCounts;
+		const self = { path: file.path, lineIndex: cursor.line };
 		const hit = resolveTriggerQuery(token, start, {
-			hasAnyPrefixMatch: (q) => index.hasAnyPrefixMatch(q),
-			hasExactMatch: (q) => index.hasExactMatch(q),
+			hasAnyPrefixMatch: (q) => index.hasAnyPrefixMatch(q, self),
+			hasExactMatch: (q) => index.hasExactMatch(q, self),
 			isLinked: (q) => links.count(q) > 0,
 		});
 		if (!hit) {
@@ -197,7 +198,9 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 			return [];
 		}
 		// 稍多取一点再排序截断，保证排序规则（精确优先等）在截断前生效。
-		const matches = this.plugin.headingIndex.queryPrefix(query, this.limit * 4);
+		// 排除正在写的标题本身（当前文件当前行，Q7）；同一篇笔记的其他标题照常。
+		const self = { path: context.file.path, lineIndex: context.start.line };
+		const matches = this.plugin.headingIndex.queryPrefix(query, this.limit * 4, self);
 		return sortEntries(matches, query, {
 			linkCount: (k) => this.plugin.headingLinkCounts.count(k),
 			activePath: context.file.path,

@@ -27,6 +27,8 @@ const VC_DATA_REL_PATH = "plugins/various-complements/data.json";
 const VC_RELOAD_COMMAND_ID = "various-complements:reload-custom-dictionaries";
 /** VC 词典文件重写节流（方案 §5.8，可调常量）：重写整个 JSON 文件比更新内存索引昂贵得多。 */
 export const VC_DICTIONARY_THROTTLE_MS = 3000;
+/** 标题变化后同步进 VC 内存的最长等待（ms，testplan Q48）：只换本插件那部分词，便宜，要快。 */
+export const VC_MEMORY_SYNC_MS = 500;
 /**
  * VC 词典条数上限（可调常量）：VC 端会全量加载词典建索引（wordByValue + 首字母桶），
  * 独立于本插件内存索引上限（50,000）设更小值——20,000 条紧凑 JSON ≈ 2.2MB，控制 VC 侧
@@ -534,10 +536,19 @@ interface VcDictionaryProvider {
 }
 
 /** Obsidian 传给 `EditorSuggest.getSuggestions` 的上下文里本插件用得到的部分。 */
-interface VcSuggestContext {
+export interface VcSuggestContext {
 	editor?: { getLine(line: number): string };
+	file?: { path: string } | null;
 	start?: { line: number; ch: number };
 	end?: { line: number; ch: number };
+}
+
+/** VC 候选词里本插件用得到的部分（`CustomDictionaryWord`）。 */
+export interface VcWordLike {
+	value?: string;
+	description?: string;
+	insertedText?: string;
+	createdPath?: string;
 }
 
 /** VC 建议框实例里本插件要套过滤的部分（`AutoCompleteSuggest`，非公开结构）。 */
@@ -547,23 +558,37 @@ interface VcSuggesterLike {
 }
 
 /**
- * 给 VC 的建议框套一层过滤：在本插件规则判定为「不该建议标题」的位置（标题行、`[[` 里、`#` 标签后、
- * 紧跟 `[`，见 headingtrigger.ts `isBlockedContext`），把候选里来自本插件词典的词去掉，VC 自己的
- * 其他候选照常（testplan Q46）。
+ * 从本插件词典词条的插入文本 `[[链接文本#锚点|标题]]` 里取出锚点（取不出返回 null）。
+ * 锚点经 `stripIllegal` 处理过，不含 `#` `|` `[` `]`，按第一个 `#` 与最后一个 `|` 切即可。
+ */
+export function anchorOfDictionaryLink(insertedText: string | undefined): string | null {
+	if (!insertedText?.startsWith("[[") || !insertedText.endsWith("]]")) {
+		return null;
+	}
+	const inner = insertedText.slice(2, -2);
+	const hash = inner.indexOf("#");
+	const pipe = inner.lastIndexOf("|");
+	return hash >= 0 && pipe > hash ? inner.slice(hash + 1, pipe) : null;
+}
+
+/**
+ * 给 VC 的建议框套一层过滤：对候选里**来自本插件词典**的每个词问一次 `shouldDrop`，为真就去掉；VC 自己的
+ * 其他候选原样保留（testplan Q46 / Q48）。
  *
- * 用户实测（2026-10-18）：在 `# haha` 标题行里打字，VC 框把正在写的这个标题本身列成候选，选中后
- * 链接被插进标题，标题文字变了又被收录成新的候选，再选再套一层。本插件自己的建议框在标题行里从不
- * 弹（Q7），但标题写进 VC 词典后由 VC 匹配，VC 不知道这条规则，词典格式也没有逐词的触发条件。
+ * 为什么需要：标题写进 VC 词典后由 VC 匹配、VC 弹框，VC 不知道本插件的规则，也只认它内存里那份词典——
+ * 用户实测两件事：在 `# haha` 标题行里打字，VC 把正在写的标题本身列成候选，选中后链接插进标题、越套越长；
+ * 改了标题后接着在正文打字，VC 框里还挂着已经不存在的旧标题。是否去掉由调用方（main.ts `shouldDropVcWord`）
+ * 对照实时索引判断：`[[` / `#` / `[` 上下文、正在写的那一条、已不在索引里（过期）。
  *
- * 套的是实例上的 `getSuggestions`（Obsidian 每次取候选都调它，VC 返回 Promise）；已套过不重复。
- * VC 重开会换一个新实例，调用方在每次键入时调本函数自检补上；返回的还原函数在本插件卸载时调用。
+ * 套的是实例上的 `getSuggestions`（Obsidian 每次取候选都调它，VC 返回 Promise）；已套过不重复。VC 重开会
+ * 换一个新实例，调用方在每次键入时调本函数自检补上；返回的还原函数在本插件卸载时调用。
  *
  * @returns 本次新套上时返回还原函数；已套过 / VC 没启用 / 结构认不出返回 null。
  */
 export function installVcContextFilter(
 	app: App,
 	dictionaryPath: string,
-	isBlocked: (line: string, before: string, tokenStart: number) => boolean,
+	shouldDrop: (word: VcWordLike, ctx: VcSuggestContext) => boolean,
 ): (() => void) | null {
 	const vc = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as
 		| { suggester?: VcSuggesterLike }
@@ -573,25 +598,18 @@ export function installVcContextFilter(
 		return null;
 	}
 	const original = sg.getSuggestions;
-	const blockedAt = (ctx: VcSuggestContext): boolean => {
-		if (!ctx?.editor || !ctx.start || !ctx.end) {
-			return false;
-		}
-		const line = ctx.editor.getLine(ctx.end.line);
-		return isBlocked(line, line.slice(0, ctx.end.ch), ctx.start.ch);
-	};
-	const dropOurs = (words: unknown): unknown =>
+	const filter = (words: unknown, ctx: VcSuggestContext): unknown =>
 		Array.isArray(words)
 			? words.filter(
-					(w) => (w as { createdPath?: string } | null)?.createdPath !== dictionaryPath,
+					(w: VcWordLike | null) =>
+						w?.createdPath !== dictionaryPath || !shouldDrop(w, ctx),
 				)
 			: words;
 	sg.getSuggestions = function (this: unknown, ctx: VcSuggestContext): unknown {
 		const result: unknown = original.call(this, ctx);
-		if (!blockedAt(ctx)) {
-			return result;
-		}
-		return result instanceof Promise ? result.then(dropOurs) : dropOurs(result);
+		return result instanceof Promise
+			? result.then((words) => filter(words, ctx))
+			: filter(result, ctx);
 	};
 	const restore = (): void => {
 		sg.getSuggestions = original;

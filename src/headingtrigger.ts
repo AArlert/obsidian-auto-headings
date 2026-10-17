@@ -177,22 +177,18 @@ function candidateHits(c: TriggerCandidate, query: string, probe: TriggerIndexPr
 
 /**
  * 是否应放弃本次触发（方案 §3.4 的「礼貌规则」，避免与 Obsidian 原生补全抢戏）：
- * ① 当前行本身是 ATX 标题行——不该把「正在写的标题文本」当成「正文里提到了某标题」来建议链接；
- * ② 紧邻 `#`——标签输入上下文，让给 Obsidian 原生标签补全；
- * ③ 处于未闭合的 `[[` 内——wikilink 输入上下文，让给 Obsidian 原生链接补全（最高优先级）；
- * ④ 紧邻单个 `[`——markdown 链接文本上下文，保守让开（v1 不细分）。
+ * ① 紧邻 `#`——标签输入上下文，让给 Obsidian 原生标签补全；
+ * ② 处于未闭合的 `[[` 内——wikilink 输入上下文，让给 Obsidian 原生链接补全（最高优先级）；
+ * ③ 紧邻单个 `[`——markdown 链接文本上下文，保守让开（v1 不细分）。
+ *
+ * **标题行不再整行屏蔽**（testplan Q7，2026-10-18 用户定）：1.0.26 起为防「把正在写的标题建议给自己」整行
+ * 不弹，但用户确有在标题里链到别的标题（含同一篇笔记的其他标题）的需要。要排除的只有正在写的那一条，由调用方
+ * 按「当前文件 + 当前行」从候选里剔除（见 headingsuggest.ts 与 main.ts `shouldDropVcWord`）。
  *
  * 已知限制（v1 明确接受）：围栏代码块只做同行内反引号不做全文件级扫描（onTrigger 每次按键
  * 都跑，O(文件行数) 不划算），跨行围栏块内部可能弹出建议，见方案 §10。
  */
-export function isBlockedContext(
-	fullLineText: string,
-	lineTextBeforeCursor: string,
-	tokenStart: number,
-): boolean {
-	if (/^\s{0,3}#{1,6}(\s|$)/.test(fullLineText)) {
-		return true;
-	}
+export function isBlockedContext(lineTextBeforeCursor: string, tokenStart: number): boolean {
 	const before = lineTextBeforeCursor.slice(0, tokenStart);
 	if (before.endsWith("#")) {
 		return true;

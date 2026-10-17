@@ -44,6 +44,35 @@ export function isExcalidrawFile(path: string, content: string): boolean {
 	return !!fm && /^excalidraw-plugin\s*:/m.test(fm[1]);
 }
 
+/**
+ * 查询时要排除的那一条：某文件的某一行（testplan Q7：正在写的标题不建议给它自己）。行号取自上次收录该文件时，
+ * 用户正在这一行打字时它基本不会漂移。
+ */
+export interface ExcludeAt {
+	path: string;
+	lineIndex: number;
+}
+
+const isExcluded = (e: HeadingIndexEntry, ex: ExcludeAt | undefined): boolean =>
+	!!ex && e.path === ex.path && e.lineIndex === ex.lineIndex;
+
+/** 「标题这一层」有没有变（只看会进词典的字段，不看行号——正文增删行只会让行号漂移）。 */
+function sameHeadings(a: readonly HeadingIndexEntry[], b: readonly HeadingIndexEntry[]): boolean {
+	if (a.length !== b.length) {
+		return false;
+	}
+	for (let i = 0; i < a.length; i++) {
+		if (
+			a[i].matchKey !== b[i].matchKey ||
+			a[i].anchor !== b[i].anchor ||
+			a[i].displayText !== b[i].displayText
+		) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /** vault 标题索引中的一条标题记录。 */
 export interface HeadingIndexEntry {
 	/** 文件的 vault 相对路径（含 .md 后缀），即 TFile.path。 */
@@ -197,8 +226,11 @@ export class HeadingIndex {
 		this.sorted = all;
 	}
 
-	/** 增量：单文件内容变化（新建/修改）后调用，替换该文件在索引中的全部条目。 */
-	setFile(path: string, basename: string, content: string): void {
+	/**
+	 * 增量：单文件内容变化（新建/修改）后调用，替换该文件在索引中的全部条目。
+	 * @returns 该文件的标题（文本 / 锚点）是否真的变了——只改正文时为 false，调用方据此决定要不要同步 VC 词典。
+	 */
+	setFile(path: string, basename: string, content: string): boolean {
 		const entries = buildEntriesForFile(path, basename, content);
 		const old = this.byFile.get(path) ?? [];
 		const room = Math.max(0, this.maxIndexed - (this.totalCount - old.length));
@@ -217,6 +249,7 @@ export class HeadingIndex {
 			// 同一文件时相同 key 的条目顺序反转，与参考模型稳定排序不一致）。
 			this.sorted.splice(upperBoundEntry(this.sorted, e), 0, e);
 		}
+		return !sameHeadings(old, taken);
 	}
 
 	/** 增量：文件删除。 */
@@ -260,8 +293,8 @@ export class HeadingIndex {
 		this.byFile.set(newPath, entries);
 	}
 
-	/** 前缀查询：返回 matchKey 以 normalizedQuery 为前缀的条目，最多 limit 条。 */
-	queryPrefix(normalizedQuery: string, limit: number): HeadingIndexEntry[] {
+	/** 前缀查询：返回 matchKey 以 normalizedQuery 为前缀的条目（排除 `exclude` 那一条），最多 limit 条。 */
+	queryPrefix(normalizedQuery: string, limit: number, exclude?: ExcludeAt): HeadingIndexEntry[] {
 		if (!normalizedQuery) {
 			return [];
 		}
@@ -272,7 +305,7 @@ export class HeadingIndex {
 			if (!e.matchKey.startsWith(normalizedQuery)) {
 				break; // 排序保证一旦不匹配即可停止
 			}
-			if (!this.isGenericKey(e.matchKey)) {
+			if (!this.isGenericKey(e.matchKey) && !isExcluded(e, exclude)) {
 				out.push(e);
 			}
 		}
@@ -283,16 +316,16 @@ export class HeadingIndex {
 	 * onTrigger 专用的廉价判定：是否存在至少一条**非套话**的前缀匹配（不收集结果）。
 	 * 跳过套话标题时最坏要扫过同前缀的全部套话条目，规模受「同前缀标题数」约束，可接受。
 	 */
-	hasAnyPrefixMatch(normalizedQuery: string): boolean {
+	hasAnyPrefixMatch(normalizedQuery: string, exclude?: ExcludeAt): boolean {
 		if (!normalizedQuery) {
 			return false;
 		}
 		for (let i = lowerBoundByKey(this.sorted, normalizedQuery); i < this.sorted.length; i++) {
-			const key = this.sorted[i].matchKey;
-			if (!key.startsWith(normalizedQuery)) {
+			const e = this.sorted[i];
+			if (!e.matchKey.startsWith(normalizedQuery)) {
 				return false;
 			}
-			if (!this.isGenericKey(key)) {
+			if (!this.isGenericKey(e.matchKey) && !isExcluded(e, exclude)) {
 				return true;
 			}
 		}
@@ -300,12 +333,25 @@ export class HeadingIndex {
 	}
 
 	/** onTrigger 专用：是否存在 matchKey 恰好等于查询串的**非套话**条目（完整命中，testplan Q28/Q30）。 */
-	hasExactMatch(normalizedQuery: string): boolean {
+	hasExactMatch(normalizedQuery: string, exclude?: ExcludeAt): boolean {
 		if (!normalizedQuery || this.isGenericKey(normalizedQuery)) {
 			return false;
 		}
-		const idx = lowerBoundByKey(this.sorted, normalizedQuery);
-		return idx < this.sorted.length && this.sorted[idx].matchKey === normalizedQuery;
+		for (let i = lowerBoundByKey(this.sorted, normalizedQuery); i < this.sorted.length; i++) {
+			const e = this.sorted[i];
+			if (e.matchKey !== normalizedQuery) {
+				return false;
+			}
+			if (!isExcluded(e, exclude)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** 某文件里锚点为 `anchor` 的条目（VC 候选核对「这个标题还在不在」用，testplan Q48）。 */
+	findByAnchor(path: string, anchor: string): HeadingIndexEntry | undefined {
+		return this.byFile.get(path)?.find((e) => e.anchor === anchor);
 	}
 
 	/** 含该标题的文件数（0 = 索引里没有）。 */

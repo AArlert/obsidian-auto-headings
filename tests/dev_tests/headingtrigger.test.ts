@@ -202,31 +202,29 @@ describe("resolveTriggerQuery：命中规则（Q22 / Q27 / Q28 / Q30 / Q31）", 
 });
 
 describe("isBlockedContext：上下文屏蔽（礼貌规则）", () => {
-	it("光标所在整行是 ATX 标题行：屏蔽（Q7 逻辑面）", () => {
-		expect(isBlockedContext("## 正在写的标题", "## 正在写的", 2)).toBe(true);
-		// CommonMark：ATX 标题最多缩进 3 个空格（4 空格是代码块，不是标题行，不屏蔽）。
-		expect(isBlockedContext("   ### 缩进标题", "   ### 缩进标", 3)).toBe(true);
-		expect(isBlockedContext("    ### 四空格缩进", "    ### 四空格缩进", 4)).toBe(false);
+	it("标题行不再整行屏蔽（Q7，2026-10-18 用户定）：只排除正在写的那一条，由调用方处理", () => {
+		expect(isBlockedContext("## 正在写的", 3)).toBe(false);
+		expect(isBlockedContext("# 见 haha", 4)).toBe(false);
 	});
 
 	it("紧邻 #（标签输入）：屏蔽", () => {
-		expect(isBlockedContext("正文 #", "正文 #", 4)).toBe(true);
+		expect(isBlockedContext("正文 #", 4)).toBe(true);
 	});
 
 	it("处于未闭合 [[ 内：屏蔽（Q8 逻辑面，最高优先级礼貌规则）", () => {
-		expect(isBlockedContext("打 [[交叉", "打 [[交叉", 4)).toBe(true);
+		expect(isBlockedContext("打 [[交叉", 4)).toBe(true);
 	});
 
 	it("已闭合 [[…]] 之后正常打字：不屏蔽", () => {
-		expect(isBlockedContext("见 [[笔记]] 交叉", "见 [[笔记]] 交", 8)).toBe(false);
+		expect(isBlockedContext("见 [[笔记]] 交", 8)).toBe(false);
 	});
 
 	it("紧邻单个 [（markdown 链接上下文）：屏蔽", () => {
-		expect(isBlockedContext("看 [交叉", "看 [交", 3)).toBe(true);
+		expect(isBlockedContext("看 [交", 3)).toBe(true);
 	});
 
 	it("普通正文：不屏蔽", () => {
-		expect(isBlockedContext("这里提到交叉矩阵", "这里提到交叉矩", 5)).toBe(false);
+		expect(isBlockedContext("这里提到交叉矩", 5)).toBe(false);
 	});
 });
 

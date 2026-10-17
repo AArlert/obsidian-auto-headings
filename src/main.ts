@@ -84,6 +84,7 @@ import { HeadingLinkSuggest } from "./headingsuggest";
 import { isBlockedContext } from "./headingtrigger";
 import {
 	buildVcDictionaryJson,
+	anchorOfDictionaryLink,
 	enableAutoIntegration,
 	installVcContextFilter,
 	isDictionaryRegisteredInVc,
@@ -92,8 +93,11 @@ import {
 	replaceVcDictionaryWords,
 	tryReloadVcDictionaries,
 	VC_DICTIONARY_THROTTLE_MS,
+	VC_MEMORY_SYNC_MS,
 	vcDictionaryPath,
 	vcSuggestInstance,
+	type VcSuggestContext,
+	type VcWordLike,
 } from "./vcintegration";
 
 /** 批量改写单个文件的结果。 */
@@ -161,6 +165,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 	private vcDictionaryTimer: number | null = null;
 	/** 上次写出的词典 JSON（1.0.27 轻量改进：内容未变不写盘，避免 iCloud/同步无谓上传）。 */
 	private lastVcDictionaryJson: string | null = null;
+	/** 上次成功同步进 VC 内存的词典 JSON（内容未变不重建 VC 的索引）。 */
+	private lastVcMemoryJson: string | null = null;
+	/** VC 内存同步的定时（不重置，见 scheduleVcDictionaryWrite）。 */
+	private vcMemoryTimer: number | null = null;
 	/** 词典条数截断的一次性 Notice 是否已弹过（不重复打扰）。 */
 	private vcTruncationNoticed = false;
 
@@ -457,6 +465,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 				this.app.vault.on("delete", (f) => {
 					this.headingIndex.removeFile(f.path);
 					this.headingLinkCounts.removeSource(f.path);
+					this.scheduleVcDictionaryWrite();
 				}),
 			);
 			this.registerEvent(
@@ -468,6 +477,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 						this.headingIndex.removeFile(oldPath);
 						this.headingLinkCounts.removeSource(oldPath);
 					}
+					this.scheduleVcDictionaryWrite(); // 路径 / 文件名变了，词典里的链接要跟着变
 				}),
 			);
 			const indexReady = this.buildInitialHeadingIndex();
@@ -499,10 +509,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.headingIndexTimers.clear();
 		this.headingIndex.clear();
 		this.headingLinkCounts.clear();
-		if (this.vcDictionaryTimer !== null) {
-			window.clearTimeout(this.vcDictionaryTimer);
-			this.vcDictionaryTimer = null;
-		}
+		this.clearVcSyncTimers();
 	}
 
 	/**
@@ -530,6 +537,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			this.headingLinkCounts.clear();
 			// 同 setVcIntegrationOff：清写盘缓存，下次开启必须重新落盘。
 			this.lastVcDictionaryJson = null;
+			this.lastVcMemoryJson = null;
 		}
 	}
 
@@ -586,12 +594,10 @@ export default class AutoHeadingsPlugin extends Plugin {
 	async setVcIntegrationOff(): Promise<void> {
 		this.settings.vcIntegrationMode = "off";
 		await this.saveSettings();
-		if (this.vcDictionaryTimer !== null) {
-			window.clearTimeout(this.vcDictionaryTimer);
-			this.vcDictionaryTimer = null;
-		}
+		this.clearVcSyncTimers();
 		// 清掉写盘缓存：用户可能在关闭期间手动删除/改动词典文件，下次开启必须重新落盘。
 		this.lastVcDictionaryJson = null;
+		this.lastVcMemoryJson = null;
 	}
 
 	/**
@@ -617,14 +623,40 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (this.settings.vcIntegrationMode === "off") {
 			return;
 		}
-		const restore = installVcContextFilter(
-			this.app,
-			this.vcDictionaryFilePath(),
-			isBlockedContext,
+		const restore = installVcContextFilter(this.app, this.vcDictionaryFilePath(), (word, ctx) =>
+			this.shouldDropVcWord(word, ctx),
 		);
 		if (restore) {
 			this.register(restore); // 本插件卸载时还原 VC 的方法
 		}
+	}
+
+	/**
+	 * VC 候选里一个**本插件词典**的词要不要去掉（testplan Q46 / Q48）。对照的是本插件的实时索引，所以不受
+	 * VC 词典同步快慢影响：
+	 * - 光标处在 `[[` / `#` / `[` 上下文（让给 Obsidian 原生补全，与本插件建议框同一判据）；
+	 * - 指向的标题已不在索引里（改名 / 删除后 VC 内存还没同步——用户实测正文里冒出已不存在的旧标题）；
+	 * - 已成套话标题；
+	 * - 正是光标所在的这一行（正在写的标题，不建议给它自己；同一篇笔记的其他标题照常）。
+	 * 词条认不出（不是本插件生成的形状）时保留，交给 VC。
+	 */
+	private shouldDropVcWord(word: VcWordLike, ctx: VcSuggestContext): boolean {
+		if (ctx.editor && ctx.start && ctx.end) {
+			const line = ctx.editor.getLine(ctx.end.line);
+			if (isBlockedContext(line.slice(0, ctx.end.ch), ctx.start.ch)) {
+				return true;
+			}
+		}
+		const path = word.description;
+		const anchor = anchorOfDictionaryLink(word.insertedText);
+		if (!path || anchor === null) {
+			return false;
+		}
+		const entry = this.headingIndex.findByAnchor(path, anchor);
+		if (!entry || this.headingIndex.isGenericKey(entry.matchKey)) {
+			return true;
+		}
+		return ctx.file?.path === path && ctx.start?.line === entry.lineIndex;
 	}
 
 	/** 启用中的 VC 是否还挂着本插件的词典（切回「不联动」时问要不要移除、面板过期提示，Q35/Q36）。 */
@@ -960,11 +992,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return;
 		}
 		try {
-			this.headingIndex.setFile(f.path, f.basename, await this.app.vault.cachedRead(f));
+			if (this.headingIndex.setFile(f.path, f.basename, await this.app.vault.cachedRead(f))) {
+				this.scheduleVcDictionaryWrite(); // 只在标题真的变了时（Q48）
+			}
 		} catch {
 			/* 忽略：下次 modify 事件会重试 */
 		}
-		this.scheduleVcDictionaryWrite();
 	}
 
 	/**
@@ -989,37 +1022,58 @@ export default class AutoHeadingsPlugin extends Plugin {
 			if (info.file?.path !== path) {
 				return; // 与 scheduleRenumber 同一条 J15 教训：该叶子已切到别的文件，本轮作废
 			}
-			this.headingIndex.setFile(path, file.basename ?? linkBasename(path), editor.getValue());
-			this.scheduleVcDictionaryWrite();
+			const changed = this.headingIndex.setFile(
+				path,
+				file.basename ?? linkBasename(path),
+				editor.getValue(),
+			);
+			if (changed) {
+				this.scheduleVcDictionaryWrite(); // 正文打字不再推后 VC 同步（Q48）
+			}
 		}, this.settings.debounceDelay); // 复用已有防抖延迟设置，不新增设置项
 		this.headingIndexTimers.set(path, timer);
 	}
 
 	/**
-	 * M13：VC 词典重写（全局 3000ms 节流，见 vcintegration.ts §5.8）——重写一个可能几千条目的
-	 * JSON 文件比更新内存索引昂贵得多，没必要跟着每次小改动都写盘。「不联动」时完全不生成/维护。
+	 * M13：标题有变化后安排 VC 侧更新（testplan Q48，2026-10-18 用户实测「改了标题接着打字，VC 里还挂着旧标题」）。
+	 *
+	 * 两件事、两个节奏，都是**不重置**的定时：已经在等的不再往后推，到点时读当时最新的索引——原先每次编辑都把
+	 * 3 秒计时重置，只要不停手 3 秒就永远不同步；且正文打字也会触发，等于一直在推。
+	 * - VC 内存（{@link syncVcMemory}）：{@link VC_MEMORY_SYNC_MS}，便宜（只换本插件那部分词），要快；
+	 * - 词典文件（{@link writeVcDictionaryFile}）：{@link VC_DICTIONARY_THROTTLE_MS}，文件随 iCloud 等同步整个上传，慢一点。
+	 * 调用方只在标题真的变了（`setFile` 返回 true、删除、改名）时调；「不联动」时完全不生成 / 维护。
 	 */
 	private scheduleVcDictionaryWrite(): void {
 		if (this.settings.vcIntegrationMode === "off" || !this.settings.headingLinkSuggestEnabled) {
 			return;
 		}
-		if (this.vcDictionaryTimer !== null) {
-			window.clearTimeout(this.vcDictionaryTimer);
+		if (this.vcMemoryTimer === null) {
+			this.vcMemoryTimer = window.setTimeout(() => {
+				this.vcMemoryTimer = null;
+				void this.syncVcMemory(this.buildVcDictionary().json);
+			}, VC_MEMORY_SYNC_MS);
 		}
-		this.vcDictionaryTimer = window.setTimeout(() => {
-			this.vcDictionaryTimer = null;
-			void this.writeVcDictionary();
-		}, VC_DICTIONARY_THROTTLE_MS);
+		if (this.vcDictionaryTimer === null) {
+			this.vcDictionaryTimer = window.setTimeout(() => {
+				this.vcDictionaryTimer = null;
+				void this.writeVcDictionaryFile(this.buildVcDictionary());
+			}, VC_DICTIONARY_THROTTLE_MS);
+		}
 	}
 
-	/**
-	 * M13：把当前索引全量写成 VC 词典 JSON（手动/自动模式共用）。
-	 *
-	 * **内容未变不写盘**（1.0.27 轻量改进）：词典在 .obsidian 内、随 iCloud 等同步整个 vault，
-	 * 每次全量重写都会触发整文件重新上传——内存缓存上次写出的字符串，相同则跳过
-	 * `adapter.write`（标题无变化时同步零流量）。写失败静默，下次索引变更会重试。
-	 */
-	private async writeVcDictionary(): Promise<void> {
+	/** 清掉两个待执行的 VC 同步定时（切回「不联动」、关闭建议、卸载时）。 */
+	private clearVcSyncTimers(): void {
+		for (const key of ["vcMemoryTimer", "vcDictionaryTimer"] as const) {
+			const timer = this[key];
+			if (timer !== null) {
+				window.clearTimeout(timer);
+				this[key] = null;
+			}
+		}
+	}
+
+	/** 把当前索引（剔除套话标题）生成 VC 词典 JSON。 */
+	private buildVcDictionary(): ReturnType<typeof buildVcDictionaryJson> {
 		// 链接文本按 Obsidian 的规则：文件名唯一写文件名，重名写路径（Q47；词典不知道将来插在哪篇笔记里，
 		// 故以空源路径求，重名一律写完整路径）。
 		const linktextOf = (e: HeadingIndexEntry): string => {
@@ -1028,25 +1082,49 @@ export default class AutoHeadingsPlugin extends Plugin {
 				? this.app.metadataCache.fileToLinktext(f, "", true)
 				: e.basename;
 		};
-		const { json, truncated, total } = buildVcDictionaryJson(
-			this.headingIndex.eligibleEntries(),
-			linktextOf,
-		);
-		if (json === this.lastVcDictionaryJson) {
-			return; // 内容未变：不写盘（避免 iCloud/同步无谓上传）
+		return buildVcDictionaryJson(this.headingIndex.eligibleEntries(), linktextOf);
+	}
+
+	/**
+	 * M13：把当前索引全量写成 VC 词典并同步进 VC 内存（开启联动、启动同步时用；平时走 {@link scheduleVcDictionaryWrite}）。
+	 */
+	private async writeVcDictionary(): Promise<void> {
+		const dict = this.buildVcDictionary();
+		await this.writeVcDictionaryFile(dict);
+		await this.syncVcMemory(dict.json);
+	}
+
+	/**
+	 * 写词典文件。**内容未变不写盘**（1.0.27 轻量改进）：词典在 .obsidian 内、随 iCloud 等同步整个 vault，
+	 * 每次全量重写都会触发整文件重新上传。写失败静默，下次标题变化会重试。
+	 */
+	private async writeVcDictionaryFile(
+		dict: ReturnType<typeof buildVcDictionaryJson>,
+	): Promise<void> {
+		if (dict.json === this.lastVcDictionaryJson) {
+			return;
 		}
-		this.lastVcDictionaryJson = json;
+		this.lastVcDictionaryJson = dict.json;
 		try {
-			await this.app.vault.adapter.write(this.vcDictionaryFilePath(), json);
+			await this.app.vault.adapter.write(this.vcDictionaryFilePath(), dict.json);
 		} catch {
 			/* 写入失败静默忽略：下一次索引变更会重试 */
 		}
-		// VC 不会自己重读词典文件：把它内存里本插件的那部分换成最新内容（Q45，只动本插件的词）。
-		await replaceVcDictionaryWords(this.app, this.vcDictionaryFilePath(), json);
-		if (truncated && !this.vcTruncationNoticed) {
+		if (dict.truncated && !this.vcTruncationNoticed) {
 			// 词典条数上限（20,000）截断：一次性告知，不做静默丢弃。
 			this.vcTruncationNoticed = true;
-			new Notice(this.messages().noticeVcDictionaryTruncated(total));
+			new Notice(this.messages().noticeVcDictionaryTruncated(dict.total));
+		}
+	}
+
+	/** VC 不会自己重读词典文件：把它内存里本插件的那部分换成最新内容（Q45，只动本插件的词；内容未变不动）。 */
+	private async syncVcMemory(json: string): Promise<void> {
+		if (json === this.lastVcMemoryJson) {
+			return;
+		}
+		const result = await replaceVcDictionaryWords(this.app, this.vcDictionaryFilePath(), json);
+		if (result === "ok") {
+			this.lastVcMemoryJson = json;
 		}
 	}
 
