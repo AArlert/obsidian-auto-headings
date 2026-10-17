@@ -15,7 +15,8 @@
  * - `hasAnyPrefixMatch` 一致；
  * - **Q22 后缀触发解析**（1.0.29）：对一组「无标点连写」样本，`resolveTriggerQuery` 经索引
  *   二分选出的候选，与参考「候选序列 + 全量扫描」选出的候选一致，且 `start` 与 `text` 自洽
- *   （替换区间不会吃掉用户已打的前半截）。
+ *   （替换区间不会吃掉用户已打的前半截）。未发版起参考侧按「整段前缀 / 行内后缀完整命中」
+ *   两档判定（Q28），并对拍 `hasExactMatch`。
  *
  * 失败时抛错携带：种子 / 步号 / 操作轨迹 / 查询 / 两侧结果——照同一种子可复现（AAH_FUZZ_*）。
  */
@@ -53,6 +54,8 @@ const TITLE_POOL = [
 ];
 /** 对拍查询集：命中前缀 / 未命中 / 大小写变体 / 空串。 */
 const QUERIES = [
+	"交叉矩阵",
+	"总结",
 	"交",
 	"交叉",
 	"交叉矩",
@@ -82,6 +85,12 @@ const TYPED_SAMPLES = [
 	"交叉矩阵",
 	"一笔事务",
 	"zzz",
+	// Q27/Q28（issue #10）：整段前缀命中 / 行内后缀只是标题前缀 / 两字完整标题过不了门槛
+	"交叉矩阵与",
+	"交叉矩",
+	"一个交叉矩",
+	"参考文献",
+	"这是总结的附录",
 ];
 
 /** 参考模型排序（与 DUT 的 sorted 同 key：matchKey 主键 + path 次级键）。 */
@@ -92,17 +101,12 @@ function compareRef(a: HeadingIndexEntry, b: HeadingIndexEntry): number {
 	return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 }
 
-/** 参考模型的朴素前缀查询。 */
-function refQuery(
-	ref: Map<string, HeadingIndexEntry[]>,
-	query: string,
-	limit: number,
-): HeadingIndexEntry[] {
+/** 参考模型的朴素前缀查询（`flat` 由调用方每步展平一次复用，见 check）。 */
+function refQuery(flat: HeadingIndexEntry[], query: string, limit: number): HeadingIndexEntry[] {
 	if (!query) {
 		return [];
 	}
-	return [...ref.values()]
-		.flat()
+	return flat
 		.filter((e) => e.matchKey.startsWith(query))
 		.sort(compareRef)
 		.slice(0, limit);
@@ -111,11 +115,13 @@ function refQuery(
 const basenameOf = (p: string) => p.split("/").pop()?.replace(/\.md$/i, "") ?? p;
 
 /** 参考模型：全量扫一遍，判断有没有 matchKey 以 query 开头的条目。 */
-function refHasPrefix(ref: Map<string, HeadingIndexEntry[]>, query: string): boolean {
-	if (!query) {
-		return false;
-	}
-	return [...ref.values()].flat().some((e) => e.matchKey.startsWith(query));
+function refHasPrefix(flat: HeadingIndexEntry[], query: string): boolean {
+	return !!query && flat.some((e) => e.matchKey.startsWith(query));
+}
+
+/** 参考模型的朴素完整匹配判定（Q28 行内后缀触发）。 */
+function refHasExact(flat: HeadingIndexEntry[], query: string): boolean {
+	return !!query && flat.some((e) => e.matchKey === query);
 }
 
 /** 用随机标题生成文件内容。 */
@@ -155,7 +161,7 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 			);
 		}
 		for (const q of QUERIES) {
-			const expected = refQuery(ref, q, 20);
+			const expected = refQuery(flat, q, 20);
 			const actual = dut.queryPrefix(q, 20);
 			const key = (e: HeadingIndexEntry) => `${e.path}|${e.displayText}|${e.anchor}`;
 			if (actual.map(key).join("\n") !== expected.map(key).join("\n")) {
@@ -163,6 +169,11 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 					`[M13 压测] seed=${seed} ${label}：queryPrefix(${JSON.stringify(q)}) 不一致\n` +
 						`DUT: ${JSON.stringify(actual.map(key))}\n参考: ${JSON.stringify(expected.map(key))}\n` +
 						`轨迹：${trace.join(" -> ")}`,
+				);
+			}
+			if (dut.hasExactMatch(q) !== refHasExact(flat, q)) {
+				throw new Error(
+					`[M13 压测] seed=${seed} ${label}：hasExactMatch(${JSON.stringify(q)}) 不一致\n轨迹：${trace.join(" -> ")}`,
 				);
 			}
 			if (dut.hasAnyPrefixMatch(q) !== expected.length > 0) {
@@ -176,11 +187,13 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 		// 额外断言 start 自洽（`sample.slice(start) === text`）——这是「接受建议只替换被匹配上
 		// 的那一段、不吃掉前面已有的字」的地基，错了就是用户文本被吞。
 		for (const sample of TYPED_SAMPLES) {
-			const hit = resolveTriggerQuery(sample, 0, (q) => dut.hasAnyPrefixMatch(q));
+			const hit = resolveTriggerQuery(sample, 0, dut);
+			// 参考：整段（start 0）按前缀、行内后缀按完整标题（Q28）。
 			const expected =
-				suffixCandidates(sample, 0).find((c) =>
-					refHasPrefix(ref, normalizeForWhitelist(c.text)),
-				) ?? null;
+				suffixCandidates(sample, 0).find((c) => {
+					const q = normalizeForWhitelist(c.text);
+					return c.start === 0 ? refHasPrefix(flat, q) : refHasExact(flat, q);
+				}) ?? null;
 			const shape = (v: { text: string; start: number } | null) =>
 				v ? `${v.text}@${v.start}` : "null";
 			if (shape(hit) !== shape(expected)) {

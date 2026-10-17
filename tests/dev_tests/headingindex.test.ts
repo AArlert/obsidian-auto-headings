@@ -88,6 +88,17 @@ describe("HeadingIndex：loadInitial / 查询", () => {
 		]);
 	});
 
+	it("hasExactMatch：只认 matchKey 完全相等，前缀不算（Q28 行内后缀触发）", () => {
+		const idx = new HeadingIndex();
+		idx.loadInitial([
+			{ path: "a.md", basename: "a", content: "## 交叉矩阵\n## 交叉矩阵与其应用" },
+		]);
+		expect(idx.hasExactMatch("交叉矩阵")).toBe(true);
+		expect(idx.hasExactMatch("交叉矩")).toBe(false);
+		expect(idx.hasExactMatch("交叉矩阵与")).toBe(false);
+		expect(idx.hasExactMatch("")).toBe(false);
+	});
+
 	it("queryPrefix 空查询返回空、limit 生效", () => {
 		const idx = new HeadingIndex();
 		idx.loadInitial([{ path: "a.md", basename: "a", content: "## 甲\n## 乙\n## 丙" }]);

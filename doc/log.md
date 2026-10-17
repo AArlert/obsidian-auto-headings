@@ -15,6 +15,38 @@
 
 ---
 
+## 2026-10-18 修 issue #10：标题链接建议误触发（不 bump，交接：fix/heading-suggest-trigger → master）
+
+### 做了什么
+
+- 外部用户报 [issue #10](https://github.com/AArlert/obsidian-auto-headings/issues/10)：随便打「项目」「json」
+  就弹框，接着按空格会误选。根因是两层猜测叠加：触发门槛只有 2 字符，行内连写截出的后缀也按前缀匹配
+  （截图里「…当前项目」的尾巴「项目」撞上【项目级…】）。
+- `headingtrigger.ts`：`MIN_QUERY_LENGTH = 2` 换成按字数加权的 `MIN_TRIGGER_WEIGHT = 6`（中日韩字符记 2、
+  其他记 1）；`resolveTriggerQuery` 改收 `TriggerIndexProbe`，整段按前缀、行内后缀只认完整标题
+  （新增 `HeadingIndex.hasExactMatch`）。`headingsuggest.ts`：Tab 加 `isComposing` 判定。
+- testplan 新增 Q27–Q29、改写 Q22 例子；spec §3.23 记取舍；使用指南双语补触发说明。
+- UVM 标题索引对拍改为两档判定并对拍 `hasExactMatch`；参考侧改成每步只展平一次——否则 `test:fuzz` 的
+  M13 用例同步跑到 56s，触发 vitest `onTaskUpdate` RPC 超时（测试本身全过，但会报未处理错误）。
+
+### 没做什么
+
+- 「空格误选」没复现、没修：两侧代码都没绑空格（核对了 Obsidian 1.10.6 app.js，建议框只注册 Enter / Tab
+  且判 `isComposing`）。issue 回复草稿（请报告者补充系统 / 输入法 / 其他补全插件信息）已交用户，由用户贴出。
+- 没发版、没真机测；Q27–Q29 的真机部分仍 🔲。
+- 取舍要用户知悉：【事务】【总结】这类两字标题不再触发（1.0.29 的 Q22 原例因此改写）。
+
+### 下一步
+
+- 真机验 Q27–Q29（建议推 `1.2.4-beta.1` 走 BRAT），然后发 1.2.4 并回复 / 关闭 issue #10；报告者补了
+  环境信息再看空格问题。之后回到 M17。
+
+### 验证方式
+
+- `npm run check`（唯一失败为已知的 Windows ICU 排序假红 `whitelist.test.ts`），`npm run test:fuzz` 全绿无超时。
+
+---
+
 ## 2026-10-08 登记 M17：仅显示模式固化 + 阅读视图 live TOC（仅文档，不 bump，交接：master）
 
 ### 做了什么
@@ -59,26 +91,3 @@
 ### 验证方式
 
 - `npm run docs`（索引与链接一致性校验）。
-
----
-
-## 2026-10-08 发版 1.2.3：笔记内入口（M16）+ 商店审查清理（交接：feat/1.3.0-note-entry → master，tag 1.2.3）
-
-### 做了什么
-
-- 用户在 test 库确认右键菜单正常后要求发版，**版本号按用户定为 1.2.3**（原计划 1.3.0），从 master 发。
-- 发版前最后一改：「本篇」菜单的系统 emoji 换成 Obsidian 原生 Lucide 图标（与标题菜单一致：map-pin / repeat / circle-check / ban / file-text / refresh-cw / clipboard-list / eraser / undo-2），spec 3.24、testplan S28 同步。
-- `npm run bump 1.2.3`；写 [`release-notes/1.2.3.md`](./release-notes/1.2.3.md)；testplan「未发版」→ 1.2.3。
-
-### 没做什么
-
-- 上两块列的真机未测项（历史弹窗、整节升级越界、手机端 ⋯、源码模式手柄、拖动向前 / 文末 / 自动滚动等）仍未逐项实测，用户已认可直接发版。
-- 1.13 声明式设置 API（`getSettingDefinitions`）未接，商店审查会继续给 Warning / Recommendation。
-
-### 下一步
-
-- master CI 绿后打 tag `1.2.3` 推送；用户到 Community Hub 维护者面板点「Check for new releases」送审。
-
-### 验证方式
-
-- `npm run preflight`；vitest 仅 `whitelist.test.ts:406` ICU 本机假红。

@@ -92,7 +92,7 @@ On by default, with a one-time explanatory notice the first time it actually rew
 
 ### Heading link suggestions
 
-Type the text of a heading (its words without the number) and matching headings from your vault pop up; pick one to replace what you typed with a link to it. Self-contained and on by default — no other plugin needed. Turn it off in **Settings → General → Heading link suggestions** and no heading index is built at all, so memory and CPU cost drop to zero.
+Type the text of a heading (its words without the number) and matching headings from your vault pop up; pick one to replace what you typed with a link to it. To keep common short words from popping up all the time, suggestions start at 3 CJK characters or 6 letters; in the middle of a run of text with no space or punctuation (common in Chinese and Japanese), the full heading text must be typed before it pops up. Self-contained and on by default — no other plugin needed. Turn it off in **Settings → General → Heading link suggestions** and no heading index is built at all, so memory and CPU cost drop to zero.
 
 **Alongside Various Complements (VC):** both plugins share Obsidian's single suggestion popup, so only one can show at a time. These settings appear only while VC is enabled:
 

@@ -251,6 +251,15 @@ export class HeadingIndex {
 		return idx < this.sorted.length && this.sorted[idx].matchKey.startsWith(normalizedQuery);
 	}
 
+	/** onTrigger 专用：是否存在 matchKey 恰好等于查询串的条目（行内后缀触发，testplan Q28）。 */
+	hasExactMatch(normalizedQuery: string): boolean {
+		if (!normalizedQuery) {
+			return false;
+		}
+		const idx = lowerBoundByKey(this.sorted, normalizedQuery);
+		return idx < this.sorted.length && this.sorted[idx].matchKey === normalizedQuery;
+	}
+
 	/** 全部条目（按 matchKey 排序的扁平视图副本），供 VC 词典生成等全量消费方使用。 */
 	allEntries(): HeadingIndexEntry[] {
 		return [...this.sorted];
