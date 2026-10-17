@@ -66,6 +66,10 @@ export function renderVcTargetSection(tab: AutoHeadingsSettingTab, containerEl: 
 	if (readVcDescriptionOnSuggestion(plugin.app)?.toLowerCase() === "none") {
 		containerEl.createEl("p", { cls: "ah-section-desc", text: t.vcDescriptionOffHint });
 	}
+	// 词典路径只有手动配置才用得上（自己填进 VC）；自动配置已替用户填好，再显示反倒像还有事要做。
+	if (plugin.settings.vcIntegrationMode !== "manual") {
+		return;
+	}
 	const path = plugin.vcDictionaryFilePath();
 	new Setting(containerEl)
 		.setName(t.vcDictionaryPathLabel)

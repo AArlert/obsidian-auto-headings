@@ -532,7 +532,7 @@ const zh: Messages = {
 	noticeHeadingIndexTruncated: (indexed) =>
 		`vault 过大，标题索引未完整构建（已索引 ${indexed} 个）；建议功能在已索引范围内可用。`,
 	vcTargetName: "建议显示在",
-	vcTargetDesc: "选 VC 的建议框时，标题会写进 VC 的自定义词典。",
+	vcTargetDesc: "本插件的框会盖住 VC 的；选 VC 则标题与 VC 的词同框。",
 	vcTargetPlugin: "本插件的建议框",
 	vcTargetVc: "Various Complements 的建议框",
 
@@ -938,7 +938,7 @@ const en: Messages = {
 	noticeHeadingIndexTruncated: (indexed) =>
 		`Vault too large: heading index built partially (${indexed} headings indexed); suggestions work within the indexed range.`,
 	vcTargetName: "Show suggestions in",
-	vcTargetDesc: "Choosing VC's popup writes headings into a VC custom dictionary.",
+	vcTargetDesc: "This plugin's popup covers VC's; with VC, headings join VC's popup.",
 	vcTargetPlugin: "This plugin's popup",
 	vcTargetVc: "Various Complements' popup",
 
