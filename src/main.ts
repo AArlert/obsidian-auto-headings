@@ -87,6 +87,7 @@ import {
 	isDictionaryRegisteredInVc,
 	moveBefore,
 	removeDictionaryFromVc,
+	replaceVcDictionaryWords,
 	tryReloadVcDictionaries,
 	VC_DICTIONARY_THROTTLE_MS,
 	vcDictionaryPath,
@@ -467,12 +468,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 					}
 				}),
 			);
-			void this.buildInitialHeadingIndex();
+			const indexReady = this.buildInitialHeadingIndex();
 			// M13（1.0.28）：已联动用户（升级/重启场景）的词典同步——VC 只在启动与
 			// 「Reload custom dictionaries」命令两个时机加载词典（已对照 VC 源码核实），
 			// 词典文件被我们重写后 VC 不会自动重读；启动时主动重写一次 + reload（带重试）。
+			// **必须等索引建完**（Q45 实测）：原先两者并行，同步抢先写出一本空词典，VC 重启后一个标题都没有。
 			if (this.settings.vcIntegrationMode !== "off") {
-				void this.syncVcDictionaryAfterStartup();
+				void indexReady.then(() => this.syncVcDictionaryAfterStartup());
 			}
 		});
 	}
@@ -1009,6 +1011,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		} catch {
 			/* 写入失败静默忽略：下一次索引变更会重试 */
 		}
+		// VC 不会自己重读词典文件：把它内存里本插件的那部分换成最新内容（Q45，只动本插件的词）。
+		await replaceVcDictionaryWords(this.app, this.vcDictionaryFilePath(), json);
 		if (truncated && !this.vcTruncationNoticed) {
 			// 词典条数上限（20,000）截断：一次性告知，不做静默丢弃。
 			this.vcTruncationNoticed = true;
@@ -2523,10 +2527,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 		// 未变（M14 纯文本改名）也要折，写回时的行级 diff 会自然识别出这一变化并写回。
 		const fold = this.foldSelfBacklinks(target, oldContent, newContent);
 		newContent = fold.content;
+		const cursor = editor.getCursor?.();
 		const selection = this.cursorSelectionForEmptyHeading(
 			oldContent,
 			newContent,
 			opts.protectLine,
+			cursor?.line === opts.protectLine ? cursor?.ch : undefined,
 		);
 		const changed = this.writeLineDiff(
 			editor,
@@ -2623,6 +2629,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		oldContent: string,
 		newContent: string,
 		protectLine: number | undefined,
+		cursorCh?: number,
 	): EditorRangeOrCaret | undefined {
 		if (protectLine === undefined) {
 			return undefined;
@@ -2640,10 +2647,23 @@ export default class AutoHeadingsPlugin extends Plugin {
 			return undefined; // 该行本轮未变，不干预用户当前光标/选区。
 		}
 		const heading = parseHeadings(newContent).find((h) => h.lineIndex === protectLine);
-		if (!heading || !heading.text.endsWith(WORD_JOINER)) {
+		if (!heading) {
 			return undefined;
 		}
-		return { from: { line: protectLine, ch: newLines[protectLine].length } };
+		if (heading.text.endsWith(WORD_JOINER)) {
+			return { from: { line: protectLine, ch: newLines[protectLine].length } };
+		}
+		// 已有正文、但编号**恰好插在光标处**（testplan J22：快捷键把一行文字变成标题时光标在正文开头）：
+		// 同样会被 CM6 留在编号前面，挪到编号之后。光标在别处一律不动。
+		if (cursorCh === undefined) {
+			return undefined;
+		}
+		const change = this.lineChange(protectLine, oldLines[protectLine], newLines[protectLine]);
+		const to = change.to ?? change.from;
+		if (change.from.ch === cursorCh && to.ch === cursorCh && change.text.length > 0) {
+			return { from: { line: protectLine, ch: cursorCh + change.text.length } };
+		}
+		return undefined;
 	}
 
 	/**

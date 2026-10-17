@@ -54,6 +54,17 @@ describe("buildVirtualDecorations：编辑视图装饰（testplan V26）", () =>
 		expect(doc.sliceString(p4, p4 + 2)).toBe("背景");
 	});
 
+	it("编号 widget 偏向前面（side < 0）：光标停在正文起点时显示在编号之后（testplan V46）", () => {
+		// 刚打完「## 」：正文为空，正文起点就是行尾、也是光标所在处。
+		const { doc, set } = decorate("## ");
+		const sides: number[] = [];
+		set.between(0, doc.length, (_from, _to, deco) => {
+			sides.push(deco.startSide);
+		});
+		expect(sides).toHaveLength(1);
+		expect(sides[0]).toBeLessThan(0);
+	});
+
 	it("残留前缀被同一个 widget 替换（残留样式），只显示一层编号", () => {
 		const line = `## ${WJ}7 ${WJ}概述`;
 		const { doc, set } = decorate(line);

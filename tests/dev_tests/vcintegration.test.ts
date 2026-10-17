@@ -19,6 +19,7 @@ import {
 	moveBefore,
 	removeDictionaryFromVc,
 	removeDictionaryPath,
+	replaceVcDictionaryWords,
 	shouldYieldSuggestToVc,
 	tryReloadVcDictionaries,
 	vcDictionaryPath,
@@ -644,5 +645,100 @@ describe("moveBefore：本插件建议框挪到 VC 前面（Q41）", () => {
 		expect(moveBefore(list, "ah", "missing")).toBe(false);
 		expect(moveBefore(list, "missing", "vc")).toBe(false);
 		expect(list).toEqual(["ah", "native", "vc"]);
+	});
+});
+
+describe("replaceVcDictionaryWords：只换掉 VC 内存里本插件的词（Q45）", () => {
+	/** 模拟 VC 的 CustomDictionaryWordProvider：words 是原始词条，addWord 记录同义词选项。 */
+	const makeProvider = (words: Array<Record<string, unknown>>) => {
+		const p = {
+			words: [...words],
+			synonyms: [] as unknown[],
+			clearWords() {
+				p.words = [];
+			},
+			addWord(w: Record<string, unknown>, opt: unknown) {
+				p.words.push(w);
+				p.synonyms.push(opt);
+			},
+		};
+		return p;
+	};
+	const json = JSON.stringify({
+		words: [
+			{ value: "[[a#AXI|AXI]]", displayed: "AXI", description: "a.md" },
+			{ value: "[[b#中断|中断]]", displayed: "中断", description: "b.md" },
+		],
+	});
+	const setup = (settings: Record<string, unknown>, provider: unknown) => {
+		const app = makeApp({ installed: true, enabled: true, liveSettings: settings });
+		(app.plugins!.plugins!["various-complements"] as Record<string, unknown>).suggester = {
+			customDictionaryWordProvider: provider,
+			refreshCustomDictionaryTokens: vi.fn(async () => {}),
+		};
+		return app;
+	};
+	const base = {
+		customDictionaryPaths: `words.txt\n${DICT}`,
+		enableCustomDictionaryComplement: true,
+		matchingWithoutEmoji: true,
+		treatAccentDiacriticsAsAlphabeticCharacters: false,
+	};
+
+	it("旧的本插件词条换成新的，其他词典的词原样保留；词条按 VC jsonToWords 的规则构造", async () => {
+		const provider = makeProvider([
+			{ value: "apple", createdPath: "words.txt" },
+			{ value: "旧标题", createdPath: DICT },
+		]);
+		expect(await replaceVcDictionaryWords(setup(base, provider), DICT, json)).toBe("ok");
+		expect(provider.words.map((w) => w.value)).toEqual(["apple", "AXI", "中断"]);
+		expect(provider.words[1]).toMatchObject({
+			value: "AXI",
+			insertedText: "[[a#AXI|AXI]]",
+			description: "a.md",
+			type: "customDictionary",
+			createdPath: DICT,
+		});
+		expect(provider.synonyms[0]).toEqual({ emoji: true, accentsDiacritics: false });
+	});
+
+	it("套用 VC 的 customDictionaryWordRegexPattern 过滤", async () => {
+		const provider = makeProvider([]);
+		const app = setup({ ...base, customDictionaryWordRegexPattern: "^[A-Z]" }, provider);
+		await replaceVcDictionaryWords(app, DICT, json);
+		expect(provider.words.map((w) => w.value)).toEqual(["AXI"]);
+	});
+
+	it("路径没登记 / 自定义词典补全关着：不动", async () => {
+		const provider = makeProvider([{ value: "apple", createdPath: "words.txt" }]);
+		expect(
+			await replaceVcDictionaryWords(
+				setup({ ...base, customDictionaryPaths: "words.txt" }, provider),
+				DICT,
+				json,
+			),
+		).toBe("not-registered");
+		expect(
+			await replaceVcDictionaryWords(
+				setup({ ...base, enableCustomDictionaryComplement: false }, provider),
+				DICT,
+				json,
+			),
+		).toBe("not-registered");
+		expect(provider.words).toHaveLength(1);
+	});
+
+	it("结构认不出（缺 addWord）或 JSON 坏了：不清空 VC 的词", async () => {
+		const broken = {
+			words: [{ value: "apple", createdPath: "words.txt" }],
+			clearWords: vi.fn(),
+		};
+		expect(await replaceVcDictionaryWords(setup(base, broken), DICT, json)).toBe("unavailable");
+		expect(broken.clearWords).not.toHaveBeenCalled();
+		const provider = makeProvider([{ value: "apple", createdPath: "words.txt" }]);
+		expect(await replaceVcDictionaryWords(setup(base, provider), DICT, "{bad")).toBe(
+			"unavailable",
+		);
+		expect(provider.words).toHaveLength(1);
 	});
 });

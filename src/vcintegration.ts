@@ -523,6 +523,122 @@ export function vcSuggestInstance(app: App): unknown {
 	return vc?.suggester ?? null;
 }
 
+/** VC 自定义词典提供者里本插件用得到的部分（`CustomDictionaryWordProvider`，非公开结构）。 */
+interface VcDictionaryProvider {
+	words: Array<{ createdPath?: string }>;
+	clearWords(): void;
+	addWord(word: unknown, synonymOption: { emoji: boolean; accentsDiacritics: boolean }): void;
+}
+
+/** 运行时拿到的 VC 实例里与词典内存有关的部分（未校验）。 */
+interface RawVcWithSuggester {
+	settings?: unknown;
+	suggester?: {
+		customDictionaryWordProvider?: Partial<VcDictionaryProvider>;
+		refreshCustomDictionaryTokens?: () => Promise<void>;
+	};
+}
+
+/** 本插件词典 JSON 的形状（见 {@link buildVcDictionaryJson}）。 */
+interface HeadingDictionaryJson {
+	caretSymbol?: string;
+	ignoreSpaceAfterCompletion?: boolean;
+	words: Array<{ value: string; displayed?: string; description?: string; aliases?: string[] }>;
+}
+
+/**
+ * 把 VC 内存里来自本插件词典的词换成最新内容（testplan Q45），其他词典的词原样保留。
+ *
+ * 为什么需要（2026-10-18 用户实测：新写的标题在 VC 框里打不出来）：VC 只在启动、「Reload custom
+ * dictionaries」、保存设置时读词典文件；本插件之后改写词典文件，VC 并不知道——1.0.27 起只有开启联动那一刻
+ * 和重启后的标题能进 VC。整体重读又会把用户的其他词典（常见的是联网的英文词表）全部重新加载、重新下载。
+ *
+ * 做法照 VC 自己 `refreshCustomWords` 的结构：词典提供者的 `words` 是原始词条，`clearWords` + 逐个
+ * `addWord(词, 同义词选项)` 重建 `wordByValue` / `wordsByFirstLetter` 两个索引（VC 每次查询现取，替换即生效）。
+ * 新词条按 VC `jsonToWords` 的规则构造（`value` 用 displayed、`insertedText` 用 value，`createdPath` 为
+ * 词典路径），并套用 VC 的 `customDictionaryWordRegexPattern` 过滤。这些都是 VC 的非公开结构：**所有校验在
+ * 清空之前做完**，形状认不出就返回 `"unavailable"`、什么都不动；万一重建中途抛错，退回 VC 自己的整体重读。
+ */
+export async function replaceVcDictionaryWords(
+	app: App,
+	dictionaryPath: string,
+	json: string,
+): Promise<"ok" | "not-registered" | "unavailable"> {
+	const raw = getPluginsRegistry(app)?.plugins?.[VC_PLUGIN_ID] as RawVcWithSuggester | undefined;
+	if (detectVcStatus(app) !== "enabled" || !raw || !isValidVcSettingsShape(raw.settings)) {
+		return "unavailable";
+	}
+	const settings = raw.settings as VcSettingsShape & Record<string, unknown>;
+	if (
+		!settings.enableCustomDictionaryComplement ||
+		!hasDictionaryPath(settings.customDictionaryPaths, dictionaryPath)
+	) {
+		return "not-registered";
+	}
+	const provider = raw.suggester?.customDictionaryWordProvider;
+	if (
+		!provider ||
+		!Array.isArray(provider.words) ||
+		typeof provider.clearWords !== "function" ||
+		typeof provider.addWord !== "function"
+	) {
+		return "unavailable";
+	}
+	let parsed: HeadingDictionaryJson;
+	try {
+		parsed = JSON.parse(json) as HeadingDictionaryJson;
+	} catch {
+		return "unavailable";
+	}
+	if (!Array.isArray(parsed.words)) {
+		return "unavailable";
+	}
+	const caret =
+		parsed.caretSymbol ??
+		(typeof settings.caretLocationSymbolAfterComplement === "string" &&
+		settings.caretLocationSymbolAfterComplement
+			? settings.caretLocationSymbolAfterComplement
+			: undefined);
+	let pattern: RegExp | null = null;
+	if (
+		typeof settings.customDictionaryWordRegexPattern === "string" &&
+		settings.customDictionaryWordRegexPattern
+	) {
+		try {
+			pattern = new RegExp(settings.customDictionaryWordRegexPattern);
+		} catch {
+			pattern = null; // VC 那边同样会因非法正则失败，这里不过滤
+		}
+	}
+	const fresh = parsed.words
+		.map((x) => ({
+			value: x.displayed || x.value,
+			description: x.description,
+			aliases: x.aliases,
+			type: "customDictionary",
+			createdPath: dictionaryPath,
+			insertedText: x.displayed ? x.value : undefined,
+			caretSymbol: caret,
+			ignoreSpaceAfterCompletion: parsed.ignoreSpaceAfterCompletion,
+		}))
+		.filter((w) => !pattern || pattern.test(w.value));
+	const kept = provider.words.filter((w) => w?.createdPath !== dictionaryPath);
+	const synonym = {
+		emoji: settings.matchingWithoutEmoji === true,
+		accentsDiacritics: settings.treatAccentDiacriticsAsAlphabeticCharacters === true,
+	};
+	try {
+		provider.clearWords();
+		for (const w of [...kept, ...fresh]) {
+			provider.addWord(w, synonym);
+		}
+	} catch {
+		await raw.suggester?.refreshCustomDictionaryTokens?.(); // 重建失败：交还 VC 整体重读
+		return "unavailable";
+	}
+	return "ok";
+}
+
 /** 运行时拿到的 VC 实例（未校验）。 */
 interface RawVc {
 	settings?: unknown;

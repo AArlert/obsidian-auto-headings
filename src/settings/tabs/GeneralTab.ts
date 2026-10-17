@@ -69,6 +69,7 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 	// 1.2.2：滑块左侧常显当前值（testplan L29）。拖动中经 `input` 事件实时刷新数字，
 	// 保存仍走 onChange（与旧行为一致）。
 	let debounceValueEl: HTMLElement | null = null;
+	let nativeValueDisplay = false; // 滑块自带数值显示时不再加自己的（见下方 addSlider）
 	const showDebounce = (ms: number): void => {
 		debounceValueEl?.setText(`${ms} ms`);
 	};
@@ -84,6 +85,16 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 					plugin.settings.debounceDelay = clampDebounceDelay(value);
 					await plugin.saveSettings();
 				});
+			// 新版 Obsidian（实测 1.14.4）的滑块自带数值显示（`span.slider-value`）与 `setDisplayFormat`；
+			// 旧版没有，只在拖动时浮出提示——有原生的就用原生的、不再自己加，免得同一个数显示两遍。
+			const native = slider as unknown as {
+				setDisplayFormat?: (fmt: (v: number) => string) => unknown;
+			};
+			if (typeof native.setDisplayFormat === "function") {
+				native.setDisplayFormat((v) => `${v} ms`);
+				nativeValueDisplay = true;
+				return;
+			}
 			slider.sliderEl.addEventListener("input", () =>
 				showDebounce(Number(slider.sliderEl.value)),
 			);
@@ -98,9 +109,11 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 					tab.display();
 				}),
 		);
-	debounceValueEl = debounceSetting.controlEl.createSpan({ cls: "ah-slider-value" });
-	debounceSetting.controlEl.prepend(debounceValueEl);
-	showDebounce(plugin.settings.debounceDelay);
+	if (!nativeValueDisplay) {
+		debounceValueEl = debounceSetting.controlEl.createSpan({ cls: "ah-slider-value" });
+		debounceSetting.controlEl.prepend(debounceValueEl);
+		showDebounce(plugin.settings.debounceDelay);
+	}
 
 	// ==== 分区：链接维护 ====
 	new Setting(containerEl).setName(t.sectionLinking).setHeading();

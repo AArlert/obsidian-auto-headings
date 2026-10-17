@@ -45,6 +45,11 @@
   与两边 `showSuggestions` 上挂日志，英文键入各种节奏都是本插件赢；用 CDP `Input.imeSetComposition` 模拟输入法才复现：
   拼字期间本插件按 Q9 不弹、VC 占位，上屏不改文档就不再触发。改为 `compositionend` 后补触发一轮（Q44）。场景整理成
   可重复跑的 `tests/probes/suggest-timing.js`（11 个场景全过）；test-vault 测完已停用 VC。
+- 用户实测又报三项，均已修：① 「VC 的建议框」模式下新写的标题打不出——VC 只在启动 / 重载 / 保存设置时读词典文件，
+  改为写词典后只替换 VC 内存里本插件那部分词（Q45，不重读用户的联网英文词表）；验证时又抓到启动同步不等索引建完、
+  写出空词典的旧 bug，一并修。② 防抖滑块在 Obsidian 1.14.4 上两个数并排——新版滑块自带数值显示与
+  `setDisplayFormat`，有就用原生的（L29）。③ 新建标题后光标在编号前面——仅显示模式的编号装饰改 `side: -1`（V46）；
+  写入模式补上「已有文字、光标在正文开头」的情形（J22）。
 - 顺手修 `extractTriggerToken` 遇星平面汉字（代理对）提前截断。
 - `test:fuzz` 的 M13 用例每 200 条让出一次事件循环，根治 vitest `onTaskUpdate` RPC 超时。
 - testplan Q27–Q38，Roadmap 登记 M18（置信分 + 淡色提示 + 历史反应），使用指南双语同步。
