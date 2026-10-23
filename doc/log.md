@@ -15,6 +15,45 @@
 
 ---
 
+## 2026-10-24 补真机探针：收紧后的规则与「不选就记住」21/21（不 bump、未提交，交接：claude/issue-10-feedback-49b340）
+
+### 做了什么
+
+- 新增 `tests/probes/suggest-signals.js`：把 Q30 / Q31 / Q62 / Q63 搬到真机（loom test-vault，Obsidian 1.14.4）。临时打开建议、
+  建 `探针-AH信号` 库，21 项全过；结束时删临时文件夹，建议开关还原成测前的「关」。
+  - 触发规则那段用真编辑器打字；「不选就记住」那段改用假编辑器（`onTrigger` 只用到 `editor.getLine`），免得 Obsidian 自己的
+    触发 / 关框在两次取样之间插进来改写记忆，把断言变成掷骰子。
+- **首轮结果是假红，原因值得记**：库里 `main.js` 确实是新构建（哈希与 `release/` 一致），但插件是 05:11 加载的、构建是 05:29 拷进去的，
+  内存里跑的还是旧规则（`sg.dismissed` 不存在、6 个字母就前缀弹、英文短词不要信号）。禁用再启用插件后复跑才 21/21。
+  教训写进 `tests/probes/README.md`「怎么跑」：拷完构建必须重载插件，并附一行 `typeof` 自查。
+- 探针自身修一处：`笔记.md` 里那条出链指向的标题文件必须**先建**——链接计数按建文件那一刻的解析结果算一次，目标还不存在就漏掉，
+  要等源文件下次变动才补（`headinglinks.ts` 已有的取舍）。改成最后建「当前笔记」后 `linksFrom` 正常。
+- `doc/testplan/Q-标题链接建议与VC联动.md`：Q30 / Q31 / Q62 / Q63 的状态格由「🔲 真机手验」改为
+  「✅ 真机探针（`suggest-signals.js`，2026-10-24）」+「🔲 打字手感」——行为有真机证据了，手感仍没人看过。
+- 顺手清库（用户授权）：主工作树切回 `master`；搬走重复克隆与 10-07 的旧 `release/auto-headings.zip`，删三个多余 worktree
+  与四个已并入 master 的分支（未提交内容已 `git diff` 存成 patch）。有一个空 worktree 目录被进程占着删不掉，git 已不再登记它，无害。
+
+### 没做什么
+
+- 没合并 master、没 bump、没发版、没回 issue #10（等用户定）。
+- **打字手感没测**：弹框出现的时机、候选顺序在真实输入节奏下顺不顺，没人试过；测试库平时关着建议，探针是临时开的。
+- 手机端、旧版 Obsidian（< 1.11）的设置页没看。
+
+### 下一步
+
+- 用户拿测试库打一轮（打开「打字时建议标题链接」）→ 满意就按 `CLAUDE.md` §5.1 合并、发 1.2.5、回并关 issue #10。
+- 主力库（Oblivion）**不用**为「升级统一关一次」做任何事：那次迁移只在 `vcIntegrationMode === "off"` 时改关，它开着 VC 联动
+  （`auto`），按设计算显式选择、保持开着；把 `headingSuggestOffMigrated` 复位也是空操作，所以没动它的 `data.json`。
+- 主力库的 `vc-heading-dictionary.json` 现在只有 `{"words":[]}`（04:53 关建议时清空的），下次重载本插件会按标题重建，不用手工补。
+
+### 验证方式
+
+- 真机：经 `loom-probe` 通道跑 `suggest-signals.js` → 21/21；跑完 `探针-AH信号` 已删、`headingLinkSuggestEnabled` 仍为 `false`、
+  `main.js` 哈希与 `release/` 一致。
+- 门槛：`node scripts/docs.mjs --check` 0、`prettier --check` 0（本次只动文档 + 新增探针脚本，`src/` 未动，故未重跑 vitest）。
+
+---
+
 ## 2026-10-24 issue #10 第三轮：触发方式收成开 / 关两档（新装默认关）+ 回车不接受（不 bump，交接：claude/issue-10-feedback-49b340）
 
 ### 做了什么
@@ -148,31 +187,3 @@
 - loom test-vault（Obsidian 1.14.4）：`native-link.js` 25/25、`suggest-rules.js` 27/27、`maintenance-tab.js`、`note-menu.js` 全过（后者要求窗口可见：隐藏时阅读视图不渲染，探查前用 `showInactive` 显示测试库窗口）；旧 data.json 迁移为自动触发。
 - 按用户要求，最终构建已放进 Oblivion 主力库与 loom test-vault（只换 main.js / manifest.json / styles.css，不碰 data.json；
   主力库原构建备份在会话 scratchpad）。主力库原开关是关着的，升级后显示为「关闭」。
-
----
-
-## 2026-10-18 发版 1.2.4：issue #10 标题链接建议按信号触发 + VC 联动收紧（交接：claude/recent-fix-test-release-012e07 → master，tag 1.2.4）
-
-### 做了什么
-
-- 用户要求按最近的修复（`fix/heading-suggest-signals`，下一块）多测后发版。该分支快进到本工作分支，复跑门槛并补真机探查：
-  - `npm run check` 唯一失败为已知 Windows ICU 排序假红；lint / 格式 / 构建全绿；`npm run test:fuzz` 3 组全绿（M13 44s，无 RPC 超时）。
-  - loom test-vault（Obsidian 1.14.4）部署新构建 + 临时放入 VC：`suggest-timing.js` 11/11；新写 `tests/probes/suggest-rules.js`
-    （Q7 / Q27–Q34 / Q46–Q48 共 27 项）全过。测完移走 VC、还原 test-vault 原 1.2.3 构建。
-- 用户截图问「在 `# haha` 里打字，VC 框出 healthca 是否正常」：核对是 VC 的框，`healthca` 是思特威那篇第 203 行的真实标题（测试残留），
-  被 VC 的 `fuzzyMatch`（用户库里开着）模糊命中；`healthcare` 来自 VC 的英文词表。行为符合 Q7 / Q48。问过用户是否在 VC 框里滤掉
-  「只靠模糊命中」的标题，用户选**保持现状**；使用指南双语补一句 VC 模糊匹配的说明。
-- bump 1.2.4，写 `doc/release-notes/1.2.4.md`，testplan / spec 的「未发版」回填为 1.2.4。
-
-### 没做什么
-
-- Q29（输入法拼字时按 Tab）、输入法下的空格误选仍只有用户手测结论，没自动化。
-- issue #10 的回复与关闭留给用户（回复要按新规则写，草稿见上一块「没做什么」）。
-
-### 下一步
-
-- 推 master 等 CI 绿 → 打 tag 1.2.4 → 到 Community Hub 维护者面板点「Check for new releases」；回复并关闭 issue #10。之后回到 M17。
-
-### 验证方式
-
-- 同上：`npm run check`、`npm run test:fuzz`、test-vault 两个探查脚本（共 38 项）全过。
