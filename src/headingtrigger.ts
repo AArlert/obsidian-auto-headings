@@ -30,6 +30,20 @@ export const MIN_TOKEN_CHARS = 2;
  */
 export const MIN_PREFIX_WEIGHT = 6;
 
+/**
+ * **纯英文**（不含中日韩字符）触发词按前缀匹配所需的最低权重（testplan Q62，未发版）：8 个字母起。
+ * 6 个字母时打普通英文单词就会被前缀猜中——主力库重放（`scripts/suggest-replay.mjs`）里 sequen / scoreb / monito
+ * 是最常弹的几个，用户只是在打 sequence、scoreboard、monitor。含中日韩字符的仍用 {@link MIN_PREFIX_WEIGHT}。
+ */
+export const MIN_LATIN_PREFIX_WEIGHT = 8;
+
+/**
+ * 短词完整命中时，「被链接过」至少要几次才算信号（testplan Q31，未发版；1.2.4 为 1 次）。主力库重放里「验证」「测试」
+ * 「为什么」这类常用词只因库里某处链过一次就处处弹。另两种信号（就在当前笔记 / 同一文件夹里，或当前笔记链过它）见
+ * {@link hasShortWordSignal}。
+ */
+export const MIN_LINKS_FOR_SHORT = 2;
+
 const CJK_CHAR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
 /** 是否中日韩字符（单个码点）。 */
@@ -118,8 +132,36 @@ export interface TriggerIndexProbe {
 	hasAnyPrefixMatch(normalizedQuery: string): boolean;
 	/** 是否存在 matchKey 恰好等于该串的标题。 */
 	hasExactMatch(normalizedQuery: string): boolean;
-	/** matchKey 恰好等于该串的标题是否被链接过（见 headinglinks.ts）。 */
-	isLinked(normalizedQuery: string): boolean;
+	/** 短词完整命中时，这个标题有没有「值得弹」的信号（见 {@link hasShortWordSignal}）。 */
+	isRelevant(normalizedQuery: string): boolean;
+}
+
+/**
+ * 短词完整命中的信号（testplan Q30 / Q31，未发版）：满足任一即弹——
+ * ① 该标题在库里被链接过至少 {@link MIN_LINKS_FOR_SHORT} 次；
+ * ② 有同名标题就在当前笔记里，或在当前笔记的同一文件夹里（同一个项目里的术语多半是正在写的那件事）；
+ * ③ 当前笔记已经链过这个标题。
+ *
+ * @param entryPaths 完整命中的那些标题所在的文件路径（已剔除正在写的那一条）
+ * @param activePath 当前笔记路径
+ */
+export function hasShortWordSignal(
+	entryPaths: readonly string[],
+	linkCount: number,
+	linkedFromHere: boolean,
+	activePath: string,
+): boolean {
+	if (linkCount >= MIN_LINKS_FOR_SHORT || linkedFromHere) {
+		return true;
+	}
+	const dir = folderOf(activePath);
+	return entryPaths.some((p) => p === activePath || folderOf(p) === dir);
+}
+
+/** 文件所在文件夹（根目录为空串）。 */
+function folderOf(path: string): string {
+	const i = path.lastIndexOf("/");
+	return i < 0 ? "" : path.slice(0, i);
 }
 
 /**
@@ -130,13 +172,12 @@ export interface TriggerIndexProbe {
  *
  * | 候选 | 条件 |
  * |---|---|
- * | 起于词边界、权重 ≥ {@link MIN_PREFIX_WEIGHT} | 有标题以它开头 |
- * | 起于词边界、权重不足、不含中日韩字符 | 完整等于某标题 |
- * | 起于词边界、权重不足、含中日韩字符 | 完整等于某标题，且该标题被链接过 |
- * | 连写中间的后缀 | 完整等于某标题，且（权重 ≥ {@link MIN_PREFIX_WEIGHT} 或被链接过） |
+ * | 起于词边界、权重 ≥ {@link MIN_PREFIX_WEIGHT}（纯英文 ≥ {@link MIN_LATIN_PREFIX_WEIGHT}） | 有标题以它开头 |
+ * | 起于词边界、权重不足 | 完整等于某标题，且有信号（{@link hasShortWordSignal}） |
+ * | 连写中间的后缀 | 完整等于某标题，且（权重 ≥ {@link MIN_PREFIX_WEIGHT} 或有信号） |
  *
  * 道理：前缀匹配是在猜「用户想打哪个标题」，只有输入量够大才猜得准；完整命中不用猜，但短词常是
- * 普通词——英文短词在中文笔记里多是有意打的术语，中文两字词则靠「被链接过」证明它是个概念。
+ * 普通词，要靠信号证明此刻值得弹（未发版起英文短词也要：1.2.4 时 read / write / cpu 处处弹）。
  * 连写中间的切点本身是猜的，不再叠加前缀猜测（1.0.29 叠加过，「当前项目」→【项目级…】就是这样来的）。
  *
  * **`start` 必须是被匹配上的那一段的起点，不是整个 token 的起点**——接受建议时
@@ -162,17 +203,18 @@ export function resolveTriggerQuery(
 
 /** {@link resolveTriggerQuery} 的命中规则表（单个候选）。 */
 function candidateHits(c: TriggerCandidate, query: string, probe: TriggerIndexProbe): boolean {
-	const longEnough = triggerWeight(c.text) >= MIN_PREFIX_WEIGHT;
-	if (c.boundary && longEnough) {
+	const weight = triggerWeight(c.text);
+	const prefixMin = Array.from(c.text).some(isCjk) ? MIN_PREFIX_WEIGHT : MIN_LATIN_PREFIX_WEIGHT;
+	if (c.boundary && weight >= prefixMin) {
 		return probe.hasAnyPrefixMatch(query);
 	}
 	if (!probe.hasExactMatch(query)) {
 		return false;
 	}
 	if (c.boundary) {
-		return !Array.from(c.text).some(isCjk) || probe.isLinked(query);
+		return probe.isRelevant(query);
 	}
-	return longEnough || probe.isLinked(query);
+	return weight >= MIN_PREFIX_WEIGHT || probe.isRelevant(query);
 }
 
 /**

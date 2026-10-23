@@ -60,6 +60,14 @@ describe("HeadingLinkCounts：按源文件分桶的增量计数", () => {
 		expect(c.count("axi")).toBe(0);
 	});
 
+	it("linksFrom：某源文件是否链过这个标题（Q31「当前笔记链过它」）", () => {
+		const c = new HeadingLinkCounts();
+		c.setSource("a.md", ["axi"]);
+		expect(c.linksFrom("a.md", "axi")).toBe(true);
+		expect(c.linksFrom("a.md", "中断")).toBe(false);
+		expect(c.linksFrom("b.md", "axi")).toBe(false);
+	});
+
 	it("renameSource：贡献跟着走；目标已存在时先撤掉被覆盖文件的贡献", () => {
 		const c = new HeadingLinkCounts();
 		c.setSource("a.md", ["axi"]);

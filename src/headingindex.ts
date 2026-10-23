@@ -349,6 +349,24 @@ export class HeadingIndex {
 		return false;
 	}
 
+	/** matchKey 恰好等于查询串的**非套话**条目所在的文件路径（排除 `exclude` 那一条；短词信号「就近」用，testplan Q31）。 */
+	exactMatchPaths(normalizedQuery: string, exclude?: ExcludeAt): string[] {
+		const out: string[] = [];
+		if (!normalizedQuery || this.isGenericKey(normalizedQuery)) {
+			return out;
+		}
+		for (let i = lowerBoundByKey(this.sorted, normalizedQuery); i < this.sorted.length; i++) {
+			const e = this.sorted[i];
+			if (e.matchKey !== normalizedQuery) {
+				break;
+			}
+			if (!isExcluded(e, exclude)) {
+				out.push(e.path);
+			}
+		}
+		return out;
+	}
+
 	/** 某文件里锚点为 `anchor` 的条目（VC 候选核对「这个标题还在不在」用，testplan Q48）。 */
 	findByAnchor(path: string, anchor: string): HeadingIndexEntry | undefined {
 		return this.byFile.get(path)?.find((e) => e.anchor === anchor);

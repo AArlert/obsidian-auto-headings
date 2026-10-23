@@ -21,8 +21,8 @@ describe("resolveLang", () => {
 
 	it("auto / 缺失走 Obsidian 探测", () => {
 		// detectObsidianLang 走 obsidian-mock 的 getLanguage 替身（默认 en，见下组用例）。
-		expect(["zh", "en"]).toContain(resolveLang("auto"));
-		expect(["zh", "en"]).toContain(resolveLang(undefined));
+		expect(["zh", "en", "zh-TW", "ja"]).toContain(resolveLang("auto"));
+		expect(["zh", "en", "zh-TW", "ja"]).toContain(resolveLang(undefined));
 	});
 
 	it("默认语言设置为 auto", () => {
@@ -35,8 +35,10 @@ describe("detectObsidianLang", () => {
 		__setMockLanguage(() => "en");
 	});
 
-	it("getLanguage 以 zh 前缀 → 中文", () => {
-		__setMockLanguage(() => "zh-TW");
+	it("getLanguage 以 zh 前缀（非繁体）→ 简体中文", () => {
+		__setMockLanguage(() => "zh");
+		expect(detectObsidianLang()).toBe("zh");
+		__setMockLanguage(() => "zh-CN");
 		expect(detectObsidianLang()).toBe("zh");
 	});
 
@@ -94,11 +96,7 @@ describe("getMessages 双语", () => {
 			"headingLinkSuggestDesc",
 			"vcTargetDesc",
 			"vcStaleDictDesc",
-			// 编号维护 TAB（1.2.2，testplan L43）
-			"renumberNowDesc",
-			"clearFileDesc",
-			"clearForeignDesc",
-			"clearStaleDesc",
+			// 编号维护 TAB（1.2.2，testplan L43；未发版起只剩全库两项）
 			"clearVaultDesc",
 			"freezeVaultDesc",
 		] as const;

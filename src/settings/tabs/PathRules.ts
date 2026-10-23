@@ -1,4 +1,5 @@
 import { Menu, Notice, Setting, setIcon } from "obsidian";
+import { settingGroup } from "../group";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import type { Messages } from "../../i18n";
 import {
@@ -27,18 +28,21 @@ function suggestLabelsOf(t: Messages): PathSuggestLabels {
 }
 
 /**
- * 把设置项标题行右侧的按钮渲染成「图标 + 文字」（1.2.2：「添加规则」「新增模板」挪到各自标题行右侧，
- * 普通按钮，见 testplan L32 / L34）。
+ * 分组标题行右侧的「+」按钮（「添加规则」「新增模板」，1.2.2 起挪到标题行右侧，testplan L32 / L34）：未发版起改为
+ * 原生图标按钮（`addExtraButton`，无边框、悬停高亮，2026-10-24 用户定——图标 + 文字的普通按钮里两者贴得太紧）；
+ * 文字只作悬停提示与无障碍名称。
  */
-export function decorateHeadingButton(
-	buttonEl: HTMLButtonElement,
-	icon: string,
-	text: string,
+export function addHeadingPlusButton(
+	heading: Setting,
+	label: string,
+	onClick: () => unknown,
 ): void {
-	buttonEl.empty();
-	buttonEl.addClass("ah-heading-btn");
-	setIcon(buttonEl.createSpan({ cls: "ah-heading-btn-icon" }), icon);
-	buttonEl.createSpan({ text });
+	heading.addExtraButton((btn) =>
+		btn
+			.setIcon("plus")
+			.setTooltip(label)
+			.onClick(() => void onClick()),
+	);
 }
 
 /**
@@ -64,31 +68,28 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 	const plugin = tab.plugin;
 	const rules = plugin.settings.pathRules;
 
-	new Setting(containerEl)
-		.setName(t.pathRulesHeading)
-		.setHeading()
-		.addButton((btn) => {
-			decorateHeadingButton(btn.buttonEl, "plus", t.addRule);
-			btn.onClick(async () => {
-				// 新规则的模式跟随根规则（M14）：新装用户根规则是「仅显示」，新加的文件夹规则若默认写入，
-				// 一填路径就会开始往文件里写编号，违背他们没做过的选择。路径为空时不匹配任何文件，直接存。
-				const root = rules.find((r) => r.pattern.trim() === "/");
-				rules.push({
-					pattern: "",
-					template: DEFAULT_TEMPLATE_NAME,
-					...(root && ruleMode(root) === "virtual" ? { mode: "virtual" as const } : {}),
-				});
-				await plugin.saveSettings();
-				tab.display();
-			});
+	const { groupEl: group, heading } = settingGroup(
+		containerEl,
+		t.pathRulesHeading,
+		t.pathRulesDesc,
+	);
+	addHeadingPlusButton(heading as Setting, t.addRule, async () => {
+		// 新规则一律默认「仅显示」（testplan V47，用户定）：不再跟随根规则——根规则是写入时，新规则
+		// 一填路径就会开始往文件里写编号，违背用户没做过的选择。路径为空时不匹配任何文件，直接存。
+		rules.push({
+			pattern: "",
+			template: DEFAULT_TEMPLATE_NAME,
+			mode: "virtual",
 		});
-	containerEl.createEl("p", { cls: "ah-section-desc", text: t.pathRulesDesc });
+		await plugin.saveSettings();
+		tab.display();
+	});
 
 	// —— 兜底缺失提示条 ——
 	if (!hasRootRule(rules) && plugin.settings.autoNumber) {
-		const warn = containerEl.createDiv({ cls: "ah-path-warn" });
+		const warn = group.createDiv({ cls: "ah-path-warn" });
 		warn.createSpan({ text: t.pathNoRootWarn });
-		new Setting(containerEl).addButton((btn) =>
+		new Setting(group).addButton((btn) =>
 			btn
 				.setButtonText(t.addRootRule)
 				.setCta()
@@ -102,7 +103,7 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 	}
 
 	// —— 规则表格（可滚动；表头 sticky、无底色，只留浅色列名）——
-	const table = containerEl.createDiv({ cls: "ah-path-table" });
+	const table = group.createDiv({ cls: "ah-path-table" });
 	const head = table.createDiv({ cls: "ah-path-row ah-path-head" });
 	for (const [label, cls] of [
 		["", "ah-path-c-dot"],
@@ -126,7 +127,7 @@ export function renderPathRules(tab: AutoHeadingsSettingTab, containerEl: HTMLEl
 		renderPathRuleRow(tab, table, rule, index, rule === activeRule);
 	});
 
-	containerEl.createEl("p", { cls: "ah-path-hint", text: t.pathNoMatchHint });
+	group.createEl("p", { cls: "ah-path-hint", text: t.pathNoMatchHint });
 }
 
 /**
@@ -261,13 +262,13 @@ function renderPathRuleRow(
 		void commitRules(tab, after);
 	});
 
-	// 编号模式下拉（M14，spec §3.22）：写入文件 / 仅显示。「不编号」规则没有编号可言，置灰。
+	// 编号模式下拉（M14，spec §3.22）：仅显示 / 写入文件 / 不编号（顺序见 testplan V47）。
 	const modeCell = row.createDiv({ cls: "ah-path-cell ah-path-c-mode" });
 	const modeSelect = modeCell.createEl("select", { cls: "dropdown" });
 	modeSelect.title = t.pathModeTooltip;
 	const modeOptions: Array<[string, string]> = [
-		["write", t.pathModeWrite],
 		["virtual", t.pathModeVirtual],
+		["write", t.pathModeWrite],
 		["none", t.pathTemplateNone],
 	];
 	const currentMode = rule.template === NO_NUMBERING_TEMPLATE ? "none" : ruleMode(rule);

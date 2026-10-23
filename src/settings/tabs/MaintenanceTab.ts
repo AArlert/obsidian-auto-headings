@@ -3,55 +3,30 @@ import type AutoHeadingsPlugin from "../../main";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import { confirmWordMatches } from "../model";
 import { markDestructive } from "../buttons";
+import { settingGroup } from "../group";
 
 /**
- * 「编号维护」TAB（原「敏感操作」，1.2.2 改名与重排，见 spec.md §3.10 / §3.13、testplan L43）。分两组：
+ * 「编号维护」TAB（原「敏感操作」，1.2.2 改名与重排，见 spec.md §3.10 / §3.13、testplan L43）：只放全库的事——
+ * **整个仓库**组（标题旁警示图标 +「不可撤销，操作前建议备份」）：清除全库编号… / 固化编号并交还所有权…，红字普通按钮，
+ * 确认框里输入确认词后才能点红底按钮（L44）。
  *
- * - **当前笔记**（组标题旁「文件名 · 可用 Ctrl+Z 撤销」）：立即重新编号 / 清除当前文件编号 /
- *   清理非本插件编号（先弹清理预览确认框，与迁移守卫同一个框）/ 清除残留编号——现有命令的面板入口，
- *   普通按钮。
- * - **整个仓库**（组标题旁警示图标 +「不可撤销，操作前建议备份」）：清除全库编号… / 固化编号并交还
- *   所有权…——红字普通按钮，确认框里输入确认词后才能点红底按钮（L44）。
+ * 1.2.2–1.2.4 另有「当前笔记」组（立即重新编号 / 清除当前文件编号 / 清理非本插件编号 / 清除残留编号）；它隔着设置窗口操作一篇
+ * 看不见的笔记，未发版起整体搬进本篇菜单（noteentry.ts，spec §3.24 / testplan S29）。
  *
  * 红色只在最后一步：页面上危险操作是红字，确认框里才用红底。独立成 TAB 后天然不与常用设置同屏（L8）。
  */
 export function renderMaintenanceTab(tab: AutoHeadingsSettingTab, containerEl: HTMLElement): void {
 	const t = tab.t;
 	const plugin = tab.plugin;
-
-	// —— 当前笔记 ——
-	const notePath = plugin.activeNotePath();
-	const noteName = notePath ? (notePath.split("/").pop() ?? notePath) : null;
-	groupHeading(
+	const vault = groupHeading(
 		containerEl,
-		t.maintCurrentHeading,
-		noteName ? t.maintCurrentMeta(noteName) : t.maintNoNote,
+		t.maintVaultHeading,
+		t.maintVaultMeta,
+		"alert-triangle",
 	);
-
-	const noteAction = (name: string, desc: string, btnText: string, run: () => void): void => {
-		new Setting(containerEl)
-			.setName(name)
-			.setDesc(desc)
-			.addButton((btn) => btn.setButtonText(btnText).onClick(run));
-	};
-	noteAction(t.renumberNowName, t.renumberNowDesc, t.renumberNowBtn, () =>
-		plugin.renumberActiveNoteNow(),
-	);
-	noteAction(t.clearFileName, t.clearFileDesc, t.clearFileBtn, () =>
-		plugin.clearActiveFileNumbering(),
-	);
-	noteAction(t.clearForeignName, t.clearForeignDesc, t.clearForeignBtn, () =>
-		plugin.reviewActiveFileForeignNumbering(),
-	);
-	noteAction(t.clearStaleName, t.clearStaleDesc, t.clearStaleBtn, () =>
-		plugin.clearActiveFileStaleNumbering(),
-	);
-
-	// —— 整个仓库 ——
-	groupHeading(containerEl, t.maintVaultHeading, t.maintVaultMeta, "alert-triangle");
 
 	const vaultAction = (name: string, desc: string, btnText: string, open: () => void): void => {
-		new Setting(containerEl)
+		new Setting(vault)
 			.setName(name)
 			.setDesc(desc)
 			.addButton((btn) => {
@@ -67,15 +42,22 @@ export function renderMaintenanceTab(tab: AutoHeadingsSettingTab, containerEl: H
 	});
 }
 
-/** 分组标题：原生 `setHeading()`，右侧一行灰字（可带小号图标）。 */
-function groupHeading(containerEl: HTMLElement, name: string, meta: string, icon?: string): void {
-	const heading = new Setting(containerEl).setName(name).setHeading();
+/** 分组（{@link settingGroup}）：标题右侧一行灰字（可带小号图标）；返回放设置行的容器。 */
+function groupHeading(
+	containerEl: HTMLElement,
+	name: string,
+	meta: string,
+	icon?: string,
+): HTMLElement {
+	const { list, heading: h } = settingGroup(containerEl, name);
+	const heading = h as Setting;
 	heading.settingEl.addClass("ah-maint-group");
 	const metaEl = heading.controlEl.createSpan({ cls: "ah-maint-meta" });
 	if (icon) {
 		setIcon(metaEl.createSpan({ cls: "ah-maint-meta-icon" }), icon);
 	}
 	metaEl.createSpan({ text: meta });
+	return list;
 }
 
 /**

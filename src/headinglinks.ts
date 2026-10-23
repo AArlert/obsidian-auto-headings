@@ -85,6 +85,11 @@ export class HeadingLinkCounts {
 		this.add(linkedKeys, 1);
 	}
 
+	/** 某源文件是否链过这个标题（短词信号「当前笔记链过它」，testplan Q31）。 */
+	linksFrom(sourcePath: string, matchKey: string): boolean {
+		return this.bySource.get(sourcePath)?.includes(matchKey) ?? false;
+	}
+
 	/** 源文件删除：撤掉它的贡献。 */
 	removeSource(sourcePath: string): void {
 		const old = this.bySource.get(sourcePath);

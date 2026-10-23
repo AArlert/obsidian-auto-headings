@@ -1,4 +1,5 @@
 import { App, Menu, Modal, Setting, setIcon } from "obsidian";
+import { settingGroup } from "../group";
 import type AutoHeadingsPlugin from "../../main";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import type { Template } from "../../numbering";
@@ -6,7 +7,7 @@ import type { PathRule } from "../../pathrules";
 import { DEFAULT_TEMPLATE_NAME } from "../../templates/schema";
 import { cardPreviewLines } from "../templateView";
 import { markDestructive } from "../buttons";
-import { decorateHeadingButton, renderPathRules } from "./PathRules";
+import { addHeadingPlusButton, renderPathRules } from "./PathRules";
 import { TemplateEditorModal } from "./TemplateEditorModal";
 
 /** 删模板对话框里「连规则一并删除」的下拉哨兵值（不会与任何模板名冲突）。 */
@@ -26,20 +27,18 @@ export function renderTemplatesTab(tab: AutoHeadingsSettingTab, containerEl: HTM
 	renderPathRules(tab, containerEl);
 
 	// —— 模板分区 ——
-	new Setting(containerEl)
-		.setName(t.templatesHeading)
-		.setHeading()
-		.addButton((btn) => {
-			decorateHeadingButton(btn.buttonEl, "plus", t.addTemplate);
-			btn.onClick(() => {
-				// 同步创建（落盘在后台），随即打开编辑弹窗；弹窗关闭时重绘设置页。
-				const created = tab.plugin.templateStore.create();
-				new TemplateEditorModal(tab.plugin.app, tab, created.name).open();
-			});
-		});
-	containerEl.createEl("p", { cls: "ah-section-desc", text: t.templatesDesc });
+	const { groupEl: group, heading } = settingGroup(
+		containerEl,
+		t.templatesHeading,
+		t.templatesDesc,
+	);
+	addHeadingPlusButton(heading as Setting, t.addTemplate, () => {
+		// 同步创建（落盘在后台），随即打开编辑弹窗；弹窗关闭时重绘设置页。
+		const created = tab.plugin.templateStore.create();
+		new TemplateEditorModal(tab.plugin.app, tab, created.name).open();
+	});
 
-	const cards = containerEl.createDiv({ cls: "ah-template-cards" });
+	const cards = group.createDiv({ cls: "ah-template-cards" });
 	for (const template of tab.plugin.templateStore.all()) {
 		renderTemplateCard(tab, cards, template);
 	}

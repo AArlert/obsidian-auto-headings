@@ -19,7 +19,7 @@ import {
 } from "./settings/model";
 import { AutoHeadingsSettingTab } from "./settings/SettingsTab";
 import { ForeignNumberingCleanupModal } from "./settings/ForeignNumberingCleanupModal";
-import { getMessages, type Messages, resolveLang } from "./i18n";
+import { getMessages, isLang, type Messages, resolveLang } from "./i18n";
 import {
 	planPauseFileSwitch,
 	planResumeFileSwitch,
@@ -395,6 +395,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		// 内的 syncAndSnapshot 一并刷新为写回后的状态，②的 has() 判断因此自然短路、不重复播种。
 		this.registerEvent(
 			this.app.workspace.on("file-open", (file) => {
+				// 「不选就记住」离开即忘（Q63）：只留刚打开的这一篇。
+				this.headingSuggest?.dismissed.keepOnly(file?.path ?? null);
 				if (!file) {
 					return;
 				}
@@ -442,7 +444,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			// 出链变化 → 重算该文件对「标题被链接次数」的贡献（metadataCache 解析完才有 links）。
 			this.registerEvent(
 				this.app.metadataCache.on("changed", (file) => {
-					if (this.settings.headingLinkSuggestEnabled) {
+					if (this.headingSuggestOn()) {
 						this.refreshHeadingLinkCounts(file.path);
 					}
 				}),
@@ -522,14 +524,19 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.settingTab.display();
 	}
 
+	/** 打字时建议标题链接是否开着（关着不建索引）。 */
+	headingSuggestOn(): boolean {
+		return this.settings.headingLinkSuggestEnabled;
+	}
+
 	/**
-	 * 设置「标题链接建议」开关并持久化（M13）：开启且索引尚未构建时立即补建（不必重载插件）；
-	 * 关闭时立即清空索引——兑现「关闭即零成本」（索引完全不构建，见 headingindex.ts）。
-	 * 与 setAutoNumber 完全同构的「面板开关 ↔ 持久化」模式。
+	 * 设置「打字时建议标题链接」开关并持久化（M13）：开启且索引尚未构建时立即补建（不必重载插件）；
+	 * 关闭时立即清空索引——兑现「关闭即零成本」（索引完全不构建，见 headingindex.ts）。面板开着时随之重绘。VC 联动状态与词典维护照旧，再打开即恢复原样。
 	 */
 	async setHeadingLinkSuggestEnabled(enabled: boolean): Promise<void> {
 		this.settings.headingLinkSuggestEnabled = enabled;
 		await this.saveSettings();
+		this.settingTab?.display();
 		if (enabled && this.headingIndex.size === 0) {
 			void this.buildInitialHeadingIndex();
 		} else if (!enabled) {
@@ -641,6 +648,9 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 词条认不出（不是本插件生成的形状）时保留，交给 VC。
 	 */
 	private shouldDropVcWord(word: VcWordLike, ctx: VcSuggestContext): boolean {
+		if (!this.settings.headingLinkSuggestEnabled) {
+			return true; // 关着时 VC 框里也不出标题（词典文件还留着，spec §3.23 / Q55）
+		}
 		if (ctx.editor && ctx.start && ctx.end) {
 			const line = ctx.editor.getLine(ctx.end.line);
 			if (isBlockedContext(line.slice(0, ctx.end.ch), ctx.start.ch)) {
@@ -934,7 +944,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 单文件读取失败静默跳过，不阻断整体扫描。
 	 */
 	private async buildInitialHeadingIndex(): Promise<void> {
-		if (!this.settings.headingLinkSuggestEnabled) {
+		if (!this.headingSuggestOn()) {
 			return;
 		}
 		const files = this.app.vault.getMarkdownFiles(); // 既有先例：main.ts 批量重编号同款取法
@@ -988,7 +998,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	/** M13：单文件增量索引（新建/修改后调用）。读取失败静默忽略，下次 modify 事件会重试。 */
 	private async indexSingleFile(f: TFile): Promise<void> {
-		if (!this.settings.headingLinkSuggestEnabled) {
+		if (!this.headingSuggestOn()) {
 			return;
 		}
 		try {
@@ -1009,7 +1019,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		info: MarkdownView | MarkdownFileInfo,
 	): void {
 		const file = info.file;
-		if (!file || !this.settings.headingLinkSuggestEnabled) {
+		if (!file || !this.headingSuggestOn()) {
 			return;
 		}
 		const path = file.path;
@@ -1044,7 +1054,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 调用方只在标题真的变了（`setFile` 返回 true、删除、改名）时调；「不联动」时完全不生成 / 维护。
 	 */
 	private scheduleVcDictionaryWrite(): void {
-		if (this.settings.vcIntegrationMode === "off" || !this.settings.headingLinkSuggestEnabled) {
+		if (this.settings.vcIntegrationMode === "off" || !this.headingSuggestOn()) {
 			return;
 		}
 		if (this.vcMemoryTimer === null) {
@@ -1459,7 +1469,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 确认框逐条可勾选（testplan J17）：预览与「确认清理」执行复用同一份计算
 	 * （{@link computeForeignCleanupPreview}），保证「用户看到的」与「实际发生的」逐条一致。
 	 */
-	private openForeignNumberingCleanupModal(path: string): void {
+	openForeignNumberingCleanupModal(path: string): void {
 		const found = this.markdownContextForPath(path);
 		if (!found) {
 			new Notice(this.messages().noticeForeignGuardFileNotOpen);
@@ -2009,6 +2019,14 @@ export default class AutoHeadingsPlugin extends Plugin {
 	activeMarkdownContext(): { editor: Editor; ctx: MarkdownFileInfo } | null {
 		const direct = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (direct?.editor) {
+			// 活动的是阅读视图、同一篇又在别的叶子里编辑着：改那个编辑器（S35 ②，见 markdownContextForPath）。
+			const path = direct.file?.path;
+			if (path && direct.getMode?.() === "preview") {
+				const editing = this.markdownContextForPath(path);
+				if (editing) {
+					return editing;
+				}
+			}
 			return { editor: direct.editor, ctx: direct };
 		}
 		const active = this.app.workspace.getActiveFile?.();
@@ -2024,17 +2042,26 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 的区别：后者只关心「活动」文件，本函数不要求该文件处于活动标签页，只要它在任意已打开的
 	 * 叶子里即可命中——Notice 常驻到用户点击，点击时活动标签页很可能已经切换到别的文件。
 	 */
-	private markdownContextForPath(path: string): { editor: Editor; ctx: MarkdownFileInfo } | null {
+	markdownContextForPath(path: string): { editor: Editor; ctx: MarkdownFileInfo } | null {
+		// 同一篇开在几个叶子里时**优先编辑视图**（S35 ②，2026-10-24 真机实测）：各叶子的编辑器各存一份缓冲，阅读视图的
+		// 那份不含别的叶子里还没落盘的编辑；改它的话两边各自落盘，后存的盖掉先存的，有一边的改动会丢。
+		let fallback: { editor: Editor; ctx: MarkdownFileInfo } | null = null;
 		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
-			const view = leaf.view as unknown as MarkdownFileInfo & { editor?: Editor };
+			const view = leaf.view as unknown as MarkdownFileInfo & {
+				editor?: Editor;
+				getMode?: () => string;
+			};
 			if (view.editor && view.file?.path === path) {
-				return { editor: view.editor, ctx: view };
+				if (view.getMode?.() !== "preview") {
+					return { editor: view.editor, ctx: view };
+				}
+				fallback ??= { editor: view.editor, ctx: view };
 			}
 		}
-		return null;
+		return fallback;
 	}
 
-	/** 编号维护 TAB 入口：对当前活动文件执行「立即重新编号」；无活动 Markdown 文件时 Notice。 */
+	/** 本篇菜单入口（1.2.2–1.2.4 也在编号维护 TAB）：对当前活动文件执行「立即重新编号」；无活动 Markdown 文件时 Notice。 */
 	renumberActiveNoteNow(): void {
 		const found = this.activeMarkdownContext();
 		if (!found) {
@@ -2045,7 +2072,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	}
 
 	/**
-	 * 编号维护 TAB 入口：对当前活动文件执行「清除本文件残留编号」。与同名命令一样只对仅显示笔记有意义
+	 * 本篇菜单入口（1.2.2–1.2.4 也在编号维护 TAB）：对当前活动文件执行「清除本文件残留编号」。与同名命令一样只对仅显示笔记有意义
 	 * （写入笔记清了下一次按键又会被编回去），其他笔记弹 Notice 说明。
 	 */
 	clearActiveFileStaleNumbering(): void {
@@ -2061,18 +2088,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.runClearStaleNumbering(found.editor, found.ctx);
 	}
 
-	/** 编号维护 TAB 入口：对当前活动文件执行「清除当前文件编号」；无活动 Markdown 文件时 Notice。 */
-	clearActiveFileNumbering(): void {
-		const found = this.activeMarkdownContext();
-		if (!found) {
-			new Notice(this.messages().noticeNoActiveFile);
-			return;
-		}
-		this.runClearNumbering(found.editor, found.ctx);
-	}
-
 	/**
-	 * 编号维护 TAB 入口：对当前活动文件「清理非本插件编号」——1.2.2 起先弹清理预览确认框逐条勾选
+	 * 当前活动文件入口（1.2.2–1.2.4 为编号维护 TAB 按钮，本篇菜单直接调 {@link openForeignNumberingCleanupModal}）：对当前活动文件「清理非本插件编号」——1.2.2 起先弹清理预览确认框逐条勾选
 	 * （与迁移守卫 Notice 同一个框，testplan L12 / J14），确认后才改；无活动文件 / 无可清理项时 Notice。
 	 * 同名命令仍是直接执行（{@link runClearForeignNumbering}）。
 	 */
@@ -2227,7 +2244,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		// M14：规则的 mode 非法值删掉（缺省即写入）。
 		normalizeRuleModes(merged.pathRules as PathRule[]);
 		// language 缺失 / 非法（含旧版本无此字段）时回退到默认 `auto`。
-		if (merged.language !== "zh" && merged.language !== "en" && merged.language !== "auto") {
+		if (merged.language !== "auto" && !isLang(merged.language)) {
 			merged.language = "auto";
 		}
 		// updateBacklinks 缺失 / 非布尔（含旧版本无此字段）时回退到默认 **true**（0.7.11 曝光度决策：
@@ -2238,13 +2255,28 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (typeof merged.backlinksIntroShown !== "boolean") {
 			merged.backlinksIntroShown = false;
 		}
-		// M13：新字段缺省兜底——标题链接建议默认开（默认能力）；VC 联动默认不联动
-		// （不能因为基础功能默认开就顺带默认开联动，需用户在设置面板显式选择）。
-		if (typeof merged.headingLinkSuggestEnabled !== "boolean") {
-			merged.headingLinkSuggestEnabled = true;
+		// 打字时建议标题链接（issue #10，spec §3.23）：全新安装默认关；没有该键的（1.0.26 以前装的）当年默认开 → 开。
+		// 未发版评审构建的三档 `headingSuggestTrigger` 折算一次：只有「自动触发」算开。升级后的一次性改关见下方 VC 段之后。
+		const reviewTrigger = data.headingSuggestTrigger;
+		if (typeof data.headingLinkSuggestEnabled !== "boolean") {
+			merged.headingLinkSuggestEnabled =
+				reviewTrigger === "auto" || (reviewTrigger === undefined && !fresh);
 		}
+		delete (merged as { headingSuggestTrigger?: unknown }).headingSuggestTrigger;
+		// 评审构建短暂有过「在右键菜单里显示开关」，已撤销（2026-10-24 用户定），旧键删掉。
+		delete (merged as { headingSuggestInEditorMenu?: unknown }).headingSuggestInEditorMenu;
+		// VC 联动默认不联动（不能因为基础功能默认开就顺带默认开联动，需用户在设置面板显式选择）。
 		if (merged.vcIntegrationMode !== "manual" && merged.vcIntegrationMode !== "auto") {
 			merged.vcIntegrationMode = "off";
+		}
+		// 一次性迁移（issue #10，2026-10-24 用户定）：升级到本版时统一改关，回到 Obsidian 的默认行为——1.2.4 及以前默认开，
+		// data.json 里存的 true 分不清是「默认」还是「自己打开」，只能一刀切。例外：开着 VC 联动的保持原值（那是显式选择）。
+		// 标记随下一次保存落盘；没落盘前重跑也只是再关一次，幂等。
+		if (data.headingSuggestOffMigrated !== true) {
+			if (merged.vcIntegrationMode === "off") {
+				merged.headingLinkSuggestEnabled = false;
+			}
+			merged.headingSuggestOffMigrated = true;
 		}
 		// 迁移：`headingSuggestWhenVcActive`（1.0.29 起，「VC 启用时：让路 / 本插件优先」）自 1.2.4 移除——
 		// 是否让路只看词典联动开没开（用户定的三种情况，spec §3.23），旧字段随迁移清理。
@@ -2495,12 +2527,99 @@ export default class AutoHeadingsPlugin extends Plugin {
 		const m = this.messages();
 		const content = editor.getValue();
 		const resume = planResumeFileSwitch(content);
-		const changed = this.applyRenumber(editor, template, ctx.file, {
+		let changed = this.applyRenumber(editor, template, ctx.file, {
 			extraChanges: resume ? [this.switchEditToChange(content, resume)] : [],
 		});
+		// 实时预览会**整笔丢弃**删除 frontmatter 行的编辑器事务（2026-10-23 真机实测，Obsidian 1.14.4：只插入不受影响，
+		// 所以「清除即暂停」正常；删一行、删整块都被拒，且同一事务里的编号也一起丢了——用户看到「已重新编号，并恢复」
+		// 却什么都没变）。拒绝是同步的：事务后内容原封不动即判为被拒，退回两步——先只写编号，再经官方
+		// `processFrontMatter` 删掉暂停键。代价是撤销要按两次；源码模式与单测仍是一步到位。
+		if (resume && editor.getValue() === content) {
+			changed = this.applyRenumber(editor, template, ctx.file);
+			void this.writeSwitchViaFrontMatter(ctx, null);
+		}
 		new Notice(
 			resume ? m.noticeRenumberedAndResumed : changed ? m.noticeRenumbered : m.noticeNoChange,
 		);
+	}
+
+	/**
+	 * 经官方 `processFrontMatter` 改单文件开关：`false` = 暂停；`null` = 删掉暂停键（只删值为 `false` 的）。
+	 * 实时预览拒绝删改 frontmatter 行的编辑器事务时的退路（见 {@link runImmediateRenumber}）。
+	 * 先让视图落盘：`processFrontMatter` 改的是磁盘上的文件，编辑器里刚写的改动还没存的话会被它的内容盖掉。
+	 */
+	private async writeSwitchViaFrontMatter(
+		ctx: MarkdownView | MarkdownFileInfo,
+		value: false | null,
+	): Promise<void> {
+		const file = ctx.file;
+		if (!(file instanceof TFile)) {
+			return;
+		}
+		try {
+			await (ctx as { save?: () => Promise<void> }).save?.();
+			await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+				if (value === false) {
+					fm[SWITCH_KEY] = false;
+				} else if (fm[SWITCH_KEY] === false) {
+					delete fm[SWITCH_KEY];
+				}
+			});
+		} catch {
+			/* 写失败：正文改动已写入，开关没变——再点一次即可 */
+		}
+	}
+
+	/**
+	 * 「这篇不编号」（本篇菜单，及命令「开关当前笔记的自动编号」切到关；spec §3.24，testplan S30 / S31）：写
+	 * `obsidian-auto-headings: false` 并剥掉这篇里**本插件写的**编号（带 WJ；手写编号不动——与命令「清除当前文件编号」的
+	 * 全样式剥离不同）；指向这些标题的链接随之同步。
+	 *
+	 * **刻意分两笔、先属性后剥离**：用户想留编号文字时按一次 Ctrl+Z 只退回剥离，属性仍是「不编号」（= 冻结现状）。
+	 * 2026-10-23 真机实测：并成一笔的话撤销会连属性一起退回，又被自动编号接管。剥离那笔带独立的 `origin`，免得 CM6
+	 * 把两笔相邻改动（属性块紧挨首个标题时）并进同一个撤销组。
+	 *
+	 * 实时预览拒绝写属性那笔时（删改 frontmatter 行，见 {@link runImmediateRenumber}）退回 `processFrontMatter`，
+	 * 等编辑器同步到新属性后再剥。
+	 *
+	 * @returns `false` 表示这篇没在任何编辑器里打开，调用方只写属性。
+	 */
+	async pauseNoteAndStripNumbering(path: string): Promise<boolean> {
+		const found = this.markdownContextForPath(path);
+		if (!found) {
+			return false;
+		}
+		const { editor, ctx } = found;
+		const pending = this.debounceTimers.get(path);
+		if (pending !== undefined) {
+			window.clearTimeout(pending);
+			this.debounceTimers.delete(path);
+		}
+		const before = editor.getValue();
+		const pause = planPauseFileSwitch(before);
+		if (pause) {
+			this.writeLineDiff(editor, before, before, [this.switchEditToChange(before, pause)]);
+			if (editor.getValue() === before) {
+				await this.writeSwitchViaFrontMatter(ctx, false);
+				for (let i = 0; i < 20 && readFileSwitch(editor.getValue()) !== false; i++) {
+					await new Promise((r) => window.setTimeout(r, 50)); // 等磁盘改动同步回编辑器
+				}
+			}
+		}
+		const { prefixes, suffixes } = this.strippableAffixes();
+		const oldContent = editor.getValue();
+		let newContent = clearPluginNumberingContent(oldContent, {
+			strippablePrefixes: prefixes,
+			strippableSuffixes: suffixes,
+		});
+		const fold = this.foldSelfBacklinks(ctx.file, oldContent, newContent);
+		newContent = fold.content;
+		if (
+			this.writeLineDiff(editor, oldContent, newContent, [], undefined, "auto-headings.strip")
+		) {
+			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
+		}
+		return true;
 	}
 
 	/**
@@ -2522,6 +2641,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		newContent: string,
 		extraChanges: EditorChange[] = [],
 		selection?: EditorRangeOrCaret,
+		origin?: string,
 	): boolean {
 		const changes: EditorChange[] = [];
 		if (newContent !== oldContent) {
@@ -2537,7 +2657,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		if (changes.length === 0) {
 			return false;
 		}
-		editor.transaction(selection ? { changes, selection } : { changes });
+		editor.transaction(selection ? { changes, selection } : { changes }, origin);
 		return true;
 	}
 

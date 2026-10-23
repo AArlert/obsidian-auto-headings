@@ -28,6 +28,7 @@ import {
 	type HeadingIndexEntry,
 } from "../../../src/headingindex";
 import {
+	MIN_LATIN_PREFIX_WEIGHT,
 	MIN_PREFIX_WEIGHT,
 	resolveTriggerQuery,
 	suffixCandidates,
@@ -228,17 +229,20 @@ export function runHeadingIndexSequence(seed: number, ops: number): void {
 			const hit = resolveTriggerQuery(sample, 0, {
 				hasAnyPrefixMatch: (q) => dut.hasAnyPrefixMatch(q),
 				hasExactMatch: (q) => dut.hasExactMatch(q),
-				isLinked: (q) => LINKED.has(q),
+				isRelevant: (q) => LINKED.has(q),
 			});
 			// 参考：按 spec §3.23 的规则表独立实现一遍，数据走全量扫描。
 			const expected =
 				suffixCandidates(sample, 0).find((c) => {
 					const q = normalizeForWhitelist(c.text);
-					const long = triggerWeight(c.text) >= MIN_PREFIX_WEIGHT;
-					if (c.boundary && long) return refHasPrefix(eligible, q);
+					const w = triggerWeight(c.text);
+					const prefixMin = CJK_RE.test(c.text)
+						? MIN_PREFIX_WEIGHT
+						: MIN_LATIN_PREFIX_WEIGHT;
+					if (c.boundary && w >= prefixMin) return refHasPrefix(eligible, q);
 					if (!refHasExact(eligible, q)) return false;
-					if (c.boundary) return !CJK_RE.test(c.text) || LINKED.has(q);
-					return long || LINKED.has(q);
+					if (c.boundary) return LINKED.has(q);
+					return w >= MIN_PREFIX_WEIGHT || LINKED.has(q);
 				}) ?? null;
 			const shape = (v: { text: string; start: number } | null) =>
 				v ? `${v.text}@${v.start}` : "null";

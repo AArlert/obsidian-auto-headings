@@ -7,7 +7,10 @@
 import { describe, expect, it } from "vitest";
 import {
 	MAX_TOKEN_LENGTH,
+	MIN_LATIN_PREFIX_WEIGHT,
+	MIN_LINKS_FOR_SHORT,
 	MIN_PREFIX_WEIGHT,
+	hasShortWordSignal,
 	MIN_TOKEN_CHARS,
 	buildHeadingLink,
 	extractTriggerToken,
@@ -111,12 +114,28 @@ describe("suffixCandidates：整段 + 逐级后缀候选（Q22）", () => {
 	});
 });
 
+describe("hasShortWordSignal：短词的信号（Q31，未发版）", () => {
+	it(`被链接过 ≥ ${MIN_LINKS_FOR_SHORT} 次，或当前笔记链过它`, () => {
+		expect(hasShortWordSignal(["a/x.md"], MIN_LINKS_FOR_SHORT, false, "b/y.md")).toBe(true);
+		expect(hasShortWordSignal(["a/x.md"], 1, false, "b/y.md")).toBe(false);
+		expect(hasShortWordSignal(["a/x.md"], 1, true, "b/y.md")).toBe(true);
+	});
+
+	it("同名标题就在当前笔记或同一文件夹里", () => {
+		expect(hasShortWordSignal(["b/y.md"], 0, false, "b/y.md")).toBe(true);
+		expect(hasShortWordSignal(["b/z.md"], 0, false, "b/y.md")).toBe(true);
+		expect(hasShortWordSignal(["b/c/z.md"], 0, false, "b/y.md")).toBe(false); // 子文件夹不算
+		expect(hasShortWordSignal(["z.md"], 0, false, "y.md")).toBe(true); // 都在根目录
+		expect(hasShortWordSignal([], 0, false, "y.md")).toBe(false);
+	});
+});
+
 describe("resolveTriggerQuery：命中规则（Q22 / Q27 / Q28 / Q30 / Q31）", () => {
-	/** 用一组 matchKey 模拟索引侧判定；linked 是被链接过的那些。 */
-	const indexOf = (keys: string[], linked: string[] = []): TriggerIndexProbe => ({
+	/** 用一组 matchKey 模拟索引侧判定；relevant 是有短词信号的那些（Q31，见 hasShortWordSignal）。 */
+	const indexOf = (keys: string[], relevant: string[] = []): TriggerIndexProbe => ({
 		hasAnyPrefixMatch: (q) => keys.some((k) => k.startsWith(q)),
 		hasExactMatch: (q) => keys.includes(q),
-		isLinked: (q) => linked.includes(q),
+		isRelevant: (q) => relevant.includes(q),
 	});
 
 	it(`词边界起、权重 ≥ ${MIN_PREFIX_WEIGHT}：按前缀匹配，边打边出候选（Q27）`, () => {
@@ -125,7 +144,18 @@ describe("resolveTriggerQuery：命中规则（Q22 / Q27 / Q28 / Q30 / Q31）", 
 			start: 1,
 			query: "项目级",
 		});
-		expect(resolveTriggerQuery("interf", 0, indexOf(["interface"]))?.query).toBe("interf");
+		expect(resolveTriggerQuery("interfac", 0, indexOf(["interface"]))?.query).toBe("interfac");
+	});
+
+	it(`纯英文按前缀要 ${MIN_LATIN_PREFIX_WEIGHT} 个字母（Q62）`, () => {
+		const idx = indexOf(["scoreboard 设计"]);
+		expect(resolveTriggerQuery("scoreb", 0, idx)).toBeNull();
+		expect(resolveTriggerQuery("scorebo", 0, idx)).toBeNull();
+		expect(resolveTriggerQuery("scoreboa", 0, idx)?.query).toBe("scoreboa");
+		// 含中日韩字符的仍是权重 6（中文 3 字）
+		expect(resolveTriggerQuery("项目级", 0, indexOf(["项目级（影响当前项目）"]))?.query).toBe(
+			"项目级",
+		);
 	});
 
 	it("词边界起、权重不足：前缀不算（issue #10「项目」「json」）", () => {
@@ -133,9 +163,10 @@ describe("resolveTriggerQuery：命中规则（Q22 / Q27 / Q28 / Q30 / Q31）", 
 		expect(resolveTriggerQuery("json", 1, indexOf(["json 配置"]))).toBeNull();
 	});
 
-	it("短英文词完整命中即触发，不要求被链接过（Q30）", () => {
-		const idx = indexOf(["uart", "axi"]);
+	it("短英文词完整命中也要信号（Q30，未发版起）", () => {
+		const idx = indexOf(["uart", "axi"], ["uart"]);
 		expect(resolveTriggerQuery("uart", 0, idx)?.query).toBe("uart");
+		expect(resolveTriggerQuery("axi", 0, idx)).toBeNull(); // 没信号
 		expect(resolveTriggerQuery("ax", 0, idx)).toBeNull(); // 前缀不算
 		// 紧跟汉字的英文词：交界即词边界，start 指向 uart 本身
 		expect(resolveTriggerQuery("用uart", 4, idx)).toEqual({
@@ -145,7 +176,7 @@ describe("resolveTriggerQuery：命中规则（Q22 / Q27 / Q28 / Q30 / Q31）", 
 		});
 	});
 
-	it("短中文词完整命中还要求被链接过（Q31）", () => {
+	it("短中文词完整命中要信号（Q31）", () => {
 		const idx = indexOf(["中断", "使用"], ["中断"]);
 		expect(resolveTriggerQuery("中断", 1, idx)?.query).toBe("中断");
 		expect(resolveTriggerQuery("使用", 1, idx)).toBeNull();
@@ -194,7 +225,7 @@ describe("resolveTriggerQuery：命中规则（Q22 / Q27 / Q28 / Q30 / Q31）", 
 				return false;
 			},
 			hasExactMatch: (q) => q === "appendix",
-			isLinked: () => false,
+			isRelevant: () => false,
 		});
 		expect(hit).toEqual({ text: "APPENDIX", start: 2, query: "appendix" });
 		expect(seen[0]).toBe("xxappendix"); // NFKC 折全角 + 小写
