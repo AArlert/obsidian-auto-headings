@@ -104,6 +104,17 @@ describe("HeadingIndex：loadInitial / 查询", () => {
 		expect(idx.hasExactMatch("")).toBe(false);
 	});
 
+	it("exactMatchPaths：完整命中的标题所在文件，排除正在写的那一条（Q31 就近信号）", () => {
+		const idx = new HeadingIndex();
+		idx.loadInitial([
+			{ path: "p/a.md", basename: "a", content: "## 缓存\n## 缓存一致性" },
+			{ path: "q/b.md", basename: "b", content: "## 缓存" },
+		]);
+		expect(idx.exactMatchPaths("缓存").sort()).toEqual(["p/a.md", "q/b.md"]);
+		expect(idx.exactMatchPaths("缓存", { path: "p/a.md", lineIndex: 0 })).toEqual(["q/b.md"]);
+		expect(idx.exactMatchPaths("缓")).toEqual([]);
+	});
+
 	it("queryPrefix 空查询返回空、limit 生效", () => {
 		const idx = new HeadingIndex();
 		idx.loadInitial([{ path: "a.md", basename: "a", content: "## 甲\n## 乙\n## 丙" }]);

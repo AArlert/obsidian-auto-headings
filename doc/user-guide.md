@@ -24,7 +24,7 @@ Everything below is what you get the moment the plugin is enabled, before you op
 3. Open **Settings → Auto Headings** if you want to go further:
     - **General**: language, global auto-numbering toggle, debounce delay, backlink sync, heading link suggestions.
     - **Paths & templates**: the path-rule table (each rule picks a template and a mode: write to file / display only) and the template editor (live preview, whitelist).
-    - **Maintenance**: numbering upkeep for the current note and the whole vault.
+    - **Maintenance**: whole-vault upkeep (clear all numbering, freeze numbering). Upkeep for the current note lives in the note's "this note" menu.
 4. Per-file override: add `obsidian-auto-headings: true/false` in frontmatter to force-enable/disable a single file. The command **Renumber current note** bypasses all switches.
 
 ## Two modes: display only and write to file
@@ -42,7 +42,7 @@ Every path rule has a mode (the "Mode" column under **Settings → Paths & templ
 | GitHub, Obsidian Publish, other editors         | No numbers                    | Numbers visible                        |
 | Links follow renamed headings                   | Yes                           | Yes                                    |
 
--   **Defaults**: on a new install the root rule `/` is display-only, and rules you add later follow the root rule's mode. Vaults upgrading from an earlier version keep "Write to file" and behave exactly as before.
+-   **Defaults**: on a new install the root rule `/` is display-only, and rules you add later always start as display-only (switch the mode dropdown to write numbers into the file). Vaults upgrading from an earlier version keep "Write to file" and behave exactly as before.
 -   **Mix by folder**: e.g. `/` display-only and `Papers/` write-to-file. The most specific rule wins, the same way templates are resolved.
 -   **Switching**: whenever changing a rule's mode, deleting a rule, editing its path, or setting its template to "No numbering" would move notes to a different mode, the plugin first shows a confirmation with the number of affected notes:
     -   Write → display only: choose "Remove the numbers this plugin wrote" (on by default). Only the plugin's own numbers are removed — hand-written numbers stay — and links to those headings are updated. Leave it off to keep the existing numbers.
@@ -92,16 +92,21 @@ On by default, with a one-time explanatory notice the first time it actually rew
 
 ### Heading link suggestions
 
-Type the text of a heading (its words without the number) and matching headings from your vault pop up; pick one to replace what you typed with a link to it. To keep common words from popping up all the time:
+Link to any heading in your vault without remembering which note it lives in. Turn on **Settings → General → Suggest heading links as you type** (off for new installs, matching Obsidian's default behavior). Then type the text of a heading (its words without the number) and matching headings pop up; press `Tab` (or tap on mobile) to replace what you typed with a link. **Enter never picks a suggestion** — it starts a new line as usual, so normal typing never inserts a link by accident.
 
--   From 6 letters (or 3 CJK characters) on, headings starting with what you typed are suggested as you type;
--   Shorter words must **exactly match** a heading: Latin words like `uart` or `axi` pop up right away; two-character CJK words also need the heading to be linked somewhere in your vault (`[[note#heading]]`), so everyday words don't trigger it;
+While it's off nothing pops up and no heading index is built, so memory and CPU cost drop to zero; Obsidian's own `[[##` still links headings. Upgrading to this version turns it off once (it used to be on by default); turn it back on if you use it and it stays on. Vaults with the Various Complements dictionary integration turned on keep their setting.
+
+To keep common words from popping up all the time:
+
+-   From 8 letters (or 3 CJK characters) on, headings starting with what you typed are suggested as you type;
+-   Shorter words must **exactly match** a heading that's relevant to what you're writing: linked at least twice in your vault (`[[note#heading]]`), in the current note or its folder, or already linked from the current note. So everyday words, and terms that merely happen to match a heading somewhere else, don't trigger it;
 -   In the middle of a run of text with no space or punctuation (common in Chinese and Japanese), the full heading must be typed;
 -   Headings that appear in 3 or more notes (a "Summary" in every note, say) count as template sections and are left out, as are headings inside Excalidraw drawings.
+-   If a suggestion pops up and you don't pick it (Esc, Enter, or just keep typing), that word won't pop up again in this note; it resets when you switch to another note and come back.
 
-Exact matches are listed first, then headings linked more often, then headings in the current note. Self-contained and on by default — no other plugin needed. Turn it off in **Settings → General → Heading link suggestions** and no heading index is built at all, so memory and CPU cost drop to zero.
+Exact matches are listed first, then headings linked more often, then headings in the current note. Self-contained — no other plugin needed.
 
-**Alongside Various Complements (VC):** both plugins share Obsidian's single suggestion popup, so only one can show at a time. With VC installed you get one extra setting:
+**Alongside Various Complements (VC):** both plugins share Obsidian's single suggestion popup, so only one can show at a time. With VC installed and suggestions on you get one extra setting (while they're off, no headings show up in VC's popup either):
 
 -   **Show suggestions in**: appears only while VC is enabled; pick one.
     -   **This plugin's popup** (default): heading suggestions use this plugin's own popup, which takes precedence over VC's; VC shows only its own words.
@@ -174,9 +179,10 @@ There are two markers, and you **don't have to type them** — right-click the f
 
 Do one-note things without opening settings:
 
--   **The fold arrow beside a heading** gains two abilities: **press and drag** to move the whole section (sub-headings included) elsewhere (a blue line marks the drop spot; one undo reverts it; heading levels aren't changed), and **right-click** for the heading menu — skip this heading / skip the whole section, promote section, demote section, copy section link, copy section embed, numbering settings for this note…. A plain click still folds/unfolds as usual. On mobile, a "⋯" appears at the end of the heading line while the cursor is in it, opening the same menu.
+-   **The fold arrow beside a heading** gains two abilities: **press and drag** to move the whole section (sub-headings included) elsewhere (a blue line marks the drop spot; one undo reverts it; heading levels aren't changed), and **right-click** for the heading menu — skip this heading / skip the whole section, promote section, demote section, copy section link, copy section embed, numbering settings for this note…. A plain click still folds/unfolds as usual. On mobile, a "⋯" appears at the end of the heading line while the cursor is in it, opening the same menu. In **reading view**, right-clicking the fold arrow opens the same menu too (no dragging there).
 -   **Copy section link** has two forms: a normal link `[[Note#Heading|Heading]]` and an embed `![[Note#Heading]]`.
--   **The status-bar "this note" label** (e.g. "Display only · Default") opens a menu for that note: the matching rule; auto-numbering three-way (follow global / always for this note / never for this note — read and written in the note's own frontmatter `obsidian-auto-headings`, absent means follow global); change template (writes the frontmatter property `obsidian-auto-headings-template`; choose "Follow path rule" to clear it); renumber now; copy numbered outline; clear leftover numbering.
+-   **The status-bar "this note" label** (e.g. "Display only · Default") opens a menu for that note: the matching rule; auto-numbering three-way (follow global / always for this note / never for this note — read and written in the note's own frontmatter `obsidian-auto-headings`, absent means follow global); change template (writes the frontmatter property `obsidian-auto-headings-template`; choose "Follow path rule" to clear it); renumber now; copy numbered outline; clean up handwritten numbering… (preview each one first); display-only notes also get clear leftover numbering.
+    -   Choosing "**never for this note**" also removes the numbers this plugin wrote in that note (handwritten ones stay). Want to keep the numbers as plain text and just stop the plugin managing them? Press Ctrl+Z once: the numbers come back and the note stays "never".
 -   When you rename a heading, wikilinks to it update not just the `#anchor` but also an **`|alias` that equals the old heading**; aliases you wrote yourself are left alone.
 
 ### Cleanup commands, for when you need a clean slate

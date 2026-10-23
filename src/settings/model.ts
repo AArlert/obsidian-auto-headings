@@ -61,16 +61,20 @@ export interface AutoHeadingsSettings {
 	 */
 	retired: boolean;
 	/**
-	 * 标题链接建议（M13，见 spec.md Roadmap M13）：在任意笔记正文里打出与 vault 内某标题原文
-	 * 匹配的文字时，弹出建议，接受后替换为指向该标题的可点击链接（视觉上保留用户打的原文）。
-	 * **默认开**——与「全局自动编号」`autoNumber`、Backlink 同步 `updateBacklinks` 一样，是面向
-	 * 全体用户的默认能力，不是 opt-in。关闭后标题索引完全不构建（见 headingindex.ts），
-	 * 内存/CPU 成本降为零。
+	 * 打字时建议标题链接（M13，spec §3.23）：在任意笔记正文里打出与 vault 内某标题原文匹配的文字时弹出建议，
+	 * 接受后替换为指向该标题的链接。关闭后标题索引完全不构建（见 headingindex.ts），内存 / CPU 成本降为零。
+	 * **全新安装默认关**（issue #10，2026-10-24 用户定：不用补全插件的人没有「打字出建议」的习惯，默认不打扰，
+	 * 保持 Obsidian 的默认行为，想用的人在设置里打开）；老用户升级保持原值，没有该键的当年默认开 → 开（见 main.loadSettings）。
 	 */
 	headingLinkSuggestEnabled: boolean;
 	/**
+	 * 一次性迁移标记（issue #10）：升级时把「打字时建议标题链接」统一改关（开着 VC 联动的除外）只做一次，做过记 true，
+	 * 之后用户自己打开不会再被改回去。全新安装直接为 true（新装本就默认关）。见 main.loadSettings。
+	 */
+	headingSuggestOffMigrated: boolean;
+	/**
 	 * Various Complements 联动模式（M13，见 spec.md Roadmap M13 与 vcintegration.ts）：
-	 * - "off"：不联动（**默认**——不能因为 headingLinkSuggestEnabled 默认开就跟着默认开，
+	 * - "off"：不联动（**默认**——不能因为标题链接建议默认开就跟着默认开，
 	 *   需用户在设置面板显式选择）。
 	 * - "manual"：只生成/维护 JSON 词典文件，把路径显示给用户，引导其自行粘贴进 VC 设置；
 	 *   不碰 Various Complements 的任何配置文件。
@@ -114,7 +118,8 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	updateBacklinks: true,
 	backlinksIntroShown: false,
 	retired: false,
-	headingLinkSuggestEnabled: true,
+	headingLinkSuggestEnabled: false,
+	headingSuggestOffMigrated: true,
 	vcIntegrationMode: "off",
 	templateHistory: {},
 };

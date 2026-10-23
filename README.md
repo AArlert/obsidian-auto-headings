@@ -55,9 +55,9 @@ A built-in list keeps headings like "Contents", "Appendix" and "References" unnu
 
 The fold arrow beside a heading: **drag** it to move the whole section, **right-click** it for a menu (skip this heading / the whole section, promote / demote, copy link or embed). The status-bar "this note" label switches the template or auto-numbering for just that note. When you rename a heading, a link's `|alias` is updated too.
 
-### Link to any heading as you type
+### Link headings as you type
 
-Start typing the name of a heading anywhere in your vault and a suggestion pops up. Press `Tab` to turn it into a link.
+Turn on "Suggest heading links as you type" in settings. Then type the name of any heading in your vault and it's suggested; press `Tab` to turn it into a link — no need to remember which note it's in. Enter still starts a new line, so nothing gets linked by accident. Off by default, so normal typing is never interrupted.
 
 ### Take over existing notes
 

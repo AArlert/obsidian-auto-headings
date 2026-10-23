@@ -1,4 +1,5 @@
 import { Setting, setIcon } from "obsidian";
+import { settingGroup } from "../group";
 import type { AutoHeadingsSettingTab } from "../SettingsTab";
 import type { Messages } from "../../i18n";
 
@@ -52,10 +53,9 @@ export function renderAboutTab(tab: AutoHeadingsSettingTab, containerEl: HTMLEle
 	linkButton("external-link", t.aboutLinkRepo, REPO_URL);
 	linkButton("message-square", t.aboutLinkIssues, `${REPO_URL}/issues`);
 
-	new Setting(containerEl).setName(t.aboutCreditsHeading).setHeading();
-	containerEl.createEl("p", { cls: "ah-section-desc", text: t.aboutCreditsIntro });
+	const credits = settingGroup(containerEl, t.aboutCreditsHeading, t.aboutCreditsIntro).list;
 	for (const credit of CREDITS) {
-		const item = new Setting(containerEl).setDesc(credit.note(t));
+		const item = new Setting(credits).setDesc(credit.note(t));
 		item.nameEl.createEl("a", { text: credit.repo.replace("/", " / "), href: credit.url });
 		item.settingEl.addClass("ah-about-credit");
 	}

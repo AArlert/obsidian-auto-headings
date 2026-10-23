@@ -556,7 +556,8 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 /* ==== M7 多 TAB 设置页 ==== */
 
 /* TAB 栏（0.7.17，L21/L22）：栏自身横向滑动、绝不撑宽设置页；
-   未激活 = 仅 lucide 图标（灰），激活 = 图标 + 文字 + 主题强调色背景。 */
+   未激活 = 仅 lucide 图标（灰、无底色），激活 = 图标 + 文字 + 淡强调色底 + 强调色字 + 底部强调色线
+   （未发版，2026-10-24 用户定：实心强调色块太抢眼，降一档浓度，仍用主题强调色）。 */
 .ah-tabs {
 	display: flex;
 	flex-wrap: nowrap;
@@ -596,15 +597,22 @@ button.ah-wl-seg-btn.ah-wl-seg-active:hover {
 	height: 16px;
 }
 
-.ah-tab:hover {
+/* 叠写类名压过 Obsidian / 主题给 button 的默认底色与阴影（不用 !important）。 */
+button.ah-tab {
+	background: transparent;
+	box-shadow: none;
+}
+
+button.ah-tab:hover {
+	background: var(--background-modifier-hover);
 	color: var(--text-normal);
 }
 
-/* 活动 TAB：同上，用叠写类名替代 !important 压过主题按钮底色。 */
 button.ah-tab.ah-tab-active,
 button.ah-tab.ah-tab-active:hover {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+	color: var(--text-accent);
+	box-shadow: inset 0 -2px 0 var(--interactive-accent);
 	font-weight: 600;
 }
 
@@ -997,11 +1005,6 @@ button.ah-danger-text {
 	text-align: right;
 }
 
-/* 挂在上一项之下的从属设置（1.2.2：VC 三行缩进挂在「标题链接建议」下，testplan L30） */
-.ah-sub-settings {
-	margin-left: 24px;
-}
-
 /* 标题链接建议（M13）：建议框候选行——icon 列 + 标题原文/来源路径两行。
    1.0.32 起字号与配色对齐 Various Complements 的自定义词典条目（第二行 0.75em /
    --text-muted，见 VC styles.css 的 __description 规则）：同一个标题候选在本插件的框
@@ -1069,18 +1072,6 @@ button.ah-danger-text {
 /* ==== 1.2.2 视觉更新：标题行按钮 / 模板卡片 / 模板编辑弹窗（spec Roadmap M15）==== */
 
 /* 设置标题行右侧的「图标 + 文字」普通按钮（「添加规则」「新增模板」，L32 / L34） */
-.ah-heading-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.ah-heading-btn-icon {
-	display: inline-flex;
-	color: var(--text-muted);
-	--icon-size: 15px;
-}
-
 /* 灰色小标签（「内置」等） */
 .ah-pill {
 	display: inline-flex;
@@ -1323,8 +1314,10 @@ button.ah-editor-tab.is-active:hover {
 	color: var(--text-faint);
 }
 
-.ah-fmt-placeholder {
+/* 占位字符框：叠写类名压过后面 .ah-fmt-input 的 width: 100%（否则独占一行，未发版修） */
+.ah-fmt-input.ah-fmt-placeholder {
 	width: 52px;
+	flex: none;
 }
 
 /* —— 格式表（L36–L39）：宽弹窗下不横滚、预览不截断 —— */
@@ -1571,4 +1564,86 @@ body.ah-dragging-section * {
 .ah-confirm-option-hint {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
+}
+
+/* —— 设置分组大卡片（未发版，2026-10-24 用户定，settings/group.ts）——
+   每个分区一张卡片：标题区（标题 + 一行说明）在上、细线隔开，下面是设置行。设置行本身的底色 / 分隔线 / 圆角照旧由
+   Obsidian 与主题给（默认主题是一整块带分隔线的列表，Cupertino 等是一行一张小卡片），本插件只加外面这一层。
+   颜色全用主题变量，深浅色与各主题自己适配。 */
+.ah-group {
+	background: var(--background-primary-alt);
+	border: var(--border-width, 1px) solid var(--background-modifier-border);
+	border-radius: var(--radius-l, 12px);
+	padding: 0 var(--size-4-4) var(--size-4-4);
+}
+
+.ah-tab-body > .ah-group + .ah-group {
+	margin-top: var(--size-4-4);
+}
+
+/* 没有标题的分组（如语言）：上下留白相同 */
+.ah-group:not(:has(> .setting-item-heading)) {
+	padding-top: var(--size-4-4);
+}
+
+.ah-group > .setting-item-heading {
+	margin: 0 calc(-1 * var(--size-4-4)) var(--size-4-4);
+	padding: var(--size-4-3) var(--size-4-4);
+	border-bottom: var(--border-width, 1px) solid var(--background-modifier-border);
+}
+
+/* 标题行右侧的按钮（添加规则 / 新增模板）窄屏时也留在标题行右上，不被挤到说明下面 */
+.ah-group > .setting-item-heading {
+	flex-wrap: nowrap;
+	align-items: flex-start;
+}
+
+.ah-group > .setting-item-heading .setting-item-info {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.ah-group > .setting-item-heading .setting-item-control {
+	flex: none;
+}
+
+.ah-group > .setting-item-heading .setting-item-name {
+	font-size: var(--font-ui-medium);
+	font-weight: var(--font-semibold, 600);
+	color: var(--text-normal);
+}
+
+.ah-about-links + .ah-group {
+	margin-top: var(--size-4-6);
+}
+
+.ah-group > .ah-path-table {
+	padding: var(--size-4-3) var(--size-4-4);
+	border-radius: var(--setting-items-radius, var(--radius-m));
+	background: var(--setting-items-background, var(--background-secondary));
+}
+
+/* 卡片里的表头与面板同色（面板 = 设置行底色叠在卡片底色上），不再是一条深色直角带；吸顶时仍能盖住滚上来的行 */
+.ah-group .ah-path-head {
+	background: linear-gradient(
+			var(--setting-items-background, transparent),
+			var(--setting-items-background, transparent)
+		),
+		var(--background-primary-alt);
+}
+
+/* 吸顶表头往上盖住面板的上内边距：否则滚上去的行会从表头上方那条留白里露出来 */
+.ah-group > .ah-path-table > .ah-path-head {
+	top: calc(-1 * var(--size-4-3));
+	margin-top: calc(-1 * var(--size-4-3));
+	padding-top: var(--size-4-3);
+}
+
+.ah-group > .ah-path-hint {
+	margin-bottom: 0;
+}
+
+.ah-group .ah-template-card {
+	border-radius: var(--setting-items-radius, var(--radius-l, 8px));
+	background: var(--setting-items-background, var(--background-secondary));
 }

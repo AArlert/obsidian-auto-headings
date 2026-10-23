@@ -256,9 +256,25 @@ export class App {}
 /**
  * `Scope` 替身（M13）：headingsuggest.ts 构造时注册 Tab 键回调，仅需可调用 `register`。
  */
+/** `Scope` 替身：形状照 Obsidian 1.14.4 的 app.js（处理器按注册顺序存在 `keys`，无修饰键编译成 ""）。 */
+export interface MockKeyHandler {
+	modifiers: string | null;
+	key: string | null;
+	func: (evt: unknown) => unknown;
+}
 export class Scope {
-	register(): unknown {
-		return {};
+	keys: MockKeyHandler[] = [];
+	register(
+		modifiers: string[] | null,
+		key: string | null,
+		func: (evt: unknown) => unknown,
+	): MockKeyHandler {
+		const h = { modifiers: modifiers ? modifiers.join(",") : null, key, func };
+		this.keys.push(h);
+		return h;
+	}
+	unregister(h: MockKeyHandler): void {
+		this.keys = this.keys.filter((x) => x !== h);
 	}
 }
 
@@ -273,7 +289,10 @@ export class PopoverSuggest {
 	constructor(app: unknown) {
 		this.app = app;
 		this.scope = new Scope();
+		// 与真实 PopoverSuggest 一样内置「Enter 接受」（Q58 测本插件把它摘掉）。
+		this.scope.register([], "Enter", () => false);
 	}
+	close(): void {}
 }
 
 export class EditorSuggest extends PopoverSuggest {
@@ -299,6 +318,14 @@ export function getLanguage(): string {
 /** 路径归一：折叠反斜杠与重复斜杠，足够 TemplateStore 使用。 */
 /** setIcon 替身：测试环境无 lucide 图标注册表，置空即可（DOM 结构由手验覆盖）。 */
 export function setIcon(_el: unknown, _icon: string): void {}
+
+/** 原生 stripHeadingForLink 的替身：把链接里不能出现的字符换成空格、压缩空白（照抄 1.10.6 实现）。 */
+export function stripHeadingForLink(heading: string): string {
+	return heading
+		.replace(/([:#|^\\\r\n]|%%|\[\[|]])/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
 
 export function normalizePath(path: string): string {
 	return path.replace(/\\/g, "/").replace(/\/+/g, "/");

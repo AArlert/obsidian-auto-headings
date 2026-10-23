@@ -16,7 +16,7 @@ import { NO_NUMBERING_TEMPLATE, type PathRule } from "../../src/pathrules";
 import { HeadingIndex } from "../../src/headingindex";
 import { NoteEntry } from "../../src/noteentry";
 import { TEMPLATE_KEY } from "../../src/frontmatter";
-import { Modal, Notice, TFile as MockTFile, type MockCommand } from "./obsidian-mock";
+import { Menu, Modal, Notice, TFile as MockTFile, type MockCommand } from "./obsidian-mock";
 
 /** 编辑器坐标。 */
 interface Pos {
@@ -105,7 +105,7 @@ interface PluginInternals {
 		language: "auto" | "zh" | "en";
 		updateBacklinks: boolean;
 		backlinksIntroShown?: boolean;
-		/** M13：标题链接建议开关（默认开）。 */
+		/** M13：打字时建议标题链接。 */
 		headingLinkSuggestEnabled: boolean;
 		/** M13：VC 联动模式（默认 "off"）。 */
 		vcIntegrationMode: "off" | "manual" | "auto";
@@ -137,6 +137,10 @@ interface PluginInternals {
 	scheduleHeadingIndexUpdate(editor: unknown, info: unknown): void;
 	buildInitialHeadingIndex(): Promise<void>;
 	setHeadingLinkSuggestEnabled(enabled: boolean): Promise<void>;
+	/** VC 候选里本插件词典的词要不要去掉（Q46 / Q55）。 */
+	shouldDropVcWord(word: unknown, ctx: unknown): boolean;
+	/** 「这篇不编号」：写 false + 剥本插件编号（S30）。 */
+	pauseNoteAndStripNumbering(path: string): Promise<boolean>;
 	/** M13（1.0.28）：启动后的 VC 词典同步（重写词典 + reload 重试）。 */
 	syncVcDictionaryAfterStartup(): Promise<void>;
 	/** R 组（spec.md §A.11）：注册「复制编号大纲」「复制当前小节链接」两条命令。 */
@@ -2069,6 +2073,44 @@ describe("清除即暂停 / 重新编号即恢复（1.0.15，testplan H13–H16�
 		expect(Notice.messages.some((m) => m.includes("恢复"))).toBe(true);
 	});
 
+	it("H15：实时预览拒绝删 frontmatter 行的事务时退回两步——先写编号，再经 processFrontMatter 删暂停键", async () => {
+		// 2026-10-23 真机实测：实时预览整笔丢弃删除 frontmatter 行的事务（插入不受影响），编号也跟着丢。
+		class LivePreviewEditor extends FakeEditor {
+			transaction(tx: Parameters<FakeEditor["transaction"]>[0]): void {
+				if (tx.changes.some((c) => c.to && c.text === "" && c.from.line < 3)) {
+					this.txnCount++;
+					return; // 整笔丢弃
+				}
+				super.transaction(tx);
+			}
+		}
+		const { p } = makePlugin({ autoNumber: true });
+		const ed = new LivePreviewEditor(
+			["---", "obsidian-auto-headings: false", "---", "## 章"].join("\n"),
+		);
+		const fm: Record<string, unknown> = { "obsidian-auto-headings": false };
+		const processFrontMatter = vi.fn(
+			async (_f: unknown, fn: (fm: Record<string, unknown>) => void) => fn(fm),
+		);
+		(
+			p as unknown as { app: { fileManager: Record<string, unknown> } }
+		).app.fileManager.processFrontMatter = processFrontMatter;
+		const file = Object.assign(new MockTFile(), { path: "a.md" });
+		p.runImmediateRenumber(ed, { file });
+		await flushPromises();
+		expect(ed.getValue()).toBe(
+			[
+				"---",
+				"obsidian-auto-headings: false",
+				"---",
+				`## ${WORD_JOINER}1 ${WORD_JOINER}章`,
+			].join("\n"),
+		);
+		expect(processFrontMatter).toHaveBeenCalledTimes(1);
+		expect(fm).toEqual({});
+		expect(Notice.messages).toContain("已重新编号，并恢复本文件的自动编号");
+	});
+
 	it("H15：frontmatter 还有别的键时只删这一行，保留其余属性", () => {
 		const { p } = makePlugin({ autoNumber: true });
 		const ed = new FakeEditor(
@@ -2444,7 +2486,6 @@ describe("M13：setHeadingLinkSuggestEnabled 运行期切换", () => {
 		p.scheduleHeadingIndexUpdate(ed, fileInfo("a.md"));
 		vi.advanceTimersByTime(300);
 		expect(p.headingIndex.size).toBe(1);
-		p.settings.headingLinkSuggestEnabled = false;
 		await p.setHeadingLinkSuggestEnabled(false);
 		expect(p.headingIndex.size).toBe(0);
 		expect(p.headingIndex.hasAnyPrefixMatch("交叉")).toBe(false);
@@ -3132,5 +3173,120 @@ describe("S 组：笔记内入口（M16，spec §3.24）", () => {
 		expect(e.statusText(f("a.md"))).toBe("写入 · 默认");
 		expect(e.statusText(f("V/a.md"))).toBe("仅显示 · 默认");
 		expect(e.statusText(f("N/a.md"))).toBe("本篇不编号");
+	});
+});
+
+describe("打字时建议标题链接：开 / 关（issue #10，spec §3.23，testplan Q55）", () => {
+	it("关着：VC 框里本插件词典的词一律去掉；开着照常（Q55）", async () => {
+		const { p } = makePlugin({ vaultFiles: { "a.md": "# 文档\n## axi" } });
+		await p.setHeadingLinkSuggestEnabled(true);
+		await flushPromises();
+		const word = { description: "a.md", insertedText: "[[a#axi|axi]]" };
+		expect(p.shouldDropVcWord(word, {})).toBe(false);
+		p.settings.headingLinkSuggestEnabled = false;
+		expect(p.shouldDropVcWord(word, {})).toBe(true);
+	});
+});
+
+describe("本篇菜单收纳维护操作 + 「这篇不编号」顺手清编号（未发版，spec §3.24，testplan S29–S32）", () => {
+	const entryOf = (p: unknown) => new NoteEntry(p as never);
+	const tfile = (path: string) => Object.assign(new MockTFile(), { path, extension: "md" });
+	const menuTitles = async (p: unknown, path: string) => {
+		const menu = new Menu();
+		await entryOf(p).buildNoteMenu(menu as never, tfile(path) as never);
+		return menu.items.map((i) => i.title);
+	};
+
+	it("S29 / S32：写入笔记的清理段只有「清理手写编号…」，没有单列的清除本篇编号；仅显示笔记另有清除残留", async () => {
+		const { p } = makePlugin({
+			vaultFiles: { "w.md": "## 甲", "v/x.md": "## 乙" },
+			pathRules: [
+				{ pattern: "/", template: "默认" },
+				{ pattern: "v/", template: "默认", mode: "virtual" },
+			],
+		});
+		const w = await menuTitles(p, "w.md");
+		expect(w).toContain("清理手写编号…");
+		expect(w).not.toContain("清除残留编号");
+		expect(w.some((t) => t.includes("清除本篇") || t.includes("清除当前文件"))).toBe(false);
+		const v = await menuTitles(p, "v/x.md");
+		expect(v).toEqual(expect.arrayContaining(["清理手写编号…", "清除残留编号"]));
+	});
+
+	it("S30：「这篇不编号」写 false 并剥本插件编号，手写编号不动；先属性、后剥离各一笔（撤销一次只退剥离）", async () => {
+		const { p, setLeaves } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(
+			["# 文档", `## ${WORD_JOINER}1 ${WORD_JOINER}甲`, "## 第三章 手写乙"].join("\n"),
+		);
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+		await entryOf(p).setNoteAuto(tfile("a.md") as never, false);
+		expect(ed.getValue()).toBe(
+			[
+				"---",
+				"obsidian-auto-headings: false",
+				"---",
+				"# 文档",
+				"## 甲",
+				"## 第三章 手写乙",
+			].join("\n"),
+		);
+		expect(ed.txnCount).toBe(2);
+		expect(ed.lastChanges.every((c) => c.from.line >= 3)).toBe(true); // 最后一笔只动标题行
+	});
+
+	it("S31 ②：没有本插件编号时只写属性", async () => {
+		const { p, setLeaves } = makePlugin({ autoNumber: true });
+		const ed = new FakeEditor(["# 文档", "## 甲"].join("\n"));
+		setLeaves([{ editor: ed, file: { path: "a.md" } }]);
+		await entryOf(p).setNoteAuto(tfile("a.md") as never, false);
+		expect(ed.getValue()).toBe(
+			["---", "obsidian-auto-headings: false", "---", "# 文档", "## 甲"].join("\n"),
+		);
+		expect(Notice.messages.some((m) => m.includes("无可清除") || m.includes("没有"))).toBe(
+			false,
+		);
+	});
+
+	it("S30：实时预览拒绝改写已有键那一行时退回 processFrontMatter 写 false，同步回编辑器后再剥编号", async () => {
+		class LivePreviewEditor extends FakeEditor {
+			transaction(tx: Parameters<FakeEditor["transaction"]>[0]): void {
+				if (tx.changes.some((c) => c.to && c.to.line > c.from.line && c.from.line < 3)) {
+					this.txnCount++;
+					return; // 整笔丢弃
+				}
+				super.transaction(tx);
+			}
+		}
+		const { p, setLeaves } = makePlugin({ autoNumber: true });
+		const ed = new LivePreviewEditor(
+			[
+				"---",
+				"obsidian-auto-headings: true",
+				"---",
+				`## ${WORD_JOINER}1 ${WORD_JOINER}甲`,
+			].join("\n"),
+		);
+		const file = tfile("a.md");
+		setLeaves([{ editor: ed, file }]);
+		const fm: Record<string, unknown> = { "obsidian-auto-headings": true };
+		const processFrontMatter = vi.fn(
+			async (_f: unknown, fn: (fm: Record<string, unknown>) => void) => {
+				fn(fm);
+				ed.setValue(ed.getValue().replace(": true", ": false")); // 模拟磁盘改动同步回编辑器
+			},
+		);
+		(
+			p as unknown as { app: { fileManager: Record<string, unknown> } }
+		).app.fileManager.processFrontMatter = processFrontMatter;
+		expect(await p.pauseNoteAndStripNumbering("a.md")).toBe(true);
+		expect(ed.getValue()).toBe(
+			["---", "obsidian-auto-headings: false", "---", "## 甲"].join("\n"),
+		);
+		expect(fm).toEqual({ "obsidian-auto-headings": false });
+	});
+
+	it("笔记没在任何编辑器里打开：返回 false，交给调用方只写属性", async () => {
+		const { p } = makePlugin();
+		expect(await p.pauseNoteAndStripNumbering("nowhere.md")).toBe(false);
 	});
 });

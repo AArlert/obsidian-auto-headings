@@ -25,6 +25,7 @@ import { sectionHeadingAt } from "./copycommands";
 import { readFileSwitch, SWITCH_KEY, TEMPLATE_KEY } from "./frontmatter";
 import { parseHeadings, type Heading } from "./parser";
 import { headingHandleExtension } from "./headinghandle";
+import { registerReadingHeadingMenu } from "./readingheadingmenu";
 import { stripWordJoiners } from "./strip";
 import { NO_NUMBERING_TEMPLATE, resolvePathRule } from "./pathrules";
 
@@ -135,6 +136,8 @@ export class NoteEntry {
 		);
 
 		p.registerEditorExtension(headingHandleExtension(this, () => p.messages().handleHint));
+		// 阅读视图：右键折叠箭头同样打开标题菜单，不能拖（S33–S35）。
+		registerReadingHeadingMenu(p, this, () => p.messages().handleHintReading);
 		this.registerStatusBar();
 	}
 
@@ -299,8 +302,15 @@ export class NoteEntry {
 		new Notice(on ? m.noticeNoteAutoOff : m.noticeNoteAutoOn);
 	}
 
-	/** 写 / 删单篇自动编号开关（S15）：`null` 删除该键。 */
+	/**
+	 * 写 / 删单篇自动编号开关（S15）：`null` 删除该键。写 `false`（这篇不编号）时顺手剥掉本插件写的编号（S30 / S31，
+	 * spec §3.24）——笔记开着就由 main 做完（先属性、后剥离，各一笔）；没在编辑器里打开才退回只写属性。
+	 */
 	async setNoteAuto(file: TFile, value: boolean | null): Promise<void> {
+		if (value === false && (await this.plugin.pauseNoteAndStripNumbering(file.path))) {
+			this.updateStatus();
+			return;
+		}
 		await this.writeFrontmatter(file, (fm) => {
 			if (value === null) {
 				delete fm[SWITCH_KEY];
@@ -427,6 +437,14 @@ export class NoteEntry {
 						void p.runCopyNumberedOutline(found.editor, file);
 					}
 				}),
+		);
+		// 清理（未发版起由编号维护 TAB 搬来，S29 / S32）：手写编号先弹预览；仅显示笔记另有清除残留。
+		menu.addSeparator();
+		menu.addItem((i) =>
+			i
+				.setTitle(m.statusMenuCleanForeign)
+				.setIcon("filter")
+				.onClick(() => p.openForeignNumberingCleanupModal(file.path)),
 		);
 		if (p.isVirtualFile(file.path)) {
 			menu.addItem((i) =>

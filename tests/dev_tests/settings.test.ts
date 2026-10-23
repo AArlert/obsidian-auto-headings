@@ -136,6 +136,61 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		expect(init).toBeGreaterThan(-1);
 		expect(load).toBeLessThan(init);
 	});
+
+	// issue #10（spec §3.23，testplan Q50）：新装默认关；升级时一次性统一改关，开着 VC 联动的保持原值。
+	it("Q50：全新安装默认关，迁移标记直接为 true", async () => {
+		const { plugin } = makeLoadable(undefined, false);
+		await plugin.loadSettings();
+		expect(plugin.settings.headingLinkSuggestEnabled).toBe(false);
+		expect(plugin.settings.headingSuggestOffMigrated).toBe(true);
+	});
+
+	it("Q50：升级（没做过迁移）——不联动 VC 的一律改关，含没有该键的老用户", async () => {
+		for (const data of [
+			{ headingLinkSuggestEnabled: true },
+			{ headingLinkSuggestEnabled: true, vcIntegrationMode: "off" },
+			{ autoNumber: true },
+			{ headingSuggestTrigger: "auto" },
+		]) {
+			const { plugin } = makeLoadable(data, true);
+			await plugin.loadSettings();
+			expect(plugin.settings.headingLinkSuggestEnabled).toBe(false);
+			expect(plugin.settings.headingSuggestOffMigrated).toBe(true);
+		}
+	});
+
+	it("Q50：升级时开着 VC 联动的保持原值", async () => {
+		for (const [data, want] of [
+			[{ headingLinkSuggestEnabled: true, vcIntegrationMode: "auto" }, true],
+			[{ headingLinkSuggestEnabled: true, vcIntegrationMode: "manual" }, true],
+			[{ headingLinkSuggestEnabled: false, vcIntegrationMode: "auto" }, false],
+			[{ headingSuggestTrigger: "auto", vcIntegrationMode: "auto" }, true],
+			[{ headingSuggestTrigger: "link", vcIntegrationMode: "auto" }, false],
+		] as const) {
+			const { plugin } = makeLoadable(data, true);
+			await plugin.loadSettings();
+			expect(plugin.settings.headingLinkSuggestEnabled).toBe(want);
+		}
+	});
+
+	it("Q50：迁移只做一次——做过之后自己打开的保持开", async () => {
+		const { plugin } = makeLoadable(
+			{ headingLinkSuggestEnabled: true, headingSuggestOffMigrated: true },
+			true,
+		);
+		await plugin.loadSettings();
+		expect(plugin.settings.headingLinkSuggestEnabled).toBe(true);
+	});
+
+	it("Q50：评审构建的旧键（三档、右键菜单开关）加载时删掉", async () => {
+		const { plugin } = makeLoadable(
+			{ headingSuggestTrigger: "auto", headingSuggestInEditorMenu: true },
+			true,
+		);
+		await plugin.loadSettings();
+		expect("headingSuggestTrigger" in plugin.settings).toBe(false);
+		expect("headingSuggestInEditorMenu" in plugin.settings).toBe(false);
+	});
 });
 
 describe("全库操作确认词（1.2.2，testplan L44）", () => {

@@ -8,8 +8,11 @@
  *
  * Tab 接受建议走官方公开 API（Scope.register，[] 表示只拦截不带修饰键的 Tab，不影响
  * Shift+Tab）；「接受当前高亮项」的内部调用（.suggestions.useSelectedItem）不是公开 API，
- * 包 try/catch 静默降级——内部形状变化时用户仍可用 Obsidian 内置的 Enter 接受
+ * 包 try/catch 静默降级——内部形状变化时用户仍可点按接受
  * （方案 §12 核实清单第 7 条，未来 Obsidian 版本升级时最优先复查）。
+ *
+ * **回车不接受**（testplan Q58，issue #10）：框是打字时自己弹的，回车的本意是换行。Obsidian 给建议框内置了
+ * Enter 接受，这里把它摘掉、换成「关框、不拦截」（见 {@link HeadingLinkSuggest.dropBuiltInEnter} 与构造函数）。
  */
 
 import {
@@ -18,6 +21,7 @@ import {
 	TFile,
 	setIcon,
 	type Editor,
+	type KeymapEventHandler,
 	type EditorPosition,
 	type EditorSuggestContext,
 	type EditorSuggestTriggerInfo,
@@ -29,6 +33,7 @@ import {
 	buildHeadingLink,
 	extractTriggerToken,
 	isBlockedContext,
+	hasShortWordSignal,
 	resolveTriggerQuery,
 	sortEntries,
 } from "./headingtrigger";
@@ -65,7 +70,64 @@ function setHeadingIcon(el: HTMLElement): void {
 	}
 }
 
+/**
+ * 「不选就记住」（testplan Q63，未发版，2026-10-24 用户定）：框弹出后没选就关了（Esc、回车、接着打字），这次框开着时出现过的
+ * 查询在这一篇里不再弹；切到别的笔记即清空。主力库重放（`scripts/suggest-replay.mjs`）里这一项把打扰再降一大半，且不掉召回——
+ * 每个词第一次照样弹。只在内存里，不持久化：它是「这一会儿别烦我」，不是长期偏好。
+ */
+export class DismissMemory {
+	private readonly byPath = new Map<string, Set<string>>();
+	private readonly episode = new Set<string>();
+	private episodePath: string | null = null;
+	private accepted = false;
+
+	/** 这一篇里这个查询是否已被「不选」过。 */
+	isDismissed(path: string, query: string): boolean {
+		return this.byPath.get(path)?.has(query) ?? false;
+	}
+
+	/** 框为这个查询弹出（或开着时查询变了）。 */
+	shown(path: string, query: string): void {
+		if (this.episodePath !== path) {
+			this.episode.clear();
+		}
+		this.episodePath = path;
+		this.episode.add(query);
+	}
+
+	/** 用户选中了某一条：这次不记。 */
+	accept(): void {
+		this.accepted = true;
+	}
+
+	/** 框关了：没选的话，把这次出现过的查询记到这一篇上。 */
+	closed(): void {
+		if (!this.accepted && this.episodePath !== null && this.episode.size > 0) {
+			const set = this.byPath.get(this.episodePath) ?? new Set<string>();
+			for (const q of this.episode) {
+				set.add(q);
+			}
+			this.byPath.set(this.episodePath, set);
+		}
+		this.episode.clear();
+		this.episodePath = null;
+		this.accepted = false;
+	}
+
+	/** 打开了某一篇：其余笔记的记录清掉（离开即忘，回来重新算）。 */
+	keepOnly(path: string | null): void {
+		for (const p of [...this.byPath.keys()]) {
+			if (p !== path) {
+				this.byPath.delete(p);
+			}
+		}
+	}
+}
+
 export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
+	/** 「不选就记住」（Q63）；main 在 file-open 时调 {@link DismissMemory.keepOnly}。 */
+	readonly dismissed = new DismissMemory();
+
 	constructor(private readonly plugin: AutoHeadingsPlugin) {
 		super(plugin.app);
 		this.limit = SUGGEST_LIMIT;
@@ -84,10 +146,38 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 			try {
 				suggest?.useSelectedItem?.({});
 			} catch {
-				/* 内部 API 形状变化：静默降级，Enter 仍可接受（Obsidian 内置）。 */
+				/* 内部 API 形状变化：静默降级，点按仍可接受。 */
 			}
 			return false; // 阻止默认的编辑器 Tab（缩进）行为继续传播。
 		});
+		this.dropBuiltInEnter();
+		// 回车 = 关框 + 照常换行（Q58）。必须先关框：编辑器自己的 CM 键表里 Enter 在「有建议框开着」时被吞掉
+		// （app.js：`{key: "Enter", run: () => editorSuggest.isShowingSuggestion()}`），所以只摘掉内置的还不够。
+		// 关掉后返回 undefined 不拦截，按键照常落到编辑器，换行（列表续项）由 Obsidian 自己做。
+		// 输入法组合中的回车归输入法。
+		this.scope.register([], "Enter", (evt) => {
+			if (!evt.isComposing) {
+				this.close();
+			}
+			return undefined;
+		});
+	}
+
+	/**
+	 * 摘掉 Obsidian 内置的「Enter 接受建议」（Q58）。Scope 按注册顺序取第一个匹配的处理器，内置的先注册，
+	 * 追加同键处理器盖不住，只能经公开的 `unregister` 摘掉；处理器列表 `keys` 未公开，认不出就什么都不做，
+	 * 由 {@link selectSuggestion} 兜底。
+	 */
+	private dropBuiltInEnter(): void {
+		const keys = (this.scope as unknown as { keys?: unknown }).keys;
+		if (!Array.isArray(keys)) {
+			return;
+		}
+		for (const h of [...keys] as Array<{ key?: unknown; modifiers?: unknown }>) {
+			if (h.key === "Enter" && (h.modifiers === "" || h.modifiers === null)) {
+				this.scope.unregister(h as KeymapEventHandler);
+			}
+		}
 	}
 
 	/**
@@ -177,11 +267,18 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		const hit = resolveTriggerQuery(token, start, {
 			hasAnyPrefixMatch: (q) => index.hasAnyPrefixMatch(q, self),
 			hasExactMatch: (q) => index.hasExactMatch(q, self),
-			isLinked: (q) => links.count(q) > 0,
+			isRelevant: (q) =>
+				hasShortWordSignal(
+					index.exactMatchPaths(q, self),
+					links.count(q),
+					links.linksFrom(file.path, q),
+					file.path,
+				),
 		});
-		if (!hit) {
+		if (!hit || this.dismissed.isDismissed(file.path, hit.query)) {
 			return null;
 		}
+		this.dismissed.shown(file.path, hit.query);
 
 		return {
 			// 起点是**被匹配上的那一段**的起点：接受建议时只替换这一段，token 里没参与
@@ -224,11 +321,24 @@ export class HeadingLinkSuggest extends EditorSuggest<HeadingIndexEntry> {
 		});
 	}
 
-	selectSuggestion(entry: HeadingIndexEntry, _evt: MouseEvent | KeyboardEvent): void {
+	/** 关框时交给 {@link DismissMemory}：没选就记住（Q63）。Esc、回车（Q58）、接着打字到不再命中都会走到这里。 */
+	close(): void {
+		this.dismissed.closed();
+		super.close();
+	}
+
+	selectSuggestion(entry: HeadingIndexEntry, evt: MouseEvent | KeyboardEvent): void {
 		const ctx = this.context;
 		if (!ctx) {
 			return;
 		}
+		// 兜底（Q58）：内置 Enter 没摘掉（Obsidian 内部结构变了）时回车仍会走到这里——不插链接，关框后照常换行。
+		if ("key" in evt && evt.key === "Enter") {
+			this.close();
+			ctx.editor.exec("newlineAndIndent");
+			return;
+		}
+		this.dismissed.accept();
 		// alias 恒为完整标题名（displayText），见 headingtrigger.ts buildHeadingLink。链接文本走 Obsidian 的
 		// fileToLinktext：重名文件写路径，否则会链到另一篇同名笔记（Q47）。
 		const target = this.app.vault.getAbstractFileByPath(entry.path);
