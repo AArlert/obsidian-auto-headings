@@ -179,8 +179,9 @@ export class NoteEntry {
 				.setTitle(m.menuNoteSettings)
 				.setIcon("settings")
 				.onClick(
-					() =>
-						void this.openNoteMenu(file, evt, () =>
+					// 用点击这一项的坐标定位新菜单（不是最初右键的坐标），「返回」才能对准鼠标。
+					(click) =>
+						void this.openNoteMenu(file, click as MouseEvent, () =>
 							this.openHeadingMenu(evt, editor, file, lineIndex),
 						),
 				),
