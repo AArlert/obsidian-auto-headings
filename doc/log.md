@@ -15,6 +15,33 @@
 
 ---
 
+## 2026-10-27 标题菜单四项反馈：设置开关 + 返回置顶 + 阅读视图落盘 + 升降级可选范围（不 bump、未提交，交接：claude/title-menu-level-adjust-c3cecb）
+
+### 做了什么
+
+- **设置开关**：全局设置新增「笔记内菜单」分组——标题右键菜单（`headingMenuEnabled`）、状态栏标签（`statusBarMenuEnabled`），默认开；关标题菜单时手柄 / 手机「⋯」/ 阅读视图右键 / 编辑器右键标题项都不再介入（testplan S39）。
+- **返回置顶**：从标题菜单进的本篇菜单把「返回」放最上面，鼠标点完「本篇编号设置…」正落在它上面（S38，`noteentry.ts` `buildNoteMenu`）。
+- **阅读视图菜单项生效**：只在阅读视图打开时改走 `vault.process`（`readingheadingmenu.ts` `fileBackedEditor` + 纯函数 `applyTextChanges`），不再依赖背后的隐藏编辑器；同篇有编辑视图仍改那个（S37，S35 ② 不变）。
+- **升降级范围**：保持「本节 = 连同子标题」为默认，新增「仅升级 / 降级此标题」菜单项与两条命令（`planSectionShift` 加 `scope`，S36）。理由见 spec §3.24 末节。
+- 10 种界面语言补 9 个键；testplan S36–S39、spec §3.24、user-guide 双语同步。
+
+### 没做什么
+
+- **没真机验**：阅读视图那条的根因是推断（隐藏编辑器不落盘 / 不重绘），改走文件肯定会重绘，但没在 Obsidian 里亲眼看过；S36–S39 仍写「待真机」。S35 当时的真机结论与用户这次实测矛盾，原因没查清。
+- 阅读视图下本篇菜单里的「立即重新编号 / 复制大纲 / 清理」等仍走原编辑器路径，若用户反映同样无效再照 `fileBackedEditor` 的思路处理。
+- 阅读视图下的改动进不了撤销栈（代价，已写进 spec）。
+- 门槛：`vitest` 1012/1013，唯一红仍是已知 Windows ICU 假红（`whitelist.test.ts` CJK 排序）；`npm run check` 见提交前一次。
+
+### 下一步
+
+- 重建 `release/` 部署到测试库，真机验 S36–S39（尤其阅读视图下「跳过此标题 / 升级本节」是否真改了文件并重绘）；通过后回填 testplan、发 1.2.6。
+
+### 验证方式
+
+- 单测：`headingedit.test.ts`（scope self）、`readingheadingmenu.test.ts`（`applyTextChanges`，含 CRLF）、`settings.test.ts`（S39 缺省）；真机待办见上。
+
+---
+
 ## 2026-10-24 发版 1.2.5：标题链接建议默认关 + 按重放数据收紧 + 设置页改版（issue #10，交接：claude/issue-10-feedback-49b340 → master，tag 1.2.5）
 
 ### 做了什么
@@ -79,73 +106,3 @@
 - 真机：经 `loom-probe` 通道跑 `suggest-signals.js` → 21/21；跑完 `探针-AH信号` 已删、`headingLinkSuggestEnabled` 仍为 `false`、
   `main.js` 哈希与 `release/` 一致。
 - 门槛：`node scripts/docs.mjs --check` 0、`prettier --check` 0（本次只动文档 + 新增探针脚本，`src/` 未动，故未重跑 vitest）。
-
----
-
-## 2026-10-24 issue #10 第三轮：触发方式收成开 / 关两档（新装默认关）+ 回车不接受（不 bump，交接：claude/issue-10-feedback-49b340）
-
-### 做了什么
-
-- 用户定（2026-10-24）：三档收成两档。报告者不用补全插件、没有「打字出建议」的习惯，对这类人最好的默认就是不弹。
-  - **撤销「打 `[[` 时」档**：删 `src/nativelinksuggest.ts`、其单测与 `tests/probes/native-link.js`，`headingindex.queryPrefix` 的
-    `includeGeneric` 还原。理由（spec §3.23「否决」）：全靠包原生框的非公开结构；原生 `[[##` 本来就按子序列模糊匹配全库标题
-    （先前文档说它「按剥编号匹配做不到」是错的），多出来的只是少打两个 `#`。上一块里的 Q59 / Q60 随之作废。
-  - 设置回到布尔 `headingLinkSuggestEnabled`（沿用发版键名），改名「打字时建议标题链接」，**全新安装默认关**；老用户原值保留，
-    没有该键的 → 开；评审构建写过的 `headingSuggestTrigger` 折算一次（只有 `auto` 算开）后删掉（Q50）。
-  - ~~编辑器右键菜单勾选项 + 「在右键菜单里显示开关」~~：做了、真机测过，用户看后定**没必要**（2026-10-24），已整块删掉
-    （`main.addHeadingSuggestMenuItem`、设置项、10 种语言文案、单测与探针相应部分）；评审构建存过的 `headingSuggestInEditorMenu` 加载时删。Q61 标撤销。
-  - **升级时统一改关一次**（2026-10-24 用户定：报告者是 1.2.4 升级用户，data.json 里存着默认的 `true`，只靠「新装默认关」盖不住他）：
-    没做过迁移的（`headingSuggestOffMigrated` 不为 true）一律改关，开着 VC 联动的保持原值；只做一次，新装标记直接为 true。
-    `settings.test.ts` 五例（Q50）。发布说明草稿 `doc/release-notes/1.2.5.md`（版本号发版时按 bump 定）。
-  - **回车不接受**（Q58）：对照 1.14.4 app.js，`Scope.handleKey` 按注册顺序取第一个匹配，内置 Enter 先注册、追加盖不住——
-    构造时经公开 `scope.unregister` 摘掉它（`keys` 未公开，认不出不动）；兜底：`selectSuggestion` 收到回车就关框 +
-    `exec("newlineAndIndent")`。新单测 `tests/dev_tests/headingsuggest.test.ts`，mock 的 `Scope` 照真实形状补了 `keys` / `unregister`。
-- 10 种语言的新文案；设置说明一行化上限内重写。spec §3.23 新节替换旧「三档」节，§3.13 / §4 同步；testplan Q49 / Q50 / Q55 / Q56 / Q58 改写、
-  Q51–Q54 / Q57 / Q59 / Q60 标「已撤销」、新增 Q61；使用指南双语、README 双语改写。
-- **设置页 GUI**（用户拿 Easy Typing 设置页作参考，2026-10-24 定，L49 / L50，spec §3.13）：TAB 选中态改淡强调色底 + 强调色字 + 底部线；
-  每个分区一张大卡片（新 `src/settings/group.ts`，DOM 照原生 `SettingGroup`，外加 `ah-group` 卡片层），四个 TAB 都接上。
-  先试过只用原生分组：在用户的 Cupertino 主题下与改前一样（主题把每行画成卡片），故加外层卡片。loom test-vault 截图看过
-  Cupertino、默认深 / 浅、Minimal、Blue Topaz，测完主题还原；截图在会话 scratchpad。旧版 Obsidian（< 1.11）与手机端没看。
-- 设置页细节（用户实测提，L51）：路径规则表列名改「路径 / 模板 / 编号模式」；卡片里的表头与面板同色；语言卡片加「界面」标题
-  （新键 `sectionInterface`）；窄屏时分组标题行的按钮不再被挤到说明下面；模板编辑页「占位字符」框被后面的 `.ah-fmt-input { width: 100% }`
-  盖成整行，叠写类名修回 52px。④⑤ 用户自己测。
-- 用户看过后再定（L51 ② / ⑥、L34）：吸顶表头往上盖住面板的上内边距（滚上去的行原先会从表头上方露出来）；「添加规则」「新增模板」
-  改为原生图标按钮 `addExtraButton`（只有「+」、无边框、悬停高亮、文字进提示），删掉 `decorateHeadingButton` 与 `.ah-heading-btn` 样式。
-- **标题链接建议按主力库重放数据收紧**（用户问 1.2.4 规则效果 → 定「把改进方向做完」，spec §3.23 新段，Q30 / Q31 / Q62–Q64）：
-  新脚本 `scripts/suggest-replay.mjs` 用当前源码把一个库逐字重放，报打扰（每千字弹几次）与召回（真实标题链接在原笔记里打出标题文字时
-  能否弹出）。比了 9 组方案后落地：短词（不分中英）完整命中要信号——被链接 ≥ 2 次 / 就在当前笔记或同文件夹 / 当前笔记链过它
-  （`hasShortWordSignal`、`HeadingIndex.exactMatchPaths`、`HeadingLinkCounts.linksFrom`）；纯英文前缀门槛 6 → 8 个字母
-  （`MIN_LATIN_PREFIX_WEIGHT`）；「不选就记住」（`DismissMemory`，Esc / 回车 / 接着打字都算，离开即忘）。主力库：每千字 17.98 → 12.57，
-  记住后至多 5.01；召回 79.9% → 75.7%。注意 `suggest-toggle.js` 的列表那一项现在会因记住而不弹（同篇同词），复跑时改用别的词。
-- Roadmap M18 下登记「打字插链接的其他常见需求」（用户定先记录）：Esc 记住、显示文字用原词、选中文字后补链接、同篇短链接核实、README 讲透链接不断。
-- 新探针 `tests/probes/suggest-toggle.js`（Q58 回车 / 列表续项、Q61 菜单）。
-- **真机（2026-10-24，用户空了之后）**：
-  - loom test-vault：`suggest-toggle.js` 12/12；`note-freeze.js` 13/13；回归 `note-menu.js`、`suggest-rules.js` 全过。
-  - 真机抓出两处、已修：
-    - **回车**：只摘内置 Enter 不够——编辑器自己的 CM 键表 `{key: "Enter", run: isShowingSuggestion}` 在有建议框时吞掉回车，
-      回车既不插链接也不换行。改为再注册一个 Enter：先关框、返回 `undefined` 不拦截（`headingsuggest.ts`，单测同步）。
-    - **S35 ②**：阅读视图那份编辑器缓冲不含另一叶子里未落盘的编辑，两边各自落盘互相覆盖，跳过标记丢了。改为同篇有编辑视图时
-      改那个编辑器，行号经新纯函数 `mapHeadingLine` 按标题文字 + 同名序号映射；`markdownContextForPath` / `activeMarkdownContext`
-      同样优先编辑视图（本篇菜单单篇操作同理）。
-  - 探针自身修正：`suggest-toggle.js` 改打完整标题（两字中文需被链接过才弹）、菜单改读 DOM；`note-freeze.js` S31④ 的预期改为
-    「改属性那一刻的样子」（写入笔记打开即被编号，手写「第三章」不认作编号会再补一个 2——这属 Roadmap M9 外来编号识别的范围）。
-  - 电脑操作真键盘（test-vault，无 VC）：列表里回车续出下一项、不插链接、框关掉；Tab 插入 `[[目标#waiver|waiver]]`；
-    微软拼音上屏「项目进度」后框弹出、回车照常换行；组合中回车只上屏字母。
-  - 主力库 Oblivion（`D:\iCloudDrive\…\Oblivion`）已部署：评审构建的 `link` 加载为关、右键菜单末尾有此项（关无勾 / 开有勾），
-    点按弹提示并写入 data.json（旧键已删）。主力库开着 VC 联动，开着时弹的是 VC 的框（按设计让路），回车 / Tab 是 VC 的行为。
-    测完已经从右键菜单关回去（恢复测试前的实际状态）；部署前的 data.json 备份在会话 scratchpad。
-  - 插曲：`obsidian://open?vault=Oblivion` 打开的是另一个同名库 `F:\文档\Obsidian\Oblivion`，快速切换器在那里新建了一篇
-    「AH实测临时」，已删；两库的临时笔记都已删。以后按库 id `f23b2d6dac691435` 打开主力库。
-- 门槛：tsc / eslint / prettier 绿；vitest 996/997（唯一红是已知 Windows ICU 假红 `whitelist.test.ts`）；`npm run release` 已出，已拷进 loom test-vault。
-
-### 没做什么
-
-- 主力库里本插件自己的框（不走 VC）没实测：要改用户的 VC 联动设置，没动；本插件框的按键以 test-vault 实测为准。
-- 收紧后的触发规则与「不选就记住」只有单测 + 重放脚本，没真机打字测；旧版 Obsidian（< 1.11）设置页、手机端没看。
-- 没 bump、没发版；issue #10 未回复；未合并 master。提交是一整笔：改动在同一批文件里交织，按主题拆的中间提交编不过。
-
-### 下一步
-
-- 合并回 master（CLAUDE.md §5.1）；新对话做 TOC（用户定）。
-- 发版 1.2.5（release notes 草稿已写）→ 回复并关闭 issue #10。
-- 调触发规则先跑 `node scripts/suggest-replay.mjs <库>`。

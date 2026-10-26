@@ -40,6 +40,13 @@ const ja: Partial<Messages> = {
 	sectionNumbering: "自動採番",
 	sectionLinking: "リンクの保守",
 	sectionSuggest: "見出しリンク候補",
+	sectionNoteEntry: "ノート内メニュー",
+	headingMenuName: "見出しの右クリックメニュー",
+	headingMenuDesc:
+		"見出し左の折りたたみ矢印（編集 / 閲覧ビュー）またはエディタの右クリックで、スキップ・昇格降格・リンクコピーなどを表示します。",
+	statusBarMenuName: "ステータスバーのノート表示",
+	statusBarMenuDesc:
+		"ステータスバーにこのノートの採番状態を表示し、クリックで自動採番の切替・テンプレート変更・再採番ができます。",
 
 	vcNotInstalledNotice:
 		"Various Complements が見つかりません（未インストールまたは無効）。自動設定を中止しました。先にインストールして有効化するか、「手動設定」を使ってください。",
@@ -248,6 +255,8 @@ const ja: Partial<Messages> = {
 	cmdToggleHeadingSkip: "カーソル位置の見出しの採番をスキップ／再開",
 	cmdPromoteSection: "現在のセクションを昇格",
 	cmdDemoteSection: "現在のセクションを降格",
+	cmdPromoteHeading: "現在の見出しだけ昇格（子見出しを除く）",
+	cmdDemoteHeading: "現在の見出しだけ降格（子見出しを除く）",
 	cmdChooseNoteTemplate: "現在のノートのテンプレートを選択…",
 	cmdToggleNoteAuto: "現在のノートの自動採番を切り替え",
 	menuToggleSkip: "この見出しの採番をスキップ",
@@ -257,6 +266,8 @@ const ja: Partial<Messages> = {
 	menuCopySectionLink: "このセクションのリンクをコピー",
 	menuPromoteSection: "このセクションを昇格",
 	menuDemoteSection: "このセクションを降格",
+	menuPromoteHeading: "この見出しだけ昇格（子見出しはそのまま）",
+	menuDemoteHeading: "この見出しだけ降格（子見出しはそのまま）",
 	menuNoteSettings: "このノートの採番設定…",
 	menuBack: "戻る",
 	handleHint: "ドラッグでセクションごと移動 · 右クリックでメニュー",

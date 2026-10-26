@@ -41,6 +41,13 @@ const ptBR: Partial<Messages> = {
 	sectionNumbering: "Numeração automática",
 	sectionLinking: "Manutenção de links",
 	sectionSuggest: "Sugestões de links para cabeçalhos",
+	sectionNoteEntry: "Menus na nota",
+	headingMenuName: "Menu de contexto do título",
+	headingMenuDesc:
+		"Clique direito na seta de recolher à esquerda do título (edição ou leitura) ou no menu do editor: ignorar, promover/rebaixar, copiar link e mais.",
+	statusBarMenuName: "Rótulo da nota na barra de status",
+	statusBarMenuDesc:
+		"Mostra o estado de numeração da nota na barra de status; clique para trocar a numeração automática, o modelo ou renumerar.",
 
 	vcNotInstalledNotice:
 		"Various Complements não encontrado (não instalado ou desativado); configuração automática cancelada. Instale e ative-o, ou use a configuração manual.",
@@ -250,6 +257,8 @@ const ptBR: Partial<Messages> = {
 	cmdToggleHeadingSkip: "Pular / restaurar a numeração do cabeçalho sob o cursor",
 	cmdPromoteSection: "Promover a seção atual",
 	cmdDemoteSection: "Rebaixar a seção atual",
+	cmdPromoteHeading: "Promover o título atual (sem subtítulos)",
+	cmdDemoteHeading: "Rebaixar o título atual (sem subtítulos)",
 	cmdChooseNoteTemplate: "Escolher modelo para a nota atual…",
 	cmdToggleNoteAuto: "Alternar numeração automática da nota atual",
 	menuToggleSkip: "Pular a numeração deste cabeçalho",
@@ -259,6 +268,8 @@ const ptBR: Partial<Messages> = {
 	menuCopySectionLink: "Copiar link da seção",
 	menuPromoteSection: "Promover seção",
 	menuDemoteSection: "Rebaixar seção",
+	menuPromoteHeading: "Promover só este título (manter subtítulos)",
+	menuDemoteHeading: "Rebaixar só este título (manter subtítulos)",
 	menuNoteSettings: "Configurações de numeração desta nota…",
 	menuBack: "Voltar",
 	handleHint: "Arraste para mover a seção · clique direito para o menu",

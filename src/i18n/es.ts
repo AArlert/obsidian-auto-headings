@@ -41,6 +41,13 @@ const es: Partial<Messages> = {
 	sectionNumbering: "Numeración automática",
 	sectionLinking: "Mantenimiento de enlaces",
 	sectionSuggest: "Sugerencias de enlaces a encabezados",
+	sectionNoteEntry: "Menús dentro de la nota",
+	headingMenuName: "Menú contextual del encabezado",
+	headingMenuDesc:
+		"Clic derecho en la flecha de plegado junto al encabezado (vista de edición o lectura) o en el menú del editor: omitir, subir/bajar nivel, copiar enlace y más.",
+	statusBarMenuName: "Etiqueta de la nota en la barra de estado",
+	statusBarMenuDesc:
+		"Muestra el estado de numeración de la nota en la barra de estado; al pulsar puedes cambiar la numeración automática, la plantilla o renumerar.",
 
 	vcNotInstalledNotice:
 		"No se detectó Various Complements (no instalado o desactivado); configuración automática cancelada. Instálalo y actívalo, o usa la configuración manual.",
@@ -253,6 +260,8 @@ const es: Partial<Messages> = {
 	cmdToggleHeadingSkip: "Omitir / restaurar la numeración del encabezado bajo el cursor",
 	cmdPromoteSection: "Subir de nivel la sección actual",
 	cmdDemoteSection: "Bajar de nivel la sección actual",
+	cmdPromoteHeading: "Subir el encabezado actual (sin subencabezados)",
+	cmdDemoteHeading: "Bajar el encabezado actual (sin subencabezados)",
 	cmdChooseNoteTemplate: "Elegir plantilla para la nota actual…",
 	cmdToggleNoteAuto: "Alternar numeración automática de la nota actual",
 	menuToggleSkip: "Omitir la numeración de este encabezado",
@@ -262,6 +271,8 @@ const es: Partial<Messages> = {
 	menuCopySectionLink: "Copiar enlace de la sección",
 	menuPromoteSection: "Subir de nivel la sección",
 	menuDemoteSection: "Bajar de nivel la sección",
+	menuPromoteHeading: "Subir solo este encabezado (sin subencabezados)",
+	menuDemoteHeading: "Bajar solo este encabezado (sin subencabezados)",
 	menuNoteSettings: "Ajustes de numeración de esta nota…",
 	menuBack: "Atrás",
 	handleHint: "Arrastra para mover la sección · clic derecho para el menú",

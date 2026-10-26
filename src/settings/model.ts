@@ -68,6 +68,13 @@ export interface AutoHeadingsSettings {
 	 */
 	headingLinkSuggestEnabled: boolean;
 	/**
+	 * 标题右键菜单（spec §3.24）：右键标题折叠箭头（编辑 / 阅读视图）与编辑器右键里的标题项。默认开；
+	 * 关掉后不再拦截右键，Obsidian 原生行为照旧。设置里放这个开关也是在告诉用户有这个入口。
+	 */
+	headingMenuEnabled: boolean;
+	/** 状态栏「本篇」小标签（spec §3.24）。默认开；关掉后状态栏不再占位，命令照常可用。 */
+	statusBarMenuEnabled: boolean;
+	/**
 	 * 一次性迁移标记（issue #10）：升级时把「打字时建议标题链接」统一改关（开着 VC 联动的除外）只做一次，做过记 true，
 	 * 之后用户自己打开不会再被改回去。全新安装直接为 true（新装本就默认关）。见 main.loadSettings。
 	 */
@@ -119,6 +126,8 @@ export const DEFAULT_SETTINGS: AutoHeadingsSettings = {
 	backlinksIntroShown: false,
 	retired: false,
 	headingLinkSuggestEnabled: false,
+	headingMenuEnabled: true,
+	statusBarMenuEnabled: true,
 	headingSuggestOffMigrated: true,
 	vcIntegrationMode: "off",
 	templateHistory: {},

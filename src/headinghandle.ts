@@ -263,7 +263,7 @@ export function headingHandleExtension(entry: NoteEntry, hint: () => string): Ex
 
 			private contextMenu(e: MouseEvent): void {
 				const hit = this.indicatorOf(e);
-				if (!hit) {
+				if (!hit || !entry.headingMenuOn()) {
 					return;
 				}
 				e.preventDefault();
@@ -298,7 +298,7 @@ export function headingHandleExtension(entry: NoteEntry, hint: () => string): Ex
 				if (!el) {
 					return;
 				}
-				if (!this.view.hasFocus) {
+				if (!this.view.hasFocus || !entry.headingMenuOn()) {
 					this.lineEl = null;
 					el.classList.remove("is-visible");
 					return;

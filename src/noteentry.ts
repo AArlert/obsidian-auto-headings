@@ -101,6 +101,12 @@ export class NoteEntry {
 		headingCmd("demote-section", t.cmdDemoteSection, (e, h) =>
 			this.shiftSection(e, h.lineIndex, 1),
 		);
+		headingCmd("promote-heading", t.cmdPromoteHeading, (e, h) =>
+			this.shiftSection(e, h.lineIndex, -1, "self"),
+		);
+		headingCmd("demote-heading", t.cmdDemoteHeading, (e, h) =>
+			this.shiftSection(e, h.lineIndex, 1, "self"),
+		);
 
 		const fileCmd = (id: string, name: string, run: (file: TFile) => void): void => {
 			p.addCommand({
@@ -125,6 +131,9 @@ export class NoteEntry {
 		p.registerEvent(
 			p.app.workspace.on("editor-menu", (menu, editor, view) => {
 				const file = view.file;
+				if (!p.settings.headingMenuEnabled) {
+					return;
+				}
 				const h = file
 					? sectionHeadingAt(editor.getValue(), editor.getCursor().line)
 					: null;
@@ -139,6 +148,11 @@ export class NoteEntry {
 		// 阅读视图：右键折叠箭头同样打开标题菜单，不能拖（S33–S35）。
 		registerReadingHeadingMenu(p, this, () => p.messages().handleHintReading);
 		this.registerStatusBar();
+	}
+
+	/** 「标题右键菜单」开关（设置 → 笔记内菜单）；关着时手柄 / 阅读视图都不拦截右键。 */
+	headingMenuOn(): boolean {
+		return this.plugin.settings.headingMenuEnabled;
 	}
 
 	/**
@@ -215,6 +229,19 @@ export class NoteEntry {
 					.setIcon("arrow-down")
 					.onClick(() => this.shiftSection(editor, lineIndex, 1)),
 			);
+			// 只动这一个标题（子标题级别不变）：与「本节」并列给出，用户按需选（2026-10-27 用户反馈）。
+			menu.addItem((i) =>
+				i
+					.setTitle(m.menuPromoteHeading)
+					.setIcon("chevron-up")
+					.onClick(() => this.shiftSection(editor, lineIndex, -1, "self")),
+			);
+			menu.addItem((i) =>
+				i
+					.setTitle(m.menuDemoteHeading)
+					.setIcon("chevron-down")
+					.onClick(() => this.shiftSection(editor, lineIndex, 1, "self")),
+			);
 		}
 		menu.addItem((i) =>
 			i
@@ -240,9 +267,14 @@ export class NoteEntry {
 		editor.transaction({ changes: [this.plugin.lineChange(line, old, next)] });
 	}
 
-	/** 整节升降级；越界整体拒绝并提示（S4–S6）。 */
-	shiftSection(editor: Editor, line: number, delta: -1 | 1): void {
-		const edits = planSectionShift(editor.getValue(), line, delta);
+	/** 整节升降级（`scope` 为 `self` 时只改这一个标题）；越界整体拒绝并提示（S4–S6）。 */
+	shiftSection(
+		editor: Editor,
+		line: number,
+		delta: -1 | 1,
+		scope: "tree" | "self" = "tree",
+	): void {
+		const edits = planSectionShift(editor.getValue(), line, delta, scope);
 		if (!edits) {
 			new Notice(this.plugin.messages().noticeSectionShiftOutOfRange);
 			return;
@@ -374,11 +406,14 @@ export class NoteEntry {
 		return m.statusLabel(mode, p.getTemplateForFile(file.path)?.name ?? rule.template);
 	}
 
-	private updateStatus(): void {
+	/** 刷新状态栏标签；设置里关掉「状态栏标签」时整个隐藏。 */
+	updateStatus(): void {
 		if (!this.statusEl) {
 			return;
 		}
-		const text = this.statusText(this.plugin.app.workspace.getActiveFile?.() ?? null);
+		const text = this.plugin.settings.statusBarMenuEnabled
+			? this.statusText(this.plugin.app.workspace.getActiveFile?.() ?? null)
+			: null;
 		this.statusEl.style.display = text === null ? "none" : "";
 		this.statusEl.setText(text ?? "");
 	}
@@ -396,6 +431,11 @@ export class NoteEntry {
 		const m = p.messages();
 		const rule = resolvePathRule(p.settings.pathRules, file.path);
 		const sw = readFileSwitch(await p.app.vault.cachedRead(file));
+		// 从标题菜单点进来时「返回」放最上面：新菜单从点击处向下展开，鼠标正好落在它上面，手感才跟手。
+		if (onBack) {
+			menu.addItem((i) => i.setTitle(m.menuBack).setIcon("undo-2").onClick(onBack));
+			menu.addSeparator();
+		}
 		menu.addItem((i) =>
 			i
 				.setTitle(rule ? m.statusMenuRule(rule.pattern) : m.statusMenuNoRule)
@@ -453,10 +493,6 @@ export class NoteEntry {
 					.setIcon("eraser")
 					.onClick(() => p.clearActiveFileStaleNumbering()),
 			);
-		}
-		if (onBack) {
-			menu.addSeparator();
-			menu.addItem((i) => i.setTitle(m.menuBack).setIcon("undo-2").onClick(onBack));
 		}
 	}
 }

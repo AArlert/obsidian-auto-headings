@@ -179,7 +179,7 @@ There are two markers, and you **don't have to type them** — right-click the f
 
 Do one-note things without opening settings:
 
--   **The fold arrow beside a heading** gains two abilities: **press and drag** to move the whole section (sub-headings included) elsewhere (a blue line marks the drop spot; one undo reverts it; heading levels aren't changed), and **right-click** for the heading menu — skip this heading / skip the whole section, promote section, demote section, copy section link, copy section embed, numbering settings for this note…. A plain click still folds/unfolds as usual. On mobile, a "⋯" appears at the end of the heading line while the cursor is in it, opening the same menu. In **reading view**, right-clicking the fold arrow opens the same menu too (no dragging there).
+-   **The fold arrow beside a heading** gains two abilities: **press and drag** to move the whole section (sub-headings included) elsewhere (a blue line marks the drop spot; one undo reverts it; heading levels aren't changed), and **right-click** for the heading menu — skip this heading / skip the whole section, promote / demote section (with sub-headings), promote / demote this heading only (sub-headings untouched), copy section link, copy section embed, numbering settings for this note…. A plain click still folds/unfolds as usual. This menu and the status bar note label can both be turned off in Settings → General → Menus in notes. On mobile, a "⋯" appears at the end of the heading line while the cursor is in it, opening the same menu. In **reading view**, right-clicking the fold arrow opens the same menu too (no dragging there).
 -   **Copy section link** has two forms: a normal link `[[Note#Heading|Heading]]` and an embed `![[Note#Heading]]`.
 -   **The status-bar "this note" label** (e.g. "Display only · Default") opens a menu for that note: the matching rule; auto-numbering three-way (follow global / always for this note / never for this note — read and written in the note's own frontmatter `obsidian-auto-headings`, absent means follow global); change template (writes the frontmatter property `obsidian-auto-headings-template`; choose "Follow path rule" to clear it); renumber now; copy numbered outline; clean up handwritten numbering… (preview each one first); display-only notes also get clear leftover numbering.
     -   Choosing "**never for this note**" also removes the numbers this plugin wrote in that note (handwritten ones stay). Want to keep the numbers as plain text and just stop the plugin managing them? Press Ctrl+Z once: the numbers come back and the note stays "never".
@@ -246,6 +246,7 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 | Skip / restore numbering for heading at cursor | Toggle a trailing `<!-- skip -->` |
 | Skip / restore numbering for the whole section at cursor | Toggle a trailing `<!-- skip-tree -->` (sub-headings included) |
 | Promote / demote current section | Raise / lower the section and its sub-headings by one level |
+| Promote / demote current heading (without subheadings) | Change only the heading at the cursor; sub-heading levels stay |
 | Choose template for current note… | Use a different template for this note only |
 | Toggle auto-numbering for current note | Turn auto-numbering on / off for this note only |
 

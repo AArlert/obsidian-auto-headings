@@ -37,6 +37,12 @@ const zhTW: Partial<Messages> = {
 	sectionNumbering: "自動編號",
 	sectionLinking: "連結維護",
 	sectionSuggest: "標題連結建議",
+	sectionNoteEntry: "筆記內選單",
+	headingMenuName: "標題右鍵選單",
+	headingMenuDesc:
+		"右鍵標題左側的摺疊箭頭（編輯 / 閱讀檢視），或編輯器右鍵，彈出跳過、升降級、複製連結等操作。",
+	statusBarMenuName: "狀態列「本篇」標籤",
+	statusBarMenuDesc: "狀態列顯示目前筆記的編號狀態，點開可切換自動編號、換範本、立即重新編號。",
 
 	vcNotInstalledNotice:
 		"未偵測到 Various Complements（未安裝或未啟用），自動設定已取消；請先安裝並啟用，或改用「手動設定」。",
@@ -236,6 +242,8 @@ const zhTW: Partial<Messages> = {
 	cmdToggleHeadingSkip: "跳過／恢復游標處標題的編號",
 	cmdPromoteSection: "升級目前小節",
 	cmdDemoteSection: "降級目前小節",
+	cmdPromoteHeading: "升級目前標題（不含子標題）",
+	cmdDemoteHeading: "降級目前標題（不含子標題）",
 	cmdChooseNoteTemplate: "為目前筆記選擇範本…",
 	cmdToggleNoteAuto: "開關目前筆記的自動編號",
 	menuToggleSkip: "跳過此標題的編號",
@@ -245,6 +253,8 @@ const zhTW: Partial<Messages> = {
 	menuCopySectionLink: "複製本節連結",
 	menuPromoteSection: "升級本節",
 	menuDemoteSection: "降級本節",
+	menuPromoteHeading: "僅升級此標題（不動子標題）",
+	menuDemoteHeading: "僅降級此標題（不動子標題）",
 	menuNoteSettings: "本篇編號設定…",
 	menuBack: "返回",
 	handleHint: "拖曳可移動整節 · 右鍵開啟選單",

@@ -53,12 +53,14 @@ export function toggleSkipMarker(line: string, kind: SkipKind = "self"): string 
  *
  * @param headingLine 小节标题所在行（0 起）；须恰为 `parseHeadings` 认得的标题行。
  * @param delta `-1` 升级（少一个 `#`）/ `+1` 降级。
+ * @param scope `tree`（默认）连同子标题整棵移动；`self` 只改这一个标题（子标题级别不动，升级后它们会成为它的子标题）。
  * @returns 整行变更集；越界（范围内任一标题会 <1 或 >6 级）或 `headingLine` 不是标题时返回 `null`。
  */
 export function planSectionShift(
 	content: string,
 	headingLine: number,
 	delta: -1 | 1,
+	scope: "tree" | "self" = "tree",
 ): LineEdit[] | null {
 	const headings = parseHeadings(content);
 	const start = headings.findIndex((h) => h.lineIndex === headingLine);
@@ -70,7 +72,7 @@ export function planSectionShift(
 	const edits: LineEdit[] = [];
 	for (let i = start; i < headings.length; i++) {
 		const h = headings[i];
-		if (i > start && h.level <= base) {
+		if (i > start && (scope === "self" || h.level <= base)) {
 			break;
 		}
 		const level = h.level + delta;

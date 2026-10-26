@@ -39,6 +39,12 @@ const zh: Messages = {
 	sectionNumbering: "自动编号",
 	sectionLinking: "链接维护",
 	sectionSuggest: "标题链接建议",
+	sectionNoteEntry: "笔记内菜单",
+	headingMenuName: "标题右键菜单",
+	headingMenuDesc:
+		"右键标题左侧的折叠箭头（编辑 / 阅读视图），或编辑器右键，弹出跳过、升降级、复制链接等操作。",
+	statusBarMenuName: "状态栏「本篇」标签",
+	statusBarMenuDesc: "状态栏显示当前笔记的编号状态，点开可切换自动编号、换模板、立即重新编号。",
 
 	vcNotInstalledNotice:
 		"未检测到 Various Complements（未安装或未启用），自动配置已取消；请先安装并启用，或改用「手动配置」。",
@@ -243,6 +249,8 @@ const zh: Messages = {
 	cmdToggleHeadingSkip: "跳过 / 恢复光标处标题的编号",
 	cmdPromoteSection: "升级当前小节",
 	cmdDemoteSection: "降级当前小节",
+	cmdPromoteHeading: "升级当前标题（不含子标题）",
+	cmdDemoteHeading: "降级当前标题（不含子标题）",
 	cmdChooseNoteTemplate: "为当前笔记选择模板…",
 	cmdToggleNoteAuto: "开关当前笔记的自动编号",
 	menuToggleSkip: "跳过此标题的编号",
@@ -252,6 +260,8 @@ const zh: Messages = {
 	menuCopySectionLink: "复制本节链接",
 	menuPromoteSection: "升级本节",
 	menuDemoteSection: "降级本节",
+	menuPromoteHeading: "仅升级此标题（不动子标题）",
+	menuDemoteHeading: "仅降级此标题（不动子标题）",
 	menuNoteSettings: "本篇编号设置…",
 	menuBack: "返回",
 	handleHint: "拖动可移动整节 · 右键打开菜单",

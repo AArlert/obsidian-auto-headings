@@ -57,6 +57,11 @@ export interface Messages {
 	sectionNumbering: string;
 	sectionLinking: string;
 	sectionSuggest: string;
+	sectionNoteEntry: string;
+	headingMenuName: string;
+	headingMenuDesc: string;
+	statusBarMenuName: string;
+	statusBarMenuDesc: string;
 
 	// —— Various Complements 联动（M13）——
 	/** 自动配置前置探测未检测到 VC 时的提示。 */
@@ -277,6 +282,8 @@ export interface Messages {
 	cmdToggleHeadingSkip: string;
 	cmdPromoteSection: string;
 	cmdDemoteSection: string;
+	cmdPromoteHeading: string;
+	cmdDemoteHeading: string;
 	cmdChooseNoteTemplate: string;
 	cmdToggleNoteAuto: string;
 	/** 右键菜单 / 标题手柄菜单项。 */
@@ -287,6 +294,8 @@ export interface Messages {
 	menuCopySectionLink: string;
 	menuPromoteSection: string;
 	menuDemoteSection: string;
+	menuPromoteHeading: string;
+	menuDemoteHeading: string;
 	menuNoteSettings: string;
 	menuBack: string;
 	/** 标题折叠箭头的悬停提示（拖动 / 右键）。 */

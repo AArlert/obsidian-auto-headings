@@ -42,6 +42,13 @@ const de: Partial<Messages> = {
 	sectionNumbering: "Automatische Nummerierung",
 	sectionLinking: "Link-Pflege",
 	sectionSuggest: "Vorschläge für Überschrift-Links",
+	sectionNoteEntry: "Menüs in der Notiz",
+	headingMenuName: "Rechtsklick-Menü für Überschriften",
+	headingMenuDesc:
+		"Rechtsklick auf den Faltpfeil links der Überschrift (Bearbeiten- oder Leseansicht) oder das Editor-Kontextmenü: überspringen, höher/herabstufen, Link kopieren u. a.",
+	statusBarMenuName: "Notiz-Label in der Statusleiste",
+	statusBarMenuDesc:
+		"Zeigt den Nummerierungsstatus der Notiz in der Statusleiste; per Klick Auto-Nummerierung, Vorlage oder Neunummerierung ändern.",
 
 	vcNotInstalledNotice:
 		"Various Complements nicht gefunden (nicht installiert oder deaktiviert); automatische Konfiguration abgebrochen. Installieren und aktivieren Sie es oder nutzen Sie die manuelle Einrichtung.",
@@ -254,6 +261,8 @@ const de: Partial<Messages> = {
 	cmdToggleHeadingSkip: "Nummerierung der Überschrift am Cursor auslassen / wiederherstellen",
 	cmdPromoteSection: "Aktuellen Abschnitt höherstufen",
 	cmdDemoteSection: "Aktuellen Abschnitt herabstufen",
+	cmdPromoteHeading: "Aktuelle Überschrift höherstufen (ohne Unterüberschriften)",
+	cmdDemoteHeading: "Aktuelle Überschrift herabstufen (ohne Unterüberschriften)",
 	cmdChooseNoteTemplate: "Vorlage für die aktuelle Notiz wählen…",
 	cmdToggleNoteAuto: "Automatische Nummerierung der aktuellen Notiz umschalten",
 	menuToggleSkip: "Nummerierung dieser Überschrift auslassen",
@@ -264,6 +273,8 @@ const de: Partial<Messages> = {
 	menuCopySectionLink: "Abschnitts-Link kopieren",
 	menuPromoteSection: "Abschnitt höherstufen",
 	menuDemoteSection: "Abschnitt herabstufen",
+	menuPromoteHeading: "Nur diese Überschrift höherstufen (Unterüberschriften bleiben)",
+	menuDemoteHeading: "Nur diese Überschrift herabstufen (Unterüberschriften bleiben)",
 	menuNoteSettings: "Nummerierungseinstellungen dieser Notiz…",
 	menuBack: "Zurück",
 	handleHint: "Ziehen, um den Abschnitt zu verschieben · Rechtsklick für das Menü",
