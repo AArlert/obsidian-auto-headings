@@ -15,40 +15,30 @@
 
 ---
 
-## 2026-10-27 标题菜单反馈：设置开关 + 返回置底对准 + 阅读视图落盘 + 层级子菜单（不 bump、未提交，交接：claude/title-menu-level-adjust-c3cecb）
+## 2026-10-27 发版 1.2.6：标题菜单层级子菜单 + 阅读视图落盘 + 菜单开关（交接：claude/title-menu-level-adjust-c3cecb → master，tag 1.2.6）
 
 ### 做了什么
 
-- **设置开关**：全局设置新增「笔记内菜单」分组——标题右键菜单（`headingMenuEnabled`）、状态栏标签（`statusBarMenuEnabled`），默认开；关标题菜单时手柄 / 手机「⋯」/ 阅读视图右键 / 编辑器右键标题项都不再介入（testplan S39）。
-- **返回置顶**：从标题菜单进的本篇菜单把「返回」放最上面，鼠标点完「本篇编号设置…」正落在它上面（S38，`noteentry.ts` `buildNoteMenu`）。
-- **阅读视图菜单项生效**：只在阅读视图打开时改走 `vault.process`（`readingheadingmenu.ts` `fileBackedEditor` + 纯函数 `applyTextChanges`），不再依赖背后的隐藏编辑器；同篇有编辑视图仍改那个（S37，S35 ② 不变）。
-- **升降级范围**：保持「本节 = 连同子标题」为默认，新增「仅升级 / 降级此标题」菜单项与两条命令（`planSectionShift` 加 `scope`，S36）。理由见 spec §3.24 末节。
-- 10 种界面语言补 9 个键；testplan S36–S39、spec §3.24、user-guide 双语同步。
-
-### 同日追加（用户手测后）
-
-- 设置文案精简（分组「菜单」、开关「标题菜单」「状态栏菜单」各一句说明）；「返回」改置底并按**点击菜单项**坐标对准（旧版用最初右键坐标，所以偏）；
-  升降级四项收成「调整此标题 / 整节的层级 ▸ H1–H6」子菜单，越界层级置灰（不压扁、不记状态，见 spec §3.24）；新增 S40。
-- 真机探针 `tests/probes/heading-menu.js`：阅读视图落盘 / 重绘、四个 `##` 场景、开关通过；探针抓出阅读视图隐藏编辑器缓冲不随落盘更新（连续两次调整按旧缓冲算偏了列），
-  `fileBackedEditor` 改为弹菜单时从磁盘取快照。后几次重复跑因窗口不在前台阅读视图懒渲染不出标题而失败（探针已加等待，环境因素，未判定插件问题）。
-  调整层级子菜单这版的探针尚未跑，由用户手测。
+- **设置开关**：全局设置新增「菜单」分组——标题菜单（`headingMenuEnabled`）、状态栏菜单（`statusBarMenuEnabled`），默认开，说明各一句话；关标题菜单时手柄 / 手机「⋯」/ 阅读视图右键 / 编辑器右键标题项都不介入（S39）。
+- **层级子菜单**：标题菜单里「调整此标题的层级」「调整整节的层级（含子标题）」右侧展开 H1–H6，越界层级置灰（`reachableLevels`，不压扁、不记状态，评估过「压扁再回溯」后弃，理由见 spec §3.24）；子菜单走未公开的 `MenuItem.setSubmenu`，认不出时退化平铺；新增命令「升级 / 降级当前标题（不含子标题）」（S36 / S40）。
+- **阅读视图落盘**：只在阅读视图打开时改走 `vault.process`，读写以弹菜单时磁盘快照为准（`readingheadingmenu.ts` `fileBackedEditor` + `applyTextChanges`）；真机探针抓出隐藏编辑器缓冲不随落盘更新，旧缓冲会让连续两次调整算偏列位置（S37）。
+- **返回对齐**：「返回」置底，本篇菜单与标题菜单左下角对齐（`alignToParent`）；先后踩了两个坑——替换静默失败仍用了最初右键坐标、改按点击坐标后 x 方向仍不齐，最终按两菜单外框对齐，真机量得左下角坐标一致（S38）。
+- 10 种界面语言补键；testplan S36–S40、spec §3.24、user-guide 双语、`doc/release-notes/1.2.6.md` 同步；`npm run bump` 1.2.5 → 1.2.6，testplan / spec 的「未发版」回填为 1.2.6。
+- 门槛：`docs --check` / `prettier --check` / `eslint` / `tsc` 全绿；`vitest` 1014/1015，唯一红仍是已知 Windows ICU 假红（`whitelist.test.ts` CJK 排序）。真机：用户手测子菜单、预览 / 编辑视图、置灰、对齐均通过；探针 `tests/probes/heading-menu.js`。
 
 ### 没做什么
 
-- **没真机验**：阅读视图那条的根因是推断（隐藏编辑器不落盘 / 不重绘），改走文件肯定会重绘，但没在 Obsidian 里亲眼看过；S36–S39 仍写「待真机」。S35 当时的真机结论与用户这次实测矛盾，原因没查清。
-- 阅读视图下本篇菜单里的「立即重新编号 / 复制大纲 / 清理」等仍走原编辑器路径，若用户反映同样无效再照 `fileBackedEditor` 的思路处理。
-- 阅读视图下的改动进不了撤销栈（代价，已写进 spec）。
-- 门槛：`vitest` 1012/1013，唯一红仍是已知 Windows ICU 假红（`whitelist.test.ts` CJK 排序）；`npm run check` 见提交前一次。
+- 阅读视图下本篇菜单里「立即重新编号 / 复制大纲 / 清理」等仍走原编辑器路径，用户手测未反映问题，若有再按 `fileBackedEditor` 思路处理。
+- 阅读视图下的改动进不了撤销栈（代价，已写进 spec 与发布说明）。
+- 手机端子菜单 / 菜单对齐未看；`heading-menu.js` 探针在窗口不在前台时阅读视图懒渲染不出标题会失败（环境因素，探针已加等待）。
 
 ### 下一步
 
-- 重建 `release/` 部署到测试库，真机验 S36–S39（尤其阅读视图下「跳过此标题 / 升级本节」是否真改了文件并重绘）；通过后回填 testplan、发 1.2.6。
+- 推 master 等 CI 绿 → 打 tag 1.2.6 → 到 Community Hub 维护者面板点「Check for new releases」送审。
 
 ### 验证方式
 
-- 单测：`headingedit.test.ts`（scope self）、`readingheadingmenu.test.ts`（`applyTextChanges`，含 CRLF）、`settings.test.ts`（S39 缺省）；真机待办见上。
-
----
+- 单测见上；真机探针与用户手测见上；`git tag` 与 `manifest.json` 版本一致（Release 工作流会校验）。
 
 ## 2026-10-24 发版 1.2.5：标题链接建议默认关 + 按重放数据收紧 + 设置页改版（issue #10，交接：claude/issue-10-feedback-49b340 → master，tag 1.2.5）
 
