@@ -11,7 +11,7 @@ import { detectVcStatus } from "../../vcintegration";
  *
  * 1.0.29 起按**功能区**分节（用户反馈「全局设置该按功能区划分」）：「界面」（语言；未发版起与其他分区一样挂标题，
  * 卡片才对齐）→「自动编号」（全局开关 + 防抖延迟）→「链接维护」（Backlink 同步）→
- * 「标题链接建议」（建议开关 + VC 共存策略 + VC 词典联动）。每节是一个原生分组容器（{@link settingGroup}，未发版起；
+ * 「笔记内菜单」（标题右键菜单 / 状态栏标签开关，未发版）→「标题链接建议」（建议开关 + VC 共存策略 + VC 词典联动）。每节是一个原生分组容器（{@link settingGroup}，未发版起；
  * 节头仍是原生 `setHeading()`，1.2.2 起去掉自绘的强调色竖条，与 Obsidian 自带设置页一致），而不是插一条 `<hr>`——分区**带标题**才能说明每组
  * 是干什么的，光有分隔线只是把设置切碎。说明文字一律一行，长解释在使用指南（testplan L28）。
  *
@@ -136,6 +136,29 @@ export function renderGeneralTab(tab: AutoHeadingsSettingTab, containerEl: HTMLE
 			toggle.setValue(plugin.settings.updateBacklinks).onChange(async (value) => {
 				plugin.settings.updateBacklinks = value;
 				await plugin.saveSettings();
+			}),
+		);
+
+	// ==== 分区：笔记内菜单（spec §3.24）====
+	// 两个入口默认开；放进设置一是能关，二是让用户知道有这两个入口。
+	const entries = settingGroup(containerEl, t.sectionNoteEntry).list;
+	new Setting(entries)
+		.setName(t.headingMenuName)
+		.setDesc(t.headingMenuDesc)
+		.addToggle((toggle) =>
+			toggle.setValue(plugin.settings.headingMenuEnabled).onChange(async (value) => {
+				plugin.settings.headingMenuEnabled = value;
+				await plugin.saveSettings();
+			}),
+		);
+	new Setting(entries)
+		.setName(t.statusBarMenuName)
+		.setDesc(t.statusBarMenuDesc)
+		.addToggle((toggle) =>
+			toggle.setValue(plugin.settings.statusBarMenuEnabled).onChange(async (value) => {
+				plugin.settings.statusBarMenuEnabled = value;
+				await plugin.saveSettings();
+				plugin.noteEntry?.updateStatus();
 			}),
 		);
 

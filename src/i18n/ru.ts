@@ -52,6 +52,13 @@ const ru: Partial<Messages> = {
 	sectionNumbering: "Автонумерация",
 	sectionLinking: "Обслуживание ссылок",
 	sectionSuggest: "Подсказки ссылок на заголовки",
+	sectionNoteEntry: "Меню",
+	headingMenuName: "Меню заголовка",
+	headingMenuDesc:
+		"Правый клик по стрелке слева от заголовка: сменить уровень, пропустить нумерацию, скопировать ссылку.",
+	statusBarMenuName: "Меню строки состояния",
+	statusBarMenuDesc:
+		"Строка состояния показывает нумерацию заметки; по клику можно сменить автонумерацию или шаблон.",
 
 	vcNotInstalledNotice:
 		"Various Complements не найден (не установлен или отключён); автонастройка отменена. Установите и включите его или используйте ручную настройку.",
@@ -259,6 +266,8 @@ const ru: Partial<Messages> = {
 	cmdToggleHeadingSkip: "Пропустить / вернуть нумерацию заголовка под курсором",
 	cmdPromoteSection: "Повысить текущий раздел",
 	cmdDemoteSection: "Понизить текущий раздел",
+	cmdPromoteHeading: "Повысить текущий заголовок (без подзаголовков)",
+	cmdDemoteHeading: "Понизить текущий заголовок (без подзаголовков)",
 	cmdChooseNoteTemplate: "Выбрать шаблон для текущей заметки…",
 	cmdToggleNoteAuto: "Переключить автонумерацию текущей заметки",
 	menuToggleSkip: "Пропустить нумерацию этого заголовка",
@@ -266,8 +275,8 @@ const ru: Partial<Messages> = {
 	menuCopySectionEmbed: "Копировать встраивание раздела",
 	cmdToggleSectionSkip: "Пропустить / вернуть нумерацию всего раздела под курсором",
 	menuCopySectionLink: "Копировать ссылку на раздел",
-	menuPromoteSection: "Повысить раздел",
-	menuDemoteSection: "Понизить раздел",
+	menuAdjustHeading: "Изменить уровень этого заголовка",
+	menuAdjustSection: "Изменить уровень раздела (с подзаголовками)",
 	menuNoteSettings: "Настройки нумерации этой заметки…",
 	menuBack: "Назад",
 	handleHint: "Перетащите, чтобы переместить раздел · правая кнопка — меню",

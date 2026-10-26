@@ -42,6 +42,13 @@ const fr: Partial<Messages> = {
 	sectionNumbering: "Numérotation automatique",
 	sectionLinking: "Maintenance des liens",
 	sectionSuggest: "Suggestions de liens vers les titres",
+	sectionNoteEntry: "Menus",
+	headingMenuName: "Menu des titres",
+	headingMenuDesc:
+		"Clic droit sur la flèche à gauche d'un titre : changer le niveau, ignorer la numérotation, copier le lien.",
+	statusBarMenuName: "Menu de la barre d'état",
+	statusBarMenuDesc:
+		"La barre d'état affiche l'état de numérotation ; un clic permet de changer la numérotation auto ou le modèle.",
 
 	vcNotInstalledNotice:
 		"Various Complements est introuvable (non installé ou désactivé) ; configuration automatique annulée. Installez-le et activez-le, ou utilisez la configuration manuelle.",
@@ -255,6 +262,8 @@ const fr: Partial<Messages> = {
 	cmdToggleHeadingSkip: "Ignorer / rétablir la numérotation du titre sous le curseur",
 	cmdPromoteSection: "Promouvoir la section actuelle",
 	cmdDemoteSection: "Rétrograder la section actuelle",
+	cmdPromoteHeading: "Promouvoir le titre actuel (sans sous-titres)",
+	cmdDemoteHeading: "Rétrograder le titre actuel (sans sous-titres)",
 	cmdChooseNoteTemplate: "Choisir le modèle de la note actuelle…",
 	cmdToggleNoteAuto: "Activer/désactiver la numérotation automatique de la note actuelle",
 	menuToggleSkip: "Ignorer la numérotation de ce titre",
@@ -262,8 +271,8 @@ const fr: Partial<Messages> = {
 	menuCopySectionEmbed: "Copier l'intégration de la section",
 	cmdToggleSectionSkip: "Ignorer / rétablir la numérotation de toute la section sous le curseur",
 	menuCopySectionLink: "Copier le lien de la section",
-	menuPromoteSection: "Promouvoir la section",
-	menuDemoteSection: "Rétrograder la section",
+	menuAdjustHeading: "Changer le niveau de ce titre",
+	menuAdjustSection: "Changer le niveau de la section (avec sous-titres)",
 	menuNoteSettings: "Réglages de numérotation de cette note…",
 	menuBack: "Retour",
 	handleHint: "Glissez pour déplacer la section · clic droit pour le menu",

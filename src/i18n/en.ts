@@ -40,6 +40,13 @@ const en: Messages = {
 	sectionNumbering: "Auto-numbering",
 	sectionLinking: "Link maintenance",
 	sectionSuggest: "Heading link suggestions",
+	sectionNoteEntry: "Menus",
+	headingMenuName: "Heading menu",
+	headingMenuDesc:
+		"Right-click the arrow left of a heading: change level, skip numbering, copy link.",
+	statusBarMenuName: "Status bar menu",
+	statusBarMenuDesc:
+		"Status bar shows this note's numbering state; click to switch auto-numbering or template.",
 
 	vcNotInstalledNotice:
 		"Various Complements not detected (not installed or not enabled); automatic configuration cancelled. Install and enable it, or use Manual mode.",
@@ -252,6 +259,8 @@ const en: Messages = {
 	cmdToggleHeadingSkip: "Skip / restore numbering for heading at cursor",
 	cmdPromoteSection: "Promote current section",
 	cmdDemoteSection: "Demote current section",
+	cmdPromoteHeading: "Promote current heading (without subheadings)",
+	cmdDemoteHeading: "Demote current heading (without subheadings)",
 	cmdChooseNoteTemplate: "Choose template for current note…",
 	cmdToggleNoteAuto: "Toggle auto-numbering for current note",
 	menuToggleSkip: "Skip numbering for this heading",
@@ -259,8 +268,8 @@ const en: Messages = {
 	menuCopySectionEmbed: "Copy section embed",
 	cmdToggleSectionSkip: "Skip / restore numbering for the whole section at cursor",
 	menuCopySectionLink: "Copy section link",
-	menuPromoteSection: "Promote section",
-	menuDemoteSection: "Demote section",
+	menuAdjustHeading: "Set this heading's level",
+	menuAdjustSection: "Set section level (with subheadings)",
 	menuNoteSettings: "Numbering settings for this note…",
 	menuBack: "Back",
 	handleHint: "Drag to move the section · right-click for menu",

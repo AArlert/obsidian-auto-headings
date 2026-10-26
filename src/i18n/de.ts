@@ -42,6 +42,13 @@ const de: Partial<Messages> = {
 	sectionNumbering: "Automatische Nummerierung",
 	sectionLinking: "Link-Pflege",
 	sectionSuggest: "Vorschläge für Überschrift-Links",
+	sectionNoteEntry: "Menüs",
+	headingMenuName: "Überschriften-Menü",
+	headingMenuDesc:
+		"Rechtsklick auf den Pfeil links der Überschrift: Ebene ändern, Nummerierung überspringen, Link kopieren.",
+	statusBarMenuName: "Statusleisten-Menü",
+	statusBarMenuDesc:
+		"Die Statusleiste zeigt den Nummerierungsstatus; per Klick Auto-Nummerierung oder Vorlage wechseln.",
 
 	vcNotInstalledNotice:
 		"Various Complements nicht gefunden (nicht installiert oder deaktiviert); automatische Konfiguration abgebrochen. Installieren und aktivieren Sie es oder nutzen Sie die manuelle Einrichtung.",
@@ -254,6 +261,8 @@ const de: Partial<Messages> = {
 	cmdToggleHeadingSkip: "Nummerierung der Überschrift am Cursor auslassen / wiederherstellen",
 	cmdPromoteSection: "Aktuellen Abschnitt höherstufen",
 	cmdDemoteSection: "Aktuellen Abschnitt herabstufen",
+	cmdPromoteHeading: "Aktuelle Überschrift höherstufen (ohne Unterüberschriften)",
+	cmdDemoteHeading: "Aktuelle Überschrift herabstufen (ohne Unterüberschriften)",
 	cmdChooseNoteTemplate: "Vorlage für die aktuelle Notiz wählen…",
 	cmdToggleNoteAuto: "Automatische Nummerierung der aktuellen Notiz umschalten",
 	menuToggleSkip: "Nummerierung dieser Überschrift auslassen",
@@ -262,8 +271,8 @@ const de: Partial<Messages> = {
 	cmdToggleSectionSkip:
 		"Nummerierung des ganzen Abschnitts am Cursor auslassen / wiederherstellen",
 	menuCopySectionLink: "Abschnitts-Link kopieren",
-	menuPromoteSection: "Abschnitt höherstufen",
-	menuDemoteSection: "Abschnitt herabstufen",
+	menuAdjustHeading: "Ebene dieser Überschrift ändern",
+	menuAdjustSection: "Ebene des Abschnitts ändern (mit Unterüberschriften)",
 	menuNoteSettings: "Nummerierungseinstellungen dieser Notiz…",
 	menuBack: "Zurück",
 	handleHint: "Ziehen, um den Abschnitt zu verschieben · Rechtsklick für das Menü",

@@ -137,6 +137,13 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		expect(load).toBeLessThan(init);
 	});
 
+	it("S39：标题右键菜单 / 状态栏标签开关，老用户升级缺省为开", async () => {
+		const { plugin } = makeLoadable({ language: "zh" }, false);
+		await plugin.loadSettings();
+		expect(plugin.settings.headingMenuEnabled).toBe(true);
+		expect(plugin.settings.statusBarMenuEnabled).toBe(true);
+	});
+
 	// issue #10（spec §3.23，testplan Q50）：新装默认关；升级时一次性统一改关，开着 VC 联动的保持原值。
 	it("Q50：全新安装默认关，迁移标记直接为 true", async () => {
 		const { plugin } = makeLoadable(undefined, false);

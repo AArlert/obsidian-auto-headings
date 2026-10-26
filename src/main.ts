@@ -157,6 +157,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 	headingIndex = new HeadingIndex();
 	/** 标题链接建议框实例（排到 VC 前面用，见 prioritizeHeadingSuggest）。 */
 	private headingSuggest: HeadingLinkSuggest | null = null;
+	/** 笔记内入口（命令 / 右键菜单 / 状态栏）；设置面板切换开关后经它刷新状态栏。 */
+	noteEntry: NoteEntry | null = null;
 	/** 标题被链接次数（短中文词门槛 + 候选排序的信号，见 headinglinks.ts）；与 headingIndex 同生同灭。 */
 	headingLinkCounts = new HeadingLinkCounts();
 	/** 标题索引增量更新的按文件去抖计时器（与 debounceTimers 同构，独立维护）。 */
@@ -326,7 +328,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 		});
 
 		// 笔记内入口（M16，spec §3.24）：跳过标记 / 整节升降级 / 单篇模板 / 右键菜单 / 状态栏。
-		new NoteEntry(this).register();
+		this.noteEntry = new NoteEntry(this);
+		this.noteEntry.register();
 
 		// 复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11）：接线在独立方法，纯逻辑在 copycommands.ts。
 		this.registerCopyCommands();

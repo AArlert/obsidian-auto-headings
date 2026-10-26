@@ -14,7 +14,7 @@
  * 别处还没落盘的编辑，改它会让两边各自落盘、后存的盖掉先存的。行号按标题文字与同名序号映射到那份内容上
  * （{@link mapHeadingLine}）。
  */
-import { MarkdownView } from "obsidian";
+import { MarkdownView, type Editor, type TFile } from "obsidian";
 import type AutoHeadingsPlugin from "./main";
 import type { NoteEntry } from "./noteentry";
 import { stripSkipMarker } from "./headingedit";
@@ -74,6 +74,60 @@ export function mapHeadingLine(from: string, line: number, to: string): number |
 	return hits[nth]?.lineIndex ?? null;
 }
 
+/** 一处整行内的编辑（与 `Editor.transaction` 的 `changes` 同形，只用到这几个字段）。 */
+export interface TextChange {
+	from: { line: number; ch: number };
+	to?: { line: number; ch: number };
+	text: string;
+}
+
+/**
+ * 把行列坐标的变更集套到全文上（纯逻辑部分，供单测）。坐标按「以换行符分行」计，文件是 CRLF 时先规整再还原换行；
+ * 多处变更按起点从后往前套，互不挪动对方的坐标。
+ */
+export function applyTextChanges(content: string, changes: TextChange[]): string {
+	const crlf = content.includes("\r\n");
+	let text = crlf ? content.replace(/\r\n/g, "\n") : content;
+	const starts: number[] = [0];
+	for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) {
+		starts.push(i + 1);
+	}
+	const off = (p: { line: number; ch: number }): number =>
+		(starts[Math.min(p.line, starts.length - 1)] ?? 0) + p.ch;
+	const sorted = changes
+		.map((c) => ({ from: off(c.from), to: off(c.to ?? c.from), text: c.text }))
+		.sort((a, b) => b.from - a.from);
+	for (const c of sorted) {
+		text = text.slice(0, c.from) + c.text + text.slice(c.to);
+	}
+	return crlf ? text.replace(/\n/g, "\r\n") : text;
+}
+
+/**
+ * 阅读视图自带的编辑器只是个躲在后面的缓冲：往里 `transaction` 不保证落盘、阅读视图也不一定随之重绘，缓冲本身也不随
+ * 落盘更新（2026-10-27 用户实测「点了没用」；真机探针 `heading-menu.js` 抓到升级后再降级按旧缓冲算偏了列）。
+ * 菜单里改文件的项因此在只有阅读视图的笔记上改走**文件本身**（`vault.process`，Obsidian 随后重绘阅读视图）；
+ * 这里给菜单一个只实现 `getValue` / `getLine` / `transaction` 的替身，菜单代码不必分叉，读写都以弹菜单时从磁盘读到的
+ * `snapshot` 为准（菜单是即点即用的，期间文件被别处改动的窗口可忽略）。代价是这类改动进不了编辑器的撤销栈。
+ */
+export function fileBackedEditor(
+	plugin: AutoHeadingsPlugin,
+	file: TFile,
+	snapshot: string,
+): Editor {
+	const lines = snapshot.replace(/\r\n/g, "\n").split("\n");
+	return {
+		getValue: () => lines.join("\n"),
+		getLine: (n: number) => lines[n] ?? "",
+		transaction: (tx: { changes?: TextChange[] }) => {
+			const changes = tx.changes ?? [];
+			if (changes.length > 0) {
+				void plugin.app.vault.process(file, (c) => applyTextChanges(c, changes));
+			}
+		},
+	} as unknown as Editor;
+}
+
 /** 注册阅读视图的标题右键菜单与悬停提示（主窗口与之后打开的弹出窗口都挂上）。 */
 export function registerReadingHeadingMenu(
 	plugin: AutoHeadingsPlugin,
@@ -102,6 +156,9 @@ export function registerReadingHeadingMenu(
 	};
 
 	const onContext = (e: MouseEvent): void => {
+		if (!entry.headingMenuOn()) {
+			return;
+		}
 		const ind = indicatorOf(e);
 		const heading = ind?.parentElement;
 		const view = heading ? viewOf(heading) : null;
@@ -116,20 +173,32 @@ export function registerReadingHeadingMenu(
 		} catch {
 			/* 渲染器结构认不出：走文字兜底 */
 		}
+		const file = view.file;
+		// 能认出标题行才拦截（用背后缓冲判断，够快、同步）；真正的行号随后按磁盘内容重新解析。
+		const text = heading.textContent ?? "";
 		const shown = view.editor.getValue();
-		const line = resolveReadingHeadingLine(shown, sectionLine, heading.textContent ?? "");
-		if (line === null) {
-			return;
-		}
-		const target = plugin.markdownContextForPath(view.file.path)?.editor ?? view.editor;
-		const targetLine =
-			target === view.editor ? line : mapHeadingLine(shown, line, target.getValue());
-		if (targetLine === null) {
+		if (resolveReadingHeadingLine(shown, sectionLine, text) === null) {
 			return;
 		}
 		e.preventDefault();
 		e.stopPropagation();
-		entry.openHeadingMenu(e, target, view.file, targetLine);
+		void (async () => {
+			const disk = await plugin.app.vault.read(file);
+			const line = resolveReadingHeadingLine(disk, sectionLine, text);
+			if (line === null) {
+				return;
+			}
+			const editing = plugin.markdownContextForPath(file.path)?.editor;
+			// 同篇另有编辑视图：改那个编辑器；只有阅读视图：直接改文件（见 fileBackedEditor）。
+			if (editing && editing !== view.editor) {
+				const targetLine = mapHeadingLine(disk, line, editing.getValue());
+				if (targetLine !== null) {
+					entry.openHeadingMenu(e, editing, file, targetLine);
+				}
+				return;
+			}
+			entry.openHeadingMenu(e, fileBackedEditor(plugin, file, disk), file, line);
+		})();
 	};
 
 	const onHover = (e: MouseEvent): void => {

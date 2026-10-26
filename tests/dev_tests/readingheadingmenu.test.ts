@@ -3,7 +3,11 @@
  * 右键事件、视图查找与菜单弹出留真机探查（`tests/probes/maintenance-tab.js` 之外的 `reading-menu` 部分）。
  */
 import { describe, expect, it } from "vitest";
-import { mapHeadingLine, resolveReadingHeadingLine } from "../../src/readingheadingmenu";
+import {
+	applyTextChanges,
+	mapHeadingLine,
+	resolveReadingHeadingLine,
+} from "../../src/readingheadingmenu";
 
 const WJ = "⁠";
 const doc = [
@@ -49,5 +53,21 @@ describe("mapHeadingLine（S35 ②：映射到别的叶子里正在编辑的那�
 		expect(mapHeadingLine(doc, 5, "前言\n" + doc)).toBe(6);
 		expect(mapHeadingLine(doc, 2, doc + "\n")).toBeNull(); // 第 2 行不是标题
 		expect(mapHeadingLine(doc, 3, "# 文档\n## 丙")).toBeNull(); // 那边已改名
+	});
+});
+
+describe("applyTextChanges（S35：阅读视图直接改文件）", () => {
+	it("按行列坐标套用多处变更，互不挪动", () => {
+		const out = applyTextChanges("## A\n## B\n## C", [
+			{ from: { line: 1, ch: 0 }, to: { line: 1, ch: 0 }, text: "#" },
+			{ from: { line: 0, ch: 0 }, to: { line: 0, ch: 1 }, text: "" },
+		]);
+		expect(out).toBe("# A\n### B\n## C");
+	});
+	it("CRLF 文件：坐标按行算，换行符原样保留", () => {
+		const out = applyTextChanges("## A\r\n## B\r\n", [
+			{ from: { line: 1, ch: 4 }, to: { line: 1, ch: 4 }, text: " <!-- skip -->" },
+		]);
+		expect(out).toBe("## A\r\n## B <!-- skip -->\r\n");
 	});
 });

@@ -4,6 +4,7 @@ import {
 	bodyLineCount,
 	moveSection,
 	planSectionShift,
+	reachableLevels,
 	skipKindOf,
 	toggleSkipMarker,
 } from "../../src/headingedit";
@@ -55,6 +56,29 @@ describe("planSectionShift（S4–S7）", () => {
 			{ line: 0, text: "### A" },
 			{ line: 4, text: "#### B" },
 		]);
+	});
+	it("仅此标题（S36）：升级 / 降级只改这一行，子标题级别不动", () => {
+		const d = ["## A", "## B", "## C", "## D"].join("\n");
+		expect(planSectionShift(d, 0, -1, "self")).toEqual([{ line: 0, text: "# A" }]);
+		expect(planSectionShift(doc, 1, 1, "self")).toEqual([{ line: 1, text: "### B" }]);
+	});
+	it("仅此标题越界同样拒绝；非标题行返回 null", () => {
+		expect(planSectionShift(doc, 0, -1, "self")).toBeNull();
+		expect(planSectionShift("###### A", 0, 1, "self")).toBeNull();
+		expect(planSectionShift(doc, 3, 1, "self")).toBeNull();
+	});
+	it("S40 调整层级：直接给层级差，多级一次到位", () => {
+		expect(planSectionShift(doc, 1, 2)).toEqual([
+			{ line: 1, text: "#### B" },
+			{ line: 2, text: "##### C" },
+		]);
+		expect(planSectionShift(doc, 2, -2, "self")).toEqual([{ line: 2, text: "# C" }]);
+	});
+	it("S40 reachableLevels：整节按最深的子标题限制，仅此标题只看自己；非标题行为空", () => {
+		// B(2) 下有 C(3)：整节能到 H1–H5（C 最深到 H6），仅此标题能到 H1–H6。
+		expect(reachableLevels(doc, 1)).toEqual([1, 2, 3, 4, 5]);
+		expect(reachableLevels(doc, 1, "self")).toEqual([1, 2, 3, 4, 5, 6]);
+		expect(reachableLevels(doc, 3)).toEqual([]);
 	});
 	it("末级小节到文件末尾", () => {
 		expect(planSectionShift("# A\n## B\n## C", 2, 1)).toEqual([{ line: 2, text: "### C" }]);
