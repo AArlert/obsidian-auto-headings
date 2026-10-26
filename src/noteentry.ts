@@ -179,10 +179,13 @@ export class NoteEntry {
 				.setTitle(m.menuNoteSettings)
 				.setIcon("settings")
 				.onClick(
-					// 用点击这一项的坐标定位新菜单（不是最初右键的坐标），「返回」才能对准鼠标。
+					// 新菜单与本菜单左下角对齐（取点击时本菜单的外框），「返回」就落在原来这一项的位置。
 					(click) =>
-						void this.openNoteMenu(file, click as MouseEvent, () =>
-							this.openHeadingMenu(evt, editor, file, lineIndex),
+						void this.openNoteMenu(
+							file,
+							click as MouseEvent,
+							() => this.openHeadingMenu(evt, editor, file, lineIndex),
+							(menu as unknown as { dom?: HTMLElement }).dom?.getBoundingClientRect(),
 						),
 				),
 		);
@@ -441,12 +444,17 @@ export class NoteEntry {
 	}
 
 	/** 在鼠标位置弹出「本篇」原生菜单（状态栏 / 标题手柄的「本篇编号设置…」共用，S14）。 */
-	async openNoteMenu(file: TFile, evt: MouseEvent, onBack?: () => void): Promise<void> {
+	async openNoteMenu(
+		file: TFile,
+		evt: MouseEvent,
+		onBack?: () => void,
+		anchor?: DOMRect,
+	): Promise<void> {
 		const menu = new Menu();
 		const back = await this.buildNoteMenu(menu, file, onBack);
 		menu.showAtMouseEvent(evt);
 		if (back) {
-			alignUnderPointer(menu, back, evt);
+			alignToParent(menu, back, evt, anchor);
 		}
 	}
 
@@ -528,19 +536,28 @@ export class NoteEntry {
 }
 
 /**
- * 把刚弹出的菜单整体上下挪动，让 `item` 的中线对上鼠标（再向左留一点边距，使鼠标落在菜单内）。
- * 用到的 `Menu.dom` / `MenuItem.dom` 不在公开 API 里：取不到就保持原位，不影响功能。
+ * 把刚弹出的菜单挪到与上级菜单**左下角对齐**（`anchor` 为上级菜单的外框），「返回」于是落在上级菜单里「本篇编号设置…」
+ * 的位置；没有 `anchor`（取不到上级外框）时退回按鼠标纵坐标对准 `item`。用到的 `Menu.dom` / `MenuItem.dom` 不在公开 API 里：
+ * 取不到就保持原位，不影响功能。
  */
-function alignUnderPointer(menu: Menu, item: MenuItem, evt: MouseEvent): void {
+function alignToParent(menu: Menu, item: MenuItem, evt: MouseEvent, anchor?: DOMRect): void {
 	const dom = (menu as unknown as { dom?: HTMLElement }).dom;
 	const itemEl = (item as unknown as { dom?: HTMLElement }).dom;
-	if (!dom || !itemEl || typeof evt.clientY !== "number") {
+	if (!dom || !itemEl) {
 		return;
 	}
 	const box = dom.getBoundingClientRect();
-	const row = itemEl.getBoundingClientRect();
 	const win = dom.ownerDocument.defaultView ?? window;
-	const top = box.top + (evt.clientY - (row.top + row.height / 2));
+	let top: number;
+	let left: number;
+	if (anchor && anchor.height > 0) {
+		top = anchor.bottom - box.height;
+		left = anchor.left;
+	} else {
+		const row = itemEl.getBoundingClientRect();
+		top = box.top + (evt.clientY - (row.top + row.height / 2));
+		left = evt.clientX - 60;
+	}
 	dom.style.top = `${Math.max(4, Math.min(top, win.innerHeight - box.height - 4))}px`;
-	dom.style.left = `${Math.max(4, Math.min(evt.clientX - 60, win.innerWidth - box.width - 4))}px`;
+	dom.style.left = `${Math.max(4, Math.min(left, win.innerWidth - box.width - 4))}px`;
 }
