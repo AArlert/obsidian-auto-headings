@@ -292,10 +292,8 @@ export interface Messages {
 	menuCopySectionEmbed: string;
 	cmdToggleSectionSkip: string;
 	menuCopySectionLink: string;
-	menuPromoteSection: string;
-	menuDemoteSection: string;
-	menuPromoteHeading: string;
-	menuDemoteHeading: string;
+	menuAdjustHeading: string;
+	menuAdjustSection: string;
 	menuNoteSettings: string;
 	menuBack: string;
 	/** 标题折叠箭头的悬停提示（拖动 / 右键）。 */

@@ -7,6 +7,7 @@
 import {
 	FuzzySuggestModal,
 	Menu,
+	MenuItem,
 	Notice,
 	type App,
 	type Editor,
@@ -16,6 +17,7 @@ import {
 import type AutoHeadingsPlugin from "./main";
 import {
 	planSectionShift,
+	reachableLevels,
 	skipKindOf,
 	stripSkipMarker,
 	toggleSkipMarker,
@@ -217,31 +219,8 @@ export class NoteEntry {
 				.onClick(() => this.toggleSkip(editor, lineIndex, "tree")),
 		);
 		if (withShift) {
-			menu.addItem((i) =>
-				i
-					.setTitle(m.menuPromoteSection)
-					.setIcon("arrow-up")
-					.onClick(() => this.shiftSection(editor, lineIndex, -1)),
-			);
-			menu.addItem((i) =>
-				i
-					.setTitle(m.menuDemoteSection)
-					.setIcon("arrow-down")
-					.onClick(() => this.shiftSection(editor, lineIndex, 1)),
-			);
-			// 只动这一个标题（子标题级别不变）：与「本节」并列给出，用户按需选（2026-10-27 用户反馈）。
-			menu.addItem((i) =>
-				i
-					.setTitle(m.menuPromoteHeading)
-					.setIcon("chevron-up")
-					.onClick(() => this.shiftSection(editor, lineIndex, -1, "self")),
-			);
-			menu.addItem((i) =>
-				i
-					.setTitle(m.menuDemoteHeading)
-					.setIcon("chevron-down")
-					.onClick(() => this.shiftSection(editor, lineIndex, 1, "self")),
-			);
+			this.addLevelItem(menu, editor, h, "self", m.menuAdjustHeading, "heading");
+			this.addLevelItem(menu, editor, h, "tree", m.menuAdjustSection, "list-tree");
 		}
 		menu.addItem((i) =>
 			i
@@ -257,6 +236,45 @@ export class NoteEntry {
 		);
 	}
 
+	/**
+	 * 「调整层级」项：右侧展开 H1–H6，直接选目标层级（`self` 只动这个标题，`tree` 连同子标题）。
+	 * 会让范围内任何标题越出 1–6 级的层级置灰、不可选——不压扁、不记状态，要回去就选回原层级（spec §3.24）。
+	 * 子菜单（`MenuItem.setSubmenu`）不在公开 API 里：认不出时退化成平铺的「标题 · H1…」几项。
+	 */
+	private addLevelItem(
+		menu: Menu,
+		editor: Editor,
+		h: Heading,
+		scope: "tree" | "self",
+		title: string,
+		icon: string,
+	): void {
+		const ok = new Set(reachableLevels(editor.getValue(), h.lineIndex, scope));
+		const fill = (target: Menu, flat: boolean): void => {
+			for (let lv = 1; lv <= 6; lv++) {
+				target.addItem((it) =>
+					it
+						.setTitle(flat ? `${title} · H${lv}` : `H${lv}`)
+						.setChecked(lv === h.level)
+						.setDisabled(!ok.has(lv))
+						.onClick(() => this.shiftSection(editor, h.lineIndex, lv - h.level, scope)),
+				);
+			}
+		};
+		if (
+			typeof (MenuItem.prototype as { setSubmenu?: unknown } | undefined)?.setSubmenu !==
+			"function"
+		) {
+			fill(menu, true);
+			return;
+		}
+		menu.addItem((it) => {
+			it.setTitle(title).setIcon(icon);
+			const sub = (it as unknown as { setSubmenu: () => Menu }).setSubmenu();
+			fill(sub, false);
+		});
+	}
+
 	/** 切换某标题行的跳过标记；一次编辑事务（S1/S2/S26）。 */
 	toggleSkip(editor: Editor, line: number, kind: SkipKind = "self"): void {
 		const old = editor.getLine(line);
@@ -267,13 +285,16 @@ export class NoteEntry {
 		editor.transaction({ changes: [this.plugin.lineChange(line, old, next)] });
 	}
 
-	/** 整节升降级（`scope` 为 `self` 时只改这一个标题）；越界整体拒绝并提示（S4–S6）。 */
+	/** 升降级（`scope` 为 `self` 时只改这一个标题，`delta` 为层级变化量）；越界整体拒绝并提示（S4–S6）。 */
 	shiftSection(
 		editor: Editor,
 		line: number,
-		delta: -1 | 1,
+		delta: number,
 		scope: "tree" | "self" = "tree",
 	): void {
+		if (delta === 0) {
+			return;
+		}
 		const edits = planSectionShift(editor.getValue(), line, delta, scope);
 		if (!edits) {
 			new Notice(this.plugin.messages().noticeSectionShiftOutOfRange);
@@ -421,21 +442,19 @@ export class NoteEntry {
 	/** 在鼠标位置弹出「本篇」原生菜单（状态栏 / 标题手柄的「本篇编号设置…」共用，S14）。 */
 	async openNoteMenu(file: TFile, evt: MouseEvent, onBack?: () => void): Promise<void> {
 		const menu = new Menu();
-		await this.buildNoteMenu(menu, file, onBack);
+		const back = await this.buildNoteMenu(menu, file, onBack);
 		menu.showAtMouseEvent(evt);
+		if (back) {
+			alignUnderPointer(menu, back, evt);
+		}
 	}
 
 	/** 组装「本篇」菜单（S14/S15）。 */
-	async buildNoteMenu(menu: Menu, file: TFile, onBack?: () => void): Promise<void> {
+	async buildNoteMenu(menu: Menu, file: TFile, onBack?: () => void): Promise<MenuItem | null> {
 		const p = this.plugin;
 		const m = p.messages();
 		const rule = resolvePathRule(p.settings.pathRules, file.path);
 		const sw = readFileSwitch(await p.app.vault.cachedRead(file));
-		// 从标题菜单点进来时「返回」放最上面：新菜单从点击处向下展开，鼠标正好落在它上面，手感才跟手。
-		if (onBack) {
-			menu.addItem((i) => i.setTitle(m.menuBack).setIcon("undo-2").onClick(onBack));
-			menu.addSeparator();
-		}
 		menu.addItem((i) =>
 			i
 				.setTitle(rule ? m.statusMenuRule(rule.pattern) : m.statusMenuNoRule)
@@ -494,5 +513,33 @@ export class NoteEntry {
 					.onClick(() => p.clearActiveFileStaleNumbering()),
 			);
 		}
+		// 从标题菜单点进来时末尾加「返回」；弹出后由 openNoteMenu 把它挪到鼠标正下方（与上级菜单「本篇编号设置…」对准）。
+		let back: MenuItem | null = null;
+		if (onBack) {
+			menu.addSeparator();
+			menu.addItem((i) => {
+				back = i;
+				i.setTitle(m.menuBack).setIcon("undo-2").onClick(onBack);
+			});
+		}
+		return back;
 	}
+}
+
+/**
+ * 把刚弹出的菜单整体上下挪动，让 `item` 的中线对上鼠标（再向左留一点边距，使鼠标落在菜单内）。
+ * 用到的 `Menu.dom` / `MenuItem.dom` 不在公开 API 里：取不到就保持原位，不影响功能。
+ */
+function alignUnderPointer(menu: Menu, item: MenuItem, evt: MouseEvent): void {
+	const dom = (menu as unknown as { dom?: HTMLElement }).dom;
+	const itemEl = (item as unknown as { dom?: HTMLElement }).dom;
+	if (!dom || !itemEl || typeof evt.clientY !== "number") {
+		return;
+	}
+	const box = dom.getBoundingClientRect();
+	const row = itemEl.getBoundingClientRect();
+	const win = dom.ownerDocument.defaultView ?? window;
+	const top = box.top + (evt.clientY - (row.top + row.height / 2));
+	dom.style.top = `${Math.max(4, Math.min(top, win.innerHeight - box.height - 4))}px`;
+	dom.style.left = `${Math.max(4, Math.min(evt.clientX - 60, win.innerWidth - box.width - 4))}px`;
 }

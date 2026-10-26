@@ -41,13 +41,13 @@ const ptBR: Partial<Messages> = {
 	sectionNumbering: "Numeração automática",
 	sectionLinking: "Manutenção de links",
 	sectionSuggest: "Sugestões de links para cabeçalhos",
-	sectionNoteEntry: "Menus na nota",
-	headingMenuName: "Menu de contexto do título",
+	sectionNoteEntry: "Menus",
+	headingMenuName: "Menu de títulos",
 	headingMenuDesc:
-		"Clique direito na seta de recolher à esquerda do título (edição ou leitura) ou no menu do editor: ignorar, promover/rebaixar, copiar link e mais.",
-	statusBarMenuName: "Rótulo da nota na barra de status",
+		"Clique direito na seta à esquerda do título: mudar nível, ignorar numeração, copiar link.",
+	statusBarMenuName: "Menu da barra de status",
 	statusBarMenuDesc:
-		"Mostra o estado de numeração da nota na barra de status; clique para trocar a numeração automática, o modelo ou renumerar.",
+		"A barra de status mostra a numeração da nota; clique para trocar numeração automática ou modelo.",
 
 	vcNotInstalledNotice:
 		"Various Complements não encontrado (não instalado ou desativado); configuração automática cancelada. Instale e ative-o, ou use a configuração manual.",
@@ -266,10 +266,8 @@ const ptBR: Partial<Messages> = {
 	menuCopySectionEmbed: "Copiar incorporação da seção",
 	cmdToggleSectionSkip: "Pular / restaurar a numeração da seção inteira sob o cursor",
 	menuCopySectionLink: "Copiar link da seção",
-	menuPromoteSection: "Promover seção",
-	menuDemoteSection: "Rebaixar seção",
-	menuPromoteHeading: "Promover só este título (manter subtítulos)",
-	menuDemoteHeading: "Rebaixar só este título (manter subtítulos)",
+	menuAdjustHeading: "Mudar o nível deste título",
+	menuAdjustSection: "Mudar o nível da seção (com subtítulos)",
 	menuNoteSettings: "Configurações de numeração desta nota…",
 	menuBack: "Voltar",
 	handleHint: "Arraste para mover a seção · clique direito para o menu",

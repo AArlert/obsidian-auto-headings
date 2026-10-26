@@ -52,14 +52,14 @@ export function toggleSkipMarker(line: string, kind: SkipKind = "self"): string 
  * 规划整节升降级。
  *
  * @param headingLine 小节标题所在行（0 起）；须恰为 `parseHeadings` 认得的标题行。
- * @param delta `-1` 升级（少一个 `#`）/ `+1` 降级。
+ * @param delta 层级变化量：负数升级（少几个 `#`）/ 正数降级；菜单「调整层级」传目标层级与当前层级之差。
  * @param scope `tree`（默认）连同子标题整棵移动；`self` 只改这一个标题（子标题级别不动，升级后它们会成为它的子标题）。
  * @returns 整行变更集；越界（范围内任一标题会 <1 或 >6 级）或 `headingLine` 不是标题时返回 `null`。
  */
 export function planSectionShift(
 	content: string,
 	headingLine: number,
-	delta: -1 | 1,
+	delta: number,
 	scope: "tree" | "self" = "tree",
 ): LineEdit[] | null {
 	const headings = parseHeadings(content);
@@ -82,10 +82,28 @@ export function planSectionShift(
 		const text = lines[h.lineIndex];
 		edits.push({
 			line: h.lineIndex,
-			text: delta < 0 ? text.slice(1) : "#" + text,
+			text: delta < 0 ? text.slice(-delta) : "#".repeat(delta) + text,
 		});
 	}
 	return edits;
+}
+
+/**
+ * 把标题（`self`）或整节（`tree`）调到哪些目标层级是可行的（1–6 级里不越界的那些）；`headingLine` 不是标题时返回空数组。
+ * 菜单据此把越界的层级置灰：整节不压扁、不记状态，要回去就直接选回原来的层级，树形从属关系始终无损。
+ */
+export function reachableLevels(
+	content: string,
+	headingLine: number,
+	scope: "tree" | "self" = "tree",
+): number[] {
+	const base = parseHeadings(content).find((h) => h.lineIndex === headingLine)?.level;
+	if (base === undefined) {
+		return [];
+	}
+	return [1, 2, 3, 4, 5, 6].filter(
+		(lv) => planSectionShift(content, headingLine, lv - base, scope) !== null,
+	);
 }
 
 /**

@@ -39,13 +39,12 @@ const ko: Partial<Messages> = {
 	sectionNumbering: "자동 번호 매기기",
 	sectionLinking: "링크 관리",
 	sectionSuggest: "제목 링크 제안",
-	sectionNoteEntry: "노트 내 메뉴",
-	headingMenuName: "제목 오른쪽 클릭 메뉴",
-	headingMenuDesc:
-		"제목 왼쪽의 접기 화살표(편집 / 읽기 보기) 또는 편집기 오른쪽 클릭으로 건너뛰기, 올리기/내리기, 링크 복사 등을 엽니다.",
-	statusBarMenuName: "상태 표시줄 노트 라벨",
+	sectionNoteEntry: "메뉴",
+	headingMenuName: "제목 메뉴",
+	headingMenuDesc: "제목 왼쪽 화살표를 오른쪽 클릭: 레벨 변경, 번호 건너뛰기, 링크 복사.",
+	statusBarMenuName: "상태 표시줄 메뉴",
 	statusBarMenuDesc:
-		"상태 표시줄에 이 노트의 번호 상태를 표시하며, 클릭하면 자동 번호·템플릿 변경·다시 번호 매기기를 할 수 있습니다.",
+		"상태 표시줄에 번호 상태를 표시하며, 클릭하면 자동 번호나 템플릿을 바꿀 수 있습니다.",
 
 	vcNotInstalledNotice:
 		"Various Complements를 찾을 수 없습니다 (설치되지 않았거나 비활성화됨). 자동 설정을 취소했습니다. 먼저 설치하고 활성화하거나 '수동 설정'을 사용하세요.",
@@ -260,10 +259,8 @@ const ko: Partial<Messages> = {
 	menuCopySectionEmbed: "섹션 임베드 복사",
 	cmdToggleSectionSkip: "커서 위치 섹션 전체의 번호 건너뛰기/되돌리기",
 	menuCopySectionLink: "섹션 링크 복사",
-	menuPromoteSection: "섹션 올리기",
-	menuDemoteSection: "섹션 내리기",
-	menuPromoteHeading: "이 제목만 올리기 (하위 제목 유지)",
-	menuDemoteHeading: "이 제목만 내리기 (하위 제목 유지)",
+	menuAdjustHeading: "이 제목의 레벨 변경",
+	menuAdjustSection: "섹션 레벨 변경 (하위 제목 포함)",
 	menuNoteSettings: "이 노트의 번호 설정…",
 	menuBack: "뒤로",
 	handleHint: "끌어서 섹션 이동 · 오른쪽 클릭으로 메뉴",

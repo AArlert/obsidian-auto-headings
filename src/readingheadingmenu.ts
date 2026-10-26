@@ -104,14 +104,21 @@ export function applyTextChanges(content: string, changes: TextChange[]): string
 }
 
 /**
- * 阅读视图自带的编辑器只是个躲在后面的缓冲：往里 `transaction` 不保证落盘、阅读视图也不一定随之重绘（2026-10-27 用户实测
- * 「点了没用」）。菜单里改文件的项因此在只有阅读视图的笔记上改走**文件本身**（`vault.process`，Obsidian 随后重绘阅读视图）；
- * 这里给菜单一个只实现 `getValue` / `getLine` / `transaction` 的替身，菜单代码不必分叉。代价是这类改动进不了编辑器的撤销栈。
+ * 阅读视图自带的编辑器只是个躲在后面的缓冲：往里 `transaction` 不保证落盘、阅读视图也不一定随之重绘，缓冲本身也不随
+ * 落盘更新（2026-10-27 用户实测「点了没用」；真机探针 `heading-menu.js` 抓到升级后再降级按旧缓冲算偏了列）。
+ * 菜单里改文件的项因此在只有阅读视图的笔记上改走**文件本身**（`vault.process`，Obsidian 随后重绘阅读视图）；
+ * 这里给菜单一个只实现 `getValue` / `getLine` / `transaction` 的替身，菜单代码不必分叉，读写都以弹菜单时从磁盘读到的
+ * `snapshot` 为准（菜单是即点即用的，期间文件被别处改动的窗口可忽略）。代价是这类改动进不了编辑器的撤销栈。
  */
-export function fileBackedEditor(plugin: AutoHeadingsPlugin, file: TFile, base: Editor): Editor {
+export function fileBackedEditor(
+	plugin: AutoHeadingsPlugin,
+	file: TFile,
+	snapshot: string,
+): Editor {
+	const lines = snapshot.replace(/\r\n/g, "\n").split("\n");
 	return {
-		getValue: () => base.getValue(),
-		getLine: (n: number) => base.getLine(n),
+		getValue: () => lines.join("\n"),
+		getLine: (n: number) => lines[n] ?? "",
 		transaction: (tx: { changes?: TextChange[] }) => {
 			const changes = tx.changes ?? [];
 			if (changes.length > 0) {
@@ -166,25 +173,32 @@ export function registerReadingHeadingMenu(
 		} catch {
 			/* 渲染器结构认不出：走文字兜底 */
 		}
+		const file = view.file;
+		// 能认出标题行才拦截（用背后缓冲判断，够快、同步）；真正的行号随后按磁盘内容重新解析。
+		const text = heading.textContent ?? "";
 		const shown = view.editor.getValue();
-		const line = resolveReadingHeadingLine(shown, sectionLine, heading.textContent ?? "");
-		if (line === null) {
-			return;
-		}
-		const editing = plugin.markdownContextForPath(view.file.path)?.editor;
-		// 同篇另有编辑视图：改那个编辑器；只有阅读视图：直接改文件（见 fileBackedEditor）。
-		const target =
-			editing && editing !== view.editor
-				? editing
-				: fileBackedEditor(plugin, view.file, view.editor);
-		const targetLine =
-			target === editing ? mapHeadingLine(shown, line, editing.getValue()) : line;
-		if (targetLine === null) {
+		if (resolveReadingHeadingLine(shown, sectionLine, text) === null) {
 			return;
 		}
 		e.preventDefault();
 		e.stopPropagation();
-		entry.openHeadingMenu(e, target, view.file, targetLine);
+		void (async () => {
+			const disk = await plugin.app.vault.read(file);
+			const line = resolveReadingHeadingLine(disk, sectionLine, text);
+			if (line === null) {
+				return;
+			}
+			const editing = plugin.markdownContextForPath(file.path)?.editor;
+			// 同篇另有编辑视图：改那个编辑器；只有阅读视图：直接改文件（见 fileBackedEditor）。
+			if (editing && editing !== view.editor) {
+				const targetLine = mapHeadingLine(disk, line, editing.getValue());
+				if (targetLine !== null) {
+					entry.openHeadingMenu(e, editing, file, targetLine);
+				}
+				return;
+			}
+			entry.openHeadingMenu(e, fileBackedEditor(plugin, file, disk), file, line);
+		})();
 	};
 
 	const onHover = (e: MouseEvent): void => {

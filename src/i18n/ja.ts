@@ -40,13 +40,11 @@ const ja: Partial<Messages> = {
 	sectionNumbering: "自動採番",
 	sectionLinking: "リンクの保守",
 	sectionSuggest: "見出しリンク候補",
-	sectionNoteEntry: "ノート内メニュー",
-	headingMenuName: "見出しの右クリックメニュー",
-	headingMenuDesc:
-		"見出し左の折りたたみ矢印（編集 / 閲覧ビュー）またはエディタの右クリックで、スキップ・昇格降格・リンクコピーなどを表示します。",
-	statusBarMenuName: "ステータスバーのノート表示",
-	statusBarMenuDesc:
-		"ステータスバーにこのノートの採番状態を表示し、クリックで自動採番の切替・テンプレート変更・再採番ができます。",
+	sectionNoteEntry: "メニュー",
+	headingMenuName: "見出しメニュー",
+	headingMenuDesc: "見出し左の矢印を右クリック：レベル変更、採番スキップ、リンクコピー。",
+	statusBarMenuName: "ステータスバーメニュー",
+	statusBarMenuDesc: "ステータスバーに採番状態を表示。クリックで自動採番やテンプレートを切替。",
 
 	vcNotInstalledNotice:
 		"Various Complements が見つかりません（未インストールまたは無効）。自動設定を中止しました。先にインストールして有効化するか、「手動設定」を使ってください。",
@@ -264,10 +262,8 @@ const ja: Partial<Messages> = {
 	menuCopySectionEmbed: "このセクションの埋め込みをコピー",
 	cmdToggleSectionSkip: "カーソル位置のセクション全体の採番をスキップ／再開",
 	menuCopySectionLink: "このセクションのリンクをコピー",
-	menuPromoteSection: "このセクションを昇格",
-	menuDemoteSection: "このセクションを降格",
-	menuPromoteHeading: "この見出しだけ昇格（子見出しはそのまま）",
-	menuDemoteHeading: "この見出しだけ降格（子見出しはそのまま）",
+	menuAdjustHeading: "この見出しのレベルを変更",
+	menuAdjustSection: "セクションのレベルを変更（子見出しを含む）",
 	menuNoteSettings: "このノートの採番設定…",
 	menuBack: "戻る",
 	handleHint: "ドラッグでセクションごと移動 · 右クリックでメニュー",
