@@ -36,6 +36,8 @@ export interface TocNode {
 	/** 虚拟编号（如 `"1.1 "`）；写入模式 / 不编号 / 残留旧编号时为 `null`。 */
 	label: string | null;
 	children: TocNode[];
+	/** 比「父级的下一级」多跳过了几级（H3 下直接出现 H5 则为 1）：缩进要补上，让它与同级别的标题对齐。 */
+	gap: number;
 }
 
 /** 收录的级别范围（含两端）。 */
@@ -209,6 +211,8 @@ export function buildTocTree(
 	}
 	const roots: TocNode[] = [];
 	const stack: TocNode[] = [];
+	const all: TocNode[] = [];
+	const parents = new Map<TocNode, TocNode | null>();
 	for (const h of headings) {
 		if (h.level < range.min || h.level > range.max) {
 			continue;
@@ -228,12 +232,21 @@ export function buildTocTree(
 			anchor: displayAnchor(h.heading),
 			label,
 			children: [],
+			gap: 0,
 		};
 		while (stack.length > 0 && stack[stack.length - 1].level >= node.level) {
 			stack.pop();
 		}
-		(stack.length > 0 ? stack[stack.length - 1].children : roots).push(node);
+		const parent = stack.length > 0 ? stack[stack.length - 1] : null;
+		(parent ? parent.children : roots).push(node);
+		parents.set(node, parent);
+		all.push(node);
 		stack.push(node);
+	}
+	// 缩进按级别对齐：以收录的最浅级别为基准，跳过的每一级补一格（H3 下的 H5 与别处 H4 下的 H5 同一缩进）。
+	const base = all.reduce((m, n) => Math.min(m, n.level), 7);
+	for (const n of all) {
+		n.gap = n.level - (parents.get(n)?.level ?? base - 1) - 1;
 	}
 	return roots;
 }
@@ -265,6 +278,9 @@ function drawTree(
 	const ul = container.createEl("ul", { cls: "ah-toc-list" });
 	for (const node of nodes) {
 		const li = ul.createEl("li");
+		if (node.gap > 0) {
+			li.setAttr("style", `margin-left: ${node.gap * 1.4}em`);
+		}
 		const a = li.createEl("a", { cls: "internal-link ah-toc-link", href: `#${node.anchor}` });
 		if (node.label !== null) {
 			a.createSpan({ cls: "ah-virtual-number", text: node.label });

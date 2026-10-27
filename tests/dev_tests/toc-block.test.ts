@@ -37,7 +37,7 @@ function headingsOf(content: string): TocHeading[] {
 /** 压平成「缩进 + 编号 + 文字」便于断言。 */
 function flat(nodes: TocNode[], depth = 0): string[] {
 	return nodes.flatMap((n) => [
-		`${"  ".repeat(depth)}${n.label ?? ""}${n.text}`,
+		`${"  ".repeat(depth + n.gap)}${n.label ?? ""}${n.text}`,
 		...flat(n.children, depth + 1),
 	]);
 }
@@ -78,9 +78,9 @@ describe("buildTocTree：嵌套、编号与过滤（testplan V54 / V57 / V58）"
 		const range = { min: 2, max: 3 };
 		expect(flat(buildTocTree(headingsOf(doc), null, range))).toEqual(["甲", "  甲一", "乙"]);
 		const skip = ["# 一", "### 三", "## 二"].join("\n");
-		expect(flat(buildTocTree(headingsOf(skip), null))).toEqual(["一", "  三", "  二"]);
+		expect(flat(buildTocTree(headingsOf(skip), null))).toEqual(["一", "    三", "  二"]);
 		const deepFirst = ["### 深", "## 浅", "# 根"].join("\n");
-		expect(flat(buildTocTree(headingsOf(deepFirst), null))).toEqual(["深", "浅", "根"]);
+		expect(flat(buildTocTree(headingsOf(deepFirst), null))).toEqual(["    深", "  浅", "根"]);
 	});
 
 	it("残留旧编号标题不叠加虚拟编号；写入模式的 WJ 不显示、锚点保留 WJ（V55 / V58）", () => {
@@ -98,7 +98,12 @@ describe("buildTocTree：嵌套、编号与过滤（testplan V54 / V57 / V58）"
 		const labels = computeVirtualNumbers(doc, DEFAULT_TEMPLATE);
 		const heads = headingsOf(doc);
 		heads[1] = { ...heads[1], level: 3 };
-		expect(flat(buildTocTree(heads, labels))).toEqual(["书名", "  甲", "  1.1 甲一", "  2 乙"]);
+		expect(flat(buildTocTree(heads, labels)).map((l) => l.trim())).toEqual([
+			"书名",
+			"甲",
+			"1.1 甲一",
+			"2 乙",
+		]);
 		expect(
 			buildTocTree(
 				[{ level: 2, heading: ` ${WJ} `, position: { start: { line: 0 } } }],
@@ -127,6 +132,7 @@ class FakeEl {
 		return this.createEl("span", o);
 	}
 	addClass(_c: string): void {}
+	setAttr(_k: string, _v: string): void {}
 	setText(t: string): void {
 		this.text = t;
 	}
@@ -391,14 +397,34 @@ describe("边界：缩进相对、跳级、乱序（testplan V69 / V70）", () =
 		expect(selectableLevels(headingsOf(doc), { min: 1, max: 6 })).toEqual([3, 4, 5]);
 	});
 
+	it("跳级的标题按它自己的级别对齐：H3 下直接出现的 H5 与别处 H4 下的 H5 同一缩进（V70，用户实测反馈）", () => {
+		const doc = [
+			"### 只有三级起步",
+			"#### 四级一",
+			"##### 五级一",
+			"### 又一个三级",
+			"##### 跳过四级的五级",
+		].join("\n");
+		const lines = flat(tree(doc));
+		expect(lines).toEqual([
+			"只有三级起步",
+			"  四级一",
+			"    五级一",
+			"又一个三级",
+			"    跳过四级的五级",
+		]);
+		const indent = (t: string) => lines.find((l) => l.trim() === t)!.search(/\S/);
+		expect(indent("跳过四级的五级")).toBe(indent("五级一"));
+	});
+
 	it("跳级与乱序：H3→H5→H4；文首 H4 后才有 H3（V70）", () => {
 		expect(flat(tree(["### 甲", "##### 乙", "#### 丙"].join("\n")))).toEqual([
 			"甲",
-			"  乙",
+			"    乙",
 			"  丙",
 		]);
 		expect(flat(tree(["#### 深", "### 浅", "#### 浅下"].join("\n")))).toEqual([
-			"深",
+			"  深",
 			"浅",
 			"  浅下",
 		]);

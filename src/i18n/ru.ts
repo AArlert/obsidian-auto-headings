@@ -263,7 +263,7 @@ const ru: Partial<Messages> = {
 	cmdCopyOutline: "Копировать нумерованный план",
 	cmdCopySectionLink: "Копировать ссылку на текущий раздел",
 	cmdCopySectionEmbed: "Копировать встраиваемую ссылку на текущий раздел",
-	cmdInsertToc: "Вставить оглавление (блок ah-toc с ползунком)",
+	cmdInsertToc: "Вставить оглавление",
 	cmdToggleHeadingSkip: "Пропустить / вернуть нумерацию заголовка под курсором",
 	cmdPromoteSection: "Повысить текущий раздел",
 	cmdDemoteSection: "Понизить текущий раздел",

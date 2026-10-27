@@ -247,7 +247,7 @@ const ko: Partial<Messages> = {
 	cmdCopyOutline: "번호 있는 개요 복사",
 	cmdCopySectionLink: "현재 섹션 링크 복사",
 	cmdCopySectionEmbed: "현재 섹션 임베드 링크 복사",
-	cmdInsertToc: "목차 삽입 (슬라이더가 있는 ah-toc 블록)",
+	cmdInsertToc: "목차 삽입",
 	cmdToggleHeadingSkip: "커서 위치 제목의 번호 건너뛰기/되돌리기",
 	cmdPromoteSection: "현재 섹션 올리기",
 	cmdDemoteSection: "현재 섹션 내리기",

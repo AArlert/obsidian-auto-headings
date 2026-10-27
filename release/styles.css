@@ -1056,21 +1056,12 @@ button.ah-danger-text {
 }
 
 /* 只读目录块 ah-toc（spec §3.25）：普通嵌套列表，链接不加下划线，行距随正文。 */
-.ah-toc {
-	position: relative;
-}
-/* 层级滑块：叠在目录右上角的浮层，平时隐藏，鼠标移入目录块 / 键盘焦点进入才淡入（V63）。 */
+/* 层级滑块：在目录上方、靠左（避开实时预览里代码块右上角的 </> 按钮），平时隐藏，鼠标移入目录块 / 键盘焦点进入才淡入（V63）；隐藏时仍占一行，显隐不会让目录跳动。 */
 .ah-toc-bar {
-	position: absolute;
-	top: 0;
-	right: 0;
-	z-index: 1;
 	display: flex;
 	align-items: center;
 	gap: 0.6em;
-	padding: 2px 8px;
-	border-radius: var(--radius-s);
-	background: var(--background-secondary);
+	margin-bottom: 0.3em;
 	opacity: 0;
 	transition: opacity 0.15s ease;
 }

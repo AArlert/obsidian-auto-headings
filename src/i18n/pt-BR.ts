@@ -254,7 +254,7 @@ const ptBR: Partial<Messages> = {
 	cmdCopyOutline: "Copiar estrutura numerada",
 	cmdCopySectionLink: "Copiar link da seção atual",
 	cmdCopySectionEmbed: "Copiar link de incorporação da seção atual",
-	cmdInsertToc: "Inserir sumário (bloco ah-toc com controle deslizante)",
+	cmdInsertToc: "Inserir sumário",
 	cmdToggleHeadingSkip: "Pular / restaurar a numeração do cabeçalho sob o cursor",
 	cmdPromoteSection: "Promover a seção atual",
 	cmdDemoteSection: "Rebaixar a seção atual",
