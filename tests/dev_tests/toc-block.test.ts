@@ -6,6 +6,7 @@
  * 元数据变化原地重画、卸载注销」。真实观感、PDF、实时预览留真机手验。
  */
 import { describe, expect, it, vi } from "vitest";
+import { buildNumberedOutline } from "../../src/copycommands";
 import { DEFAULT_TEMPLATE, WORD_JOINER } from "../../src/numbering";
 import { parseHeadings } from "../../src/parser";
 import { computeVirtualNumbers } from "../../src/virtual/compute";
@@ -16,6 +17,8 @@ import {
 	parseTocSlider,
 	pickTocLevel,
 	rewriteTocBlock,
+	tocCopyPayload,
+	tocIndexFromX,
 	tocInsertText,
 	selectableLevels,
 	TocBlockRenderer,
@@ -132,6 +135,11 @@ class FakeEl {
 		return this.createEl("span", o);
 	}
 	addClass(_c: string): void {}
+	getBoundingClientRect(): { left: number; width: number } {
+		return { left: 0, width: 114 };
+	}
+	setPointerCapture(): void {}
+	releasePointerCapture(): void {}
 	attrs = new Map<string, string>();
 	setAttr(k: string, v: string): void {
 		this.attrs.set(k, v);
@@ -173,6 +181,26 @@ async function flush(): Promise<void> {
 	}
 }
 
+/** 滑块第 idx 档（共 n 档）对应的指针横坐标：轨道宽 114、拇指 14，可达范围 7–107。 */
+const sliderX = (idx: number, n: number): number => 7 + (idx / (n - 1)) * 100;
+const ptr = (x: number) => ({
+	clientX: x,
+	pointerId: 1,
+	preventDefault: () => {},
+	stopPropagation: () => {},
+});
+/** 在滑块轨道上按下 / 拖到第 idx 档（不松手）。 */
+function press(track: FakeEl | undefined, idx: number, n: number): void {
+	const type = track?.listeners.has("__dragging") ? "pointermove" : "pointerdown";
+	track?.listeners.get(type)?.(ptr(sliderX(idx, n)));
+	track?.listeners.set("__dragging", () => {});
+}
+/** 松手。 */
+function release(track: FakeEl | undefined): void {
+	track?.listeners.get("pointerup")?.(ptr(0));
+	track?.listeners.delete("__dragging");
+}
+
 function makeHost(files: Record<string, string>, virtual: Set<string>) {
 	return {
 		virtualNumberingFor: vi.fn((path: string, content: string) =>
@@ -181,6 +209,8 @@ function makeHost(files: Record<string, string>, virtual: Set<string>) {
 		readFileContent: vi.fn(async (path: string) => files[path] ?? null),
 		cachedHeadings: vi.fn((path: string) => (path in files ? headingsOf(files[path]) : null)),
 		openHeadingLink: vi.fn(),
+		headingUri: (path: string, anchor: string) =>
+			`obsidian://open?vault=V&file=${encodeURIComponent(`${path}#${anchor}`)}`,
 		processFile: vi.fn(async (path: string, transform: (c: string) => string | null) => {
 			const r = transform(files[path]);
 			if (r !== null) {
@@ -223,7 +253,12 @@ describe("TocBlockRenderer：渲染、更新与退化（testplan V54 / V56 / V60
 		await flush();
 		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "2 乙"]);
 		const a = el.children[0].children[0].children[0].children[0];
-		const evt = { preventDefault: vi.fn(), ctrlKey: true, metaKey: false };
+		const evt = {
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+			ctrlKey: true,
+			metaKey: false,
+		};
 		a.listeners.get("click")?.(evt);
 		expect(evt.preventDefault).toHaveBeenCalled();
 		expect(host.openHeadingLink).toHaveBeenCalledWith("v.md#甲", "v.md", true);
@@ -323,10 +358,10 @@ describe("滑块（testplan V63–V67）", () => {
 	});
 
 	function sliderOf(el: FakeEl) {
-		const bar = el.children.find((c) => c.cls === "ah-toc-bar");
+		const bar = el.children.find((c) => c.cls.startsWith("ah-toc-bar"));
 		return {
 			bar,
-			input: bar?.children.find((c) => c.cls === "ah-toc-slider"),
+			input: bar?.children.find((c) => c.cls === "ah-toc-track"),
 			label: bar?.children.find((c) => c.cls === "ah-toc-slider-label"),
 		};
 	}
@@ -338,11 +373,11 @@ describe("滑块（testplan V63–V67）", () => {
 		const { input, label } = sliderOf(el);
 		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "    1.1.1 甲一一", "2 乙"]);
 		expect(label?.text).toBe("H4");
-		input?.listeners.get("input")?.({ target: { value: "0" } });
+		press(input, 0, 3);
 		expect(el.dump()).toEqual(["1 甲", "2 乙"]);
 		expect(sliderOf(el).input).toBe(input); // 同一个滑块元素，拖动不丢焦点
 		expect(label?.text).toBe("H2");
-		input?.listeners.get("input")?.({ target: { value: "1" } });
+		press(input, 1, 3);
 		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "2 乙"]);
 	});
 
@@ -367,7 +402,8 @@ describe("滑块（testplan V63–V67）", () => {
 		const { el } = mount(renderer, "slider", "v.md");
 		await flush();
 		const first = sliderOf(el).input;
-		first?.listeners.get("input")?.({ target: { value: "1" } });
+		press(first, 1, 3);
+		release(first);
 		files["v.md"] = ["## 新", doc].join("\n");
 		renderer.refreshPath("v.md");
 		await flush();
@@ -494,17 +530,18 @@ describe("depth：解析、选级与落盘（testplan V65 / V67 / V71 / V72）",
 			lineEnd: 4,
 		});
 		await done;
-		const input = el.children.find((c) => c.cls === "ah-toc-bar")?.children[0];
-		input?.listeners.get("input")?.({ target: { value: "0" } });
+		const input = el.children.find((c) => c.cls.startsWith("ah-toc-bar"))?.children[0];
+		press(input, 0, 4);
 		expect(host.processFile).not.toHaveBeenCalled(); // 拖动中不写
-		input?.listeners.get("change")?.({ target: { value: "0" } });
+		release(input);
 		await flush();
 		expect(host.processFile).toHaveBeenCalledTimes(1);
 		// 现存级别 [1,2,3,4]，序号 0 = H1
 		expect(files["v.md"]).toContain("```ah-toc\nslider\ndepth: 1\n```");
 		// 区间还停在旧的两行之间（模拟块被挪动 / 区间过期）：校验不过，不写、不抛，文件保持第一次落盘后的样子
 		const afterFirst = files["v.md"];
-		input?.listeners.get("change")?.({ target: { value: "1" } });
+		press(input, 1, 4);
+		release(input);
 		await flush();
 		expect(files["v.md"]).toBe(afterFirst);
 	});
@@ -514,13 +551,14 @@ describe("depth：解析、选级与落盘（testplan V65 / V67 / V71 / V72）",
 		const host = makeHost(files, new Set(["v.md"]));
 		const noInfo = mount(new TocBlockRenderer(host), "slider", "v.md", null);
 		await noInfo.done;
-		const input = noInfo.el.children.find((c) => c.cls === "ah-toc-bar");
+		const input = noInfo.el.children.find((c) => c.cls.startsWith("ah-toc-bar"));
 		void input; // doc 只有两级以下标题，可能没有滑块；改用多级文件
 		files["v.md"] = [doc, "### 甲一"].join("\n");
 		const m = mount(new TocBlockRenderer(host), "slider", "v.md", null);
 		await m.done;
-		const slider = m.el.children.find((c) => c.cls === "ah-toc-bar")?.children[0];
-		slider?.listeners.get("change")?.({ target: { value: "0" } });
+		const slider = m.el.children.find((c) => c.cls.startsWith("ah-toc-bar"))?.children[0];
+		press(slider, 0, 3);
+		release(slider);
 		await flush();
 		expect(host.processFile).not.toHaveBeenCalled();
 	});
@@ -541,6 +579,90 @@ describe("插入目录与导出（testplan V68 / V73）", () => {
 		const { el, done } = mount(new TocBlockRenderer(host), "slider", "v.md");
 		await done; // 不再 flush：处理器返回时 DOM 就该就绪
 		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一"]);
+	});
+});
+
+describe("滑块几何、链接属性与不抖动（testplan V63 / V74 / V75）", () => {
+	it("tocIndexFromX：拇指中心可达 [7, 宽−7]，均分刻度、越界夹两端（V63）", () => {
+		expect(tocIndexFromX(7, 114, 3)).toBe(0);
+		expect(tocIndexFromX(57, 114, 3)).toBe(1);
+		expect(tocIndexFromX(107, 114, 3)).toBe(2);
+		expect(tocIndexFromX(-50, 114, 3)).toBe(0);
+		expect(tocIndexFromX(999, 114, 3)).toBe(2);
+		expect(tocIndexFromX(30, 114, 1)).toBe(0);
+		expect(tocIndexFromX(30, 114, 0)).toBe(0);
+	});
+
+	it("正文里改字、目录内容没变 → 不重绘 DOM（元素原样保留，V75）", async () => {
+		const files: Record<string, string> = { "v.md": ["## 甲", "### 甲一"].join("\n") };
+		const host = makeHost(files, new Set(["v.md"]));
+		const renderer = new TocBlockRenderer(host);
+		const { el, done } = mount(renderer, "slider", "v.md");
+		await done;
+		const body = el.children[el.children.length - 1];
+		files["v.md"] = ["## 甲", "### 甲一", "", "正文里新打的字"].join("\n");
+		renderer.refreshPath("v.md");
+		await flush();
+		expect(el.children[el.children.length - 1]).toBe(body);
+		expect(body.children).toHaveLength(1); // 列表 ul 还是原来那个
+		files["v.md"] = ["## 甲", "### 甲一", "## 新标题"].join("\n");
+		renderer.refreshPath("v.md");
+		await flush();
+		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "2 新标题"]); // 真有新标题才重画
+	});
+});
+
+describe("选中复制：与「复制编号大纲」同格式 + 超链接（testplan V74）", () => {
+	it("纯文本逐行「缩进 + 编号 + 标题」，与 buildNumberedOutline 同口径；HTML 每行是指向标题的链接", () => {
+		const doc = ["## 甲", "### 甲一", "##### 甲一一一", "## 乙 & <b>"].join("\n");
+		const labels = computeVirtualNumbers(doc, DEFAULT_TEMPLATE);
+		const nodes = buildTocTree(headingsOf(doc), labels);
+		const { text, html } = tocCopyPayload(
+			nodes.flatMap(function all(n): TocNode[] {
+				return [n, ...n.children.flatMap(all)];
+			}),
+			(a) => `u:${a}`,
+		);
+		expect(text).toBe(buildNumberedOutline(doc, labels).text);
+		expect(html).toContain('<a href="u:甲">1 甲</a>');
+		expect(html).toContain("margin:0 0 0 4.5em"); // 甲一一一：H5 比最浅 H2 深 3 级 × 1.5em
+		expect(html).toContain("2 乙 &amp; &lt;b&gt;");
+	});
+
+	it("选中部分目录项 → 只复制这些项；没选中就不拦（V74）", async () => {
+		const host = makeHost(
+			{ "v.md": ["## 甲", "### 甲一", "## 乙"].join("\n") },
+			new Set(["v.md"]),
+		);
+		const { el, done } = mount(new TocBlockRenderer(host), "", "v.md");
+		await done;
+		const copy = el.listeners.get("copy");
+		expect(copy).toBeTypeOf("function");
+		const lis = el.children[0].children[0].children;
+		const data = new Map<string, string>();
+		const evt = {
+			preventDefault: vi.fn(),
+			clipboardData: { setData: (k: string, v: string) => data.set(k, v) },
+		};
+		(el as unknown as { ownerDocument: unknown }).ownerDocument = {
+			getSelection: () => ({
+				isCollapsed: false,
+				containsNode: (li: unknown) => li === lis[1] || li === lis[2],
+			}),
+		};
+		copy?.(evt);
+		expect(data.get("text/plain")).toBe("  1.1 甲一\n2 乙");
+		expect(data.get("text/html")).toContain(
+			"obsidian://open?vault=V&amp;file=v.md%23%E4%B9%99",
+		);
+		expect(evt.preventDefault).toHaveBeenCalled();
+		data.clear();
+		(el as unknown as { ownerDocument: unknown }).ownerDocument = {
+			getSelection: () => ({ isCollapsed: true, containsNode: () => true }),
+		};
+		const evt2 = { preventDefault: vi.fn(), clipboardData: { setData: () => {} } };
+		copy?.(evt2);
+		expect(evt2.preventDefault).not.toHaveBeenCalled(); // 没选中：保持默认行为
 	});
 });
 

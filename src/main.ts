@@ -2400,6 +2400,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 		await this.app.vault.process(file, (data) => transform(data) ?? data);
 	}
 
+	/** 目录块复制成超链接时用：指向 `path#锚点` 的 `obsidian://open` 地址（spec §3.25）。 */
+	headingUri(path: string, anchor: string): string {
+		const vault = encodeURIComponent(this.app.vault.getName());
+		return `obsidian://open?vault=${vault}&file=${encodeURIComponent(`${path}#${anchor}`)}`;
+	}
+
 	/** 目录块里点标题：打开 `path#锚点`（spec §3.25）。 */
 	openHeadingLink(linkText: string, sourcePath: string, newLeaf: boolean): void {
 		void this.app.workspace.openLinkText(linkText, sourcePath, newLeaf);

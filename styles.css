@@ -1086,9 +1086,39 @@ button.ah-danger-text {
 		display: none;
 	}
 }
-.ah-toc .ah-toc-slider {
+/* 自绘滑块（不用原生 range：它会拿走焦点，实时预览里编辑器就把光标放进块、退回源码）。
+   轨道宽 = 9em，拇指直径 14px（与 tocBlock.ts 的 TOC_THUMB_PX 同值）；位置由 --ah-toc-pos（0–1）给。 */
+.ah-toc .ah-toc-track {
+	position: relative;
 	width: 9em;
-	margin: 0;
+	height: 18px;
+	cursor: pointer;
+	touch-action: none;
+	user-select: none;
+}
+.ah-toc .ah-toc-rail {
+	position: absolute;
+	top: 50%;
+	left: 0;
+	right: 0;
+	height: 3px;
+	margin-top: -1.5px;
+	border-radius: 2px;
+	background: var(--background-modifier-border-hover);
+}
+.ah-toc .ah-toc-thumb {
+	position: absolute;
+	top: 50%;
+	left: calc(var(--ah-toc-pos, 1) * (100% - 14px));
+	width: 14px;
+	height: 14px;
+	margin-top: -7px;
+	border-radius: 50%;
+	background: var(--interactive-accent);
+	box-shadow: 0 0 0 3px var(--background-modifier-hover);
+}
+.ah-toc .ah-toc-track:hover .ah-toc-thumb {
+	background: var(--interactive-accent-hover);
 }
 .ah-toc .ah-toc-slider-label {
 	color: var(--text-muted);

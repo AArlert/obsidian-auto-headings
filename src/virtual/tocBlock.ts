@@ -180,6 +180,22 @@ export function tocInsertText(beforeCursor: string, afterCursor: string): string
 	);
 }
 
+/** 滑块轨道上的拇指直径（px）；拇指中心可达范围 = 轨道宽 − 直径。与 styles.css `.ah-toc-thumb` 同值。 */
+export const TOC_THUMB_PX = 14;
+
+/**
+ * 指针横坐标 → 滑块刻度序号。`x` 是指针相对轨道左缘的横坐标，`width` 是轨道宽；拇指中心的可达范围是
+ * `[直径/2, 宽 − 直径/2]`，在其上均分 `count` 个刻度、四舍五入取最近的，越界夹到两端。
+ */
+export function tocIndexFromX(x: number, width: number, count: number): number {
+	if (count <= 1) {
+		return 0;
+	}
+	const usable = Math.max(1, width - TOC_THUMB_PX);
+	const ratio = Math.min(1, Math.max(0, (x - TOC_THUMB_PX / 2) / usable));
+	return Math.round(ratio * (count - 1));
+}
+
 /** 滑块能选的级别：`range` 内文件里实际存在的级别（升序，剥掉 WJ 后为空的标题不算）。 */
 export function selectableLevels(headings: readonly TocHeading[], range: TocRange): number[] {
 	const levels = new Set<number>();
@@ -249,6 +265,38 @@ export function buildTocTree(
 	return roots;
 }
 
+/** 转义 HTML 文本 / 属性值。 */
+function escapeHtml(text: string): string {
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
+}
+
+/**
+ * 选中目录项后复制的内容（testplan V74）：
+ * - `text`（text/plain）**与「复制编号大纲」命令输出同一格式**：每行 `缩进 + 编号 + 标题`，缩进两个空格 / 级、
+ *   以收录的最浅级别为 0——粘进任何地方都是一份带编号的大纲；
+ * - `html`（text/html）是同样的行，但每行是指向对应标题的超链接（`uri` 给出链接地址），缩进用左边距；
+ *   粘进支持富文本的地方（Word / Notion / 邮件等）就是可点的目录。
+ */
+export function tocCopyPayload(
+	nodes: readonly TocNode[],
+	uri: (anchor: string) => string,
+): { text: string; html: string } {
+	const label = (n: TocNode): string => `${n.label ?? ""}${n.text}`;
+	return {
+		text: nodes.map((n) => "  ".repeat(n.indent) + label(n)).join("\n"),
+		html: nodes
+			.map(
+				(n) =>
+					`<p style="margin:0 0 0 ${n.indent * 1.5}em"><a href="${escapeHtml(uri(n.anchor))}">${escapeHtml(label(n))}</a></p>`,
+			)
+			.join(""),
+	};
+}
+
 /** 目录块渲染需要插件提供的能力（接口隔离，便于单测）。 */
 export interface TocBlockHost {
 	/** 某文件此刻应显示的虚拟编号；不该显示时返回 `null`（门控见 main.ts `virtualNumberingFor`）。 */
@@ -259,6 +307,8 @@ export interface TocBlockHost {
 	cachedHeadings(path: string): TocHeading[] | null;
 	/** 原子改写某文件：`transform` 收到当前全文，返回新全文；返回 `null` 表示不改（校验没过）。 */
 	processFile(path: string, transform: (content: string) => string | null): Promise<void>;
+	/** 指向 `path#锚点` 的 `obsidian://` 地址（复制成超链接时用，粘到别处点开就回到这个标题）。 */
+	headingUri(path: string, anchor: string): string;
 	/** 打开 `path#锚点`；`newLeaf` 为真时在新标签页打开（按住 Ctrl / Cmd 点击）。 */
 	openHeadingLink(linkText: string, sourcePath: string, newLeaf: boolean): void;
 }
@@ -272,20 +322,24 @@ function drawTree(
 	nodes: readonly TocNode[],
 	path: string,
 	host: TocBlockHost,
-): void {
+): Array<{ li: HTMLElement; node: TocNode }> {
+	const entries: Array<{ li: HTMLElement; node: TocNode }> = [];
 	if (nodes.length === 0) {
-		return;
+		return entries;
 	}
 	const ul = container.createEl("ul", { cls: "ah-toc-list" });
 	const walk = (list: readonly TocNode[]): void => {
 		for (const node of list) {
 			const li = ul.createEl("li");
+			entries.push({ li, node });
 			if (node.indent > 0) {
 				li.setAttr("style", `--ah-toc-indent: ${node.indent}`);
 			}
 			const a = li.createEl("a", {
 				cls: "internal-link ah-toc-link",
 				href: `#${node.anchor}`,
+				// data-href 是 Obsidian 识别内部链接的依据：悬浮预览、导出 PDF 时转成可点的文档内链接都靠它。
+				attr: { "data-href": `#${node.anchor}`, target: "_blank", rel: "noopener" },
 			});
 			if (node.label !== null) {
 				a.createSpan({ cls: "ah-virtual-number", text: node.label });
@@ -293,12 +347,14 @@ function drawTree(
 			a.appendText(node.text);
 			a.addEventListener("click", (evt) => {
 				evt.preventDefault();
+				evt.stopPropagation(); // 有了 data-href，别让 Obsidian 自己的点击处理再开一次
 				host.openHeadingLink(`${path}#${node.anchor}`, path, evt.ctrlKey || evt.metaKey);
 			});
 			walk(node.children);
 		}
 	};
 	walk(nodes);
+	return entries;
 }
 
 /** 一个已渲染的目录块：随块加载登记、卸载注销，供设置 / 元数据变化时原地重画。 */
@@ -312,6 +368,12 @@ class TocBlock extends MarkdownRenderChild {
 	private barKey: string | null = null;
 	private body: HTMLElement | null = null;
 	private label: HTMLElement | null = null;
+	private thumb: HTMLElement | null = null;
+	/** 当前画着的目录项（li 与它对应的节点）：复制时据此取选中的项。 */
+	private entries: Array<{ li: HTMLElement; node: TocNode }> = [];
+	private copyHooked = false;
+	/** 上一次画出来的内容签名：没变就不动 DOM（正文里打字不引起目录重绘，避免无谓的抖动）。 */
+	private signature = "";
 
 	constructor(
 		private readonly el: HTMLElement,
@@ -365,42 +427,23 @@ class TocBlock extends MarkdownRenderChild {
 			? pickTocLevel(levels, this.depth ?? parseTocDepth(this.source))
 			: range.max;
 		const key = withBar ? levels.join(",") : "";
+		const tree = buildTocTree(headings, labels, { min: range.min, max: chosen });
+		// 内容签名：没变就不动 DOM。正文里打字时元数据照常更新，但目录往往一个字没变——不重绘就不会抖。
+		const signature = JSON.stringify([key, chosen, tree]);
+		if (this.body !== null && this.barKey === key && signature === this.signature) {
+			return;
+		}
+		this.signature = signature;
 		if (this.body === null || this.barKey !== key) {
 			this.el.empty();
 			this.el.addClass("ah-toc");
+			// Obsidian 的实时预览里，点到代码块渲染结果会让光标进块、退回源码；`interactive-child` 是它自己
+			// 认的「别当成点进块」标记（V63）。
+			this.el.addClass("interactive-child");
 			this.barKey = key;
+			this.thumb = null;
 			if (withBar) {
-				const bar = this.el.createEl("div", { cls: "ah-toc-bar" });
-				const input = bar.createEl("input", {
-					cls: "ah-toc-slider",
-					type: "range",
-					attr: {
-						min: "0",
-						max: String(levels.length - 1),
-						step: "1",
-						value: String(levels.indexOf(chosen)),
-					},
-				});
-				this.label = bar.createSpan({ cls: "ah-toc-slider-label", text: `H${chosen}` });
-				// 实时预览里代码块的渲染结果被点到会让光标进块、退回源码；拖滑块不该触发（V63）。
-				for (const type of ["mousedown", "pointerdown", "click"]) {
-					bar.addEventListener(type, (evt) => evt.stopPropagation());
-				}
-				const levelAt = (evt: Event): number | null => {
-					const v = Number((evt.target as HTMLInputElement).value);
-					return Number.isInteger(v) && v >= 0 && v < levels.length ? levels[v] : null;
-				};
-				input.addEventListener("input", (evt) => {
-					this.depth = levelAt(evt);
-					this.paint();
-				});
-				// 松手才落盘（拖动过程不写文件）。
-				input.addEventListener("change", (evt) => {
-					const level = levelAt(evt);
-					if (level !== null) {
-						void this.persist(level);
-					}
-				});
+				this.buildBar(levels);
 			} else {
 				this.label = null;
 			}
@@ -408,9 +451,105 @@ class TocBlock extends MarkdownRenderChild {
 		} else {
 			this.body.empty();
 		}
-		this.label?.setText(`H${chosen}`);
-		const tree = buildTocTree(headings, labels, { min: range.min, max: chosen });
-		drawTree(this.body, tree, this.path, this.owner.host);
+		if (withBar) {
+			this.label?.setText(`H${chosen}`);
+			const idx = levels.indexOf(chosen);
+			this.thumb?.setAttr("style", `--ah-toc-pos: ${idx / (levels.length - 1)}`);
+		}
+		this.entries = drawTree(this.body, tree, this.path, this.owner.host);
+		this.hookCopy();
+	}
+
+	/**
+	 * 选中目录项再复制：用节点数据拼出与「复制编号大纲」同格式的纯文本（带编号），并附带超链接版 HTML
+	 * （{@link tocCopyPayload}）。目录里的编号是 `user-select: none` 的装饰 span，不接管的话复制出来没有编号、
+	 * 平铺列表也丢了层级。没选中任何目录项就不拦，保持浏览器默认行为。
+	 */
+	private hookCopy(): void {
+		if (this.copyHooked) {
+			return;
+		}
+		this.copyHooked = true;
+		this.el.addEventListener("copy", (evt: ClipboardEvent) => {
+			const sel = this.el.ownerDocument.getSelection();
+			if (!sel || sel.isCollapsed || !evt.clipboardData) {
+				return;
+			}
+			const picked = this.entries.filter((e) => sel.containsNode(e.li, true));
+			if (picked.length === 0) {
+				return;
+			}
+			const host = this.owner.host;
+			const { text, html } = tocCopyPayload(
+				picked.map((e) => e.node),
+				(anchor) => host.headingUri(this.path, anchor),
+			);
+			evt.preventDefault();
+			evt.clipboardData.setData("text/plain", text);
+			evt.clipboardData.setData("text/html", html);
+		});
+	}
+
+	/**
+	 * 层级滑块：**自己画的轨道 + 拇指（div），不用 `<input type=range>`**。原生输入框会拿走焦点，而实时预览
+	 * 里焦点 / 选区进了代码块的渲染结果，编辑器就把光标放进块、退回源码（用户实测）。div 没有焦点，指针按下
+	 * 时 `preventDefault` + `stopPropagation`，编辑器看不到这次点击。拖动用指针捕获，松手才落盘。
+	 */
+	private buildBar(levels: readonly number[]): void {
+		const bar = this.el.createEl("div", { cls: "ah-toc-bar interactive-child" });
+		const track = bar.createEl("div", {
+			cls: "ah-toc-track",
+			attr: { role: "slider", "aria-valuemin": "1", "aria-valuemax": String(levels.length) },
+		});
+		track.createEl("div", { cls: "ah-toc-rail" });
+		this.thumb = track.createEl("div", { cls: "ah-toc-thumb" });
+		this.label = bar.createSpan({ cls: "ah-toc-slider-label" });
+		for (const type of ["mousedown", "mouseup", "click", "dblclick", "contextmenu"]) {
+			bar.addEventListener(type, (evt) => evt.stopPropagation());
+		}
+		let dragging = false;
+		const moveTo = (evt: PointerEvent): void => {
+			const rect = track.getBoundingClientRect();
+			const level = levels[tocIndexFromX(evt.clientX - rect.left, rect.width, levels.length)];
+			if (level !== this.depth) {
+				this.depth = level;
+				this.paint();
+			}
+		};
+		track.addEventListener("pointerdown", (evt) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			dragging = true;
+			try {
+				track.setPointerCapture(evt.pointerId);
+			} catch {
+				/* 取不到指针捕获：拖出轨道会断，不影响点按 */
+			}
+			moveTo(evt);
+		});
+		track.addEventListener("pointermove", (evt) => {
+			if (dragging) {
+				evt.preventDefault();
+				moveTo(evt);
+			}
+		});
+		const end = (evt: PointerEvent): void => {
+			if (!dragging) {
+				return;
+			}
+			dragging = false;
+			evt.stopPropagation();
+			try {
+				track.releasePointerCapture(evt.pointerId);
+			} catch {
+				/* 同上 */
+			}
+			if (this.depth !== null) {
+				void this.persist(this.depth); // 松手才落盘（拖动过程不写文件）
+			}
+		};
+		track.addEventListener("pointerup", end);
+		track.addEventListener("pointercancel", end);
 	}
 
 	/**
