@@ -36,8 +36,8 @@ export interface TocNode {
 	/** 虚拟编号（如 `"1.1 "`）；写入模式 / 不编号 / 残留旧编号时为 `null`。 */
 	label: string | null;
 	children: TocNode[];
-	/** 比「父级的下一级」多跳过了几级（H3 下直接出现 H5 则为 1）：缩进要补上，让它与同级别的标题对齐。 */
-	gap: number;
+	/** 缩进格数 = 该级别 − 收录的最浅级别：缩进只看级别，与它挂在谁下面无关（H3 下的 H5 与 H4 下的 H5 对齐）。 */
+	indent: number;
 }
 
 /** 收录的级别范围（含两端）。 */
@@ -212,7 +212,6 @@ export function buildTocTree(
 	const roots: TocNode[] = [];
 	const stack: TocNode[] = [];
 	const all: TocNode[] = [];
-	const parents = new Map<TocNode, TocNode | null>();
 	for (const h of headings) {
 		if (h.level < range.min || h.level > range.max) {
 			continue;
@@ -232,21 +231,20 @@ export function buildTocTree(
 			anchor: displayAnchor(h.heading),
 			label,
 			children: [],
-			gap: 0,
+			indent: 0,
 		};
 		while (stack.length > 0 && stack[stack.length - 1].level >= node.level) {
 			stack.pop();
 		}
 		const parent = stack.length > 0 ? stack[stack.length - 1] : null;
 		(parent ? parent.children : roots).push(node);
-		parents.set(node, parent);
 		all.push(node);
 		stack.push(node);
 	}
-	// 缩进按级别对齐：以收录的最浅级别为基准，跳过的每一级补一格（H3 下的 H5 与别处 H4 下的 H5 同一缩进）。
+	// 缩进按级别对齐：以收录的最浅级别为基准（只有 H3–H5 时 H3 就是 0 格）。
 	const base = all.reduce((m, n) => Math.min(m, n.level), 7);
 	for (const n of all) {
-		n.gap = n.level - (parents.get(n)?.level ?? base - 1) - 1;
+		n.indent = n.level - base;
 	}
 	return roots;
 }
@@ -265,7 +263,10 @@ export interface TocBlockHost {
 	openHeadingLink(linkText: string, sourcePath: string, newLeaf: boolean): void;
 }
 
-/** 把目录树画进容器（容器先清空）；没有节点就什么都不画。 */
+/**
+ * 把目录画进容器；没有节点就什么都不画。**平铺成一个列表、缩进由每项的 `margin-left` 按级别给**（不靠嵌套
+ * `ul` 的内边距）：嵌套列表的缩进是「祖先层数」，H3 下直接出现的 H5 会比别处 H4 下的 H5 缩得少，对不齐。
+ */
 function drawTree(
 	container: HTMLElement,
 	nodes: readonly TocNode[],
@@ -276,22 +277,28 @@ function drawTree(
 		return;
 	}
 	const ul = container.createEl("ul", { cls: "ah-toc-list" });
-	for (const node of nodes) {
-		const li = ul.createEl("li");
-		if (node.gap > 0) {
-			li.setAttr("style", `margin-left: ${node.gap * 1.4}em`);
+	const walk = (list: readonly TocNode[]): void => {
+		for (const node of list) {
+			const li = ul.createEl("li");
+			if (node.indent > 0) {
+				li.setAttr("style", `margin-left: calc(var(--list-indent, 2em) * ${node.indent})`);
+			}
+			const a = li.createEl("a", {
+				cls: "internal-link ah-toc-link",
+				href: `#${node.anchor}`,
+			});
+			if (node.label !== null) {
+				a.createSpan({ cls: "ah-virtual-number", text: node.label });
+			}
+			a.appendText(node.text);
+			a.addEventListener("click", (evt) => {
+				evt.preventDefault();
+				host.openHeadingLink(`${path}#${node.anchor}`, path, evt.ctrlKey || evt.metaKey);
+			});
+			walk(node.children);
 		}
-		const a = li.createEl("a", { cls: "internal-link ah-toc-link", href: `#${node.anchor}` });
-		if (node.label !== null) {
-			a.createSpan({ cls: "ah-virtual-number", text: node.label });
-		}
-		a.appendText(node.text);
-		a.addEventListener("click", (evt) => {
-			evt.preventDefault();
-			host.openHeadingLink(`${path}#${node.anchor}`, path, evt.ctrlKey || evt.metaKey);
-		});
-		drawTree(li, node.children, path, host);
-	}
+	};
+	walk(nodes);
 }
 
 /** 一个已渲染的目录块：随块加载登记、卸载注销，供设置 / 元数据变化时原地重画。 */

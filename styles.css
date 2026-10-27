@@ -1061,7 +1061,11 @@ button.ah-danger-text {
 	display: flex;
 	align-items: center;
 	gap: 0.6em;
-	margin-bottom: 0.3em;
+	height: 1.4em;
+	margin: 0;
+	/* 滑块做细做小，一行只占一个字高 */
+	--slider-thumb-height: 12px;
+	--slider-track-height: 3px;
 	opacity: 0;
 	transition: opacity 0.15s ease;
 }
@@ -1083,6 +1087,8 @@ button.ah-danger-text {
 }
 .ah-toc-slider {
 	width: 9em;
+	height: 1.4em;
+	margin: 0;
 }
 .ah-toc-slider-label {
 	color: var(--text-muted);

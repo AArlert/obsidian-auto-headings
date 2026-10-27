@@ -37,7 +37,7 @@ function headingsOf(content: string): TocHeading[] {
 /** 压平成「缩进 + 编号 + 文字」便于断言。 */
 function flat(nodes: TocNode[], depth = 0): string[] {
 	return nodes.flatMap((n) => [
-		`${"  ".repeat(depth + n.gap)}${n.label ?? ""}${n.text}`,
+		`${"  ".repeat(n.indent)}${n.label ?? ""}${n.text}`,
 		...flat(n.children, depth + 1),
 	]);
 }
@@ -132,7 +132,10 @@ class FakeEl {
 		return this.createEl("span", o);
 	}
 	addClass(_c: string): void {}
-	setAttr(_k: string, _v: string): void {}
+	attrs = new Map<string, string>();
+	setAttr(k: string, v: string): void {
+		this.attrs.set(k, v);
+	}
 	setText(t: string): void {
 		this.text = t;
 	}
@@ -146,23 +149,22 @@ class FakeEl {
 	addEventListener(type: string, fn: (evt: unknown) => void): void {
 		this.listeners.set(type, fn);
 	}
-	/** 压平成可读文本：编号 span + 文字，嵌套按缩进。 */
-	dump(depth = 0): string[] {
+	/** 压平成可读文本：缩进（来自每项 style 里的级别格数）+ 编号 span + 文字。 */
+	dump(): string[] {
 		return this.children.flatMap((c) => {
 			if (c.tag === "ul" || c.tag === "div") {
-				return c.dump(depth);
+				return c.dump();
 			}
 			if (c.tag === "li") {
 				const a = c.children[0];
 				const num = a.children.find((x) => x.cls === "ah-virtual-number")?.text ?? "";
-				const nested = c.children.slice(1).flatMap((x) => x.dump(depth + 1));
-				return [`${"  ".repeat(depth)}${num}${a.text}`, ...nested];
+				const n = Number(/\* (\d+)\)/.exec(c.attrs.get("style") ?? "")?.[1] ?? 0);
+				return [`${"  ".repeat(n)}${num}${a.text}`];
 			}
 			return [];
 		});
 	}
 }
-
 async function flush(): Promise<void> {
 	for (let i = 0; i < 10; i++) {
 		await Promise.resolve();
