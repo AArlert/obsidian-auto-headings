@@ -1055,6 +1055,18 @@ button.ah-danger-text {
 	white-space: pre;
 }
 
+/* 只读目录块 ah-toc（spec §3.25）：普通嵌套列表，链接不加下划线，行距随正文。 */
+.ah-toc-list {
+	margin: 0;
+	padding-left: 1.4em;
+}
+.ah-toc-list .ah-toc-list {
+	margin-top: 0.1em;
+}
+.ah-toc-link {
+	text-decoration: none;
+}
+
 /* 文件里还留着本插件以前写入的旧编号：虚线下划线提示，悬停有说明。 */
 .ah-virtual-number--stale {
 	/* 用虚线下边框代替 text-decoration 的复合写法（旧版 Electron 只部分支持）。 */

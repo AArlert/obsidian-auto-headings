@@ -69,6 +69,7 @@ import {
 import { virtualNumberingExtension, virtualRefreshEffect } from "./virtual/editorExtension";
 import { VirtualOutlineDecorator } from "./virtual/outlineView";
 import { VirtualReadingRenderer } from "./virtual/readingView";
+import { TOC_FENCE, TocBlockRenderer } from "./virtual/tocBlock";
 import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
 import {
@@ -228,6 +229,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 故调用处一律用可选链。
 	 */
 	private readingRenderer?: VirtualReadingRenderer;
+	private tocRenderer?: TocBlockRenderer;
 	private outlineDecorator?: VirtualOutlineDecorator;
 
 	/**
@@ -344,8 +346,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.registerEvent(
 			this.app.metadataCache.on("changed", (file) => {
 				this.readingRenderer?.scheduleSweep(file.path);
+				this.tocRenderer?.refreshPath(file.path);
 			}),
 		);
+		// 只读目录块 `ah-toc`（M17-B，spec §3.25）：渲染成带虚拟编号的目录，不写文件。
+		this.tocRenderer = new TocBlockRenderer(this);
+		this.registerMarkdownCodeBlockProcessor(TOC_FENCE, this.tocRenderer.processor);
 		// 内置大纲面板也显示虚拟编号（1.2.0，见 virtual/outlineView.ts）：大纲自己刷新时由观察器跟上；
 		// 新开 / 关闭 / 延迟加载完的大纲靠布局事件挂上或摘掉观察器。
 		this.outlineDecorator = new VirtualOutlineDecorator(this, this.app.workspace);
@@ -504,6 +510,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		this.debounceTimers.clear();
 		this.readingRenderer?.dispose();
+		this.tocRenderer?.dispose();
 		this.outlineDecorator?.dispose(); // 大纲恢复原样，不留编号属性（testplan V43）。
 		this.headingSnapshots.clear();
 		this.activeGuardNotice?.notice.hide();
@@ -2322,6 +2329,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 		}
 		this.readingRenderer?.refreshAll();
+		this.tocRenderer?.refreshAll();
 		this.outlineDecorator?.refreshAll();
 	}
 
@@ -2353,6 +2361,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/** 某文件 metadataCache 里的标题（文档顺序）；Quiet Outline 面板节点的下标指向这里（testplan V48）。 */
 	cachedHeadings(path: string): HeadingCache[] | null {
 		return this.app.metadataCache.getCache(path)?.headings ?? null;
+	}
+
+	/** 目录块里点标题：打开 `path#锚点`（spec §3.25）。 */
+	openHeadingLink(linkText: string, sourcePath: string, newLeaf: boolean): void {
+		void this.app.workspace.openLinkText(linkText, sourcePath, newLeaf);
 	}
 
 	/** 阅读视图拿不到段落信息时读文件全文（M14 兜底）；不是 Markdown 文件或读失败返回 `null`。 */

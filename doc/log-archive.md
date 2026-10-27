@@ -8,6 +8,34 @@
 
 ---
 
+## 2026-10-24 发版 1.2.5：标题链接建议默认关 + 按重放数据收紧 + 设置页改版（issue #10，交接：claude/issue-10-feedback-49b340 → master，tag 1.2.5）
+
+### 做了什么
+
+- 用户真机手感验过（2026-10-24）：上一块的探针 21/21 之后，用户自己在测试库打了真实内容，确认弹框时机与候选顺序可接受，据此发版。
+- `npm run bump` 1.2.4 → 1.2.5（`manifest.json` / `package.json` / lockfile / `versions.json` / `release/manifest.json` 一并同步）；
+  `doc/testplan/` 48 处、`doc/spec/` 18 处「未发版」回填为 1.2.5，顺手补了版本号与汉字之间的空格（`1.2.5起` → `1.2.5 起`）。
+- 发布说明沿用上一块写好的 `doc/release-notes/1.2.5.md`，内容未改。
+- 门槛：`docs --check` / `prettier --check` / `eslint` / `tsc` 全绿；`vitest` 1007/1008，唯一红仍是已知 Windows ICU 假红
+  （`whitelist.test.ts` 的 CJK 排序）。
+
+### 没做什么
+
+- **没回 issue #10**：用户自己回并关闭。
+- 没把新构建重新拷进测试库 / 主力库：两边跑的就是这份代码（`main.js` 哈希一致），只是 `manifest.json` 还写着 1.2.4，
+  由用户自己走 BRAT / 商店更新。
+- 手机端、旧版 Obsidian（< 1.11）的设置页没看（与上一块同）。
+
+### 下一步
+
+- 推 master 等 CI 绿 → 打 tag 1.2.5 → 到 Community Hub 维护者面板点「Check for new releases」送审；用户在 issue #10 回复并关闭。
+
+### 验证方式
+
+- `git tag` 与 `manifest.json` 版本一致（Release 工作流会校验，不一致即失败）；真机 21/21 见上一块；本轮只动版本号与文档，`src/` 未变。
+
+---
+
 ## 2026-10-24 补真机探针：收紧后的规则与「不选就记住」21/21（不 bump、未提交，交接：claude/issue-10-feedback-49b340）
 
 ### 做了什么

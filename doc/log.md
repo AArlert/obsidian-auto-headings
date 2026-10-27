@@ -15,6 +15,31 @@
 
 ---
 
+## 2026-10-28 只读目录块 ah-toc（M17-B，不 bump、未合并，交接：claude/quiet-outline-show-only-numbers-7330df）
+
+### 做了什么
+
+- **§2.2 澄清 + 新规格 [3.25](spec/3.25-只读目录块.md)**：用户手写 `ah-toc` 围栏，插件只读渲染成目录（不写文件），边界与「不生成物理目录」不冲突。围栏名不用 `toc`（会与 Automatic Table Of Contents 抢处理器），唯一参数 `levels: A-B`。
+- **实现**：`src/virtual/tocBlock.ts`——纯函数 `parseTocLevels` / `buildTocTree`（相对级别栈式嵌套、按行号 + 级别配虚拟编号、残留旧编号不叠加）+ `TocBlockRenderer`（代码块处理器、块登记、元数据 / 设置变化原地重画）；`main.ts` 接入并加 `openHeadingLink`；样式 `.ah-toc-list`。无设置项。
+- testplan V54–V62；单测 `toc-block.test.ts` 13 条。门槛：docs / prettier / eslint / tsc 绿；`vitest` 1034/1035，唯一红仍是已知 ICU 假红。
+- 真机（Oblivion 库，深色）：阅读视图与实时预览都渲染带编号的嵌套目录，`levels: 2` 生效，点击跳转并高亮目标。
+
+### 没做什么
+
+- 未试：写入模式文件的点击跳转（含 WJ 锚点）、边改边看的实时更新、导出 PDF、停用插件后块还原、与 Automatic Table Of Contents 同装（该库里它没启用）、浅色主题。
+- 没写 README / user-guide：用户要手写围栏，**发版前必须补一节「怎么写 ah-toc 块」**，否则没人知道这个功能；没做插入命令（要动 10 种语言）。
+- 标题里的行内标记（粗体 / 链接 / 行内代码）按纯文本显示，没渲染。
+
+### 下一步
+
+- 补 user-guide 双语 + README 一句；补真机未试项；用户定后合并。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/toc-block.test.ts`；真机见上。
+
+---
+
 ## 2026-10-28 Quiet Outline 面板显示仅显示编号（不 bump、未提交，交接：claude/quiet-outline-show-only-numbers-7330df）
 
 ### 做了什么
@@ -62,31 +87,3 @@
 ### 验证方式
 
 - 单测见上；真机探针与用户手测见上；`git tag` 与 `manifest.json` 版本一致（Release 工作流会校验）。
-
----
-
-## 2026-10-24 发版 1.2.5：标题链接建议默认关 + 按重放数据收紧 + 设置页改版（issue #10，交接：claude/issue-10-feedback-49b340 → master，tag 1.2.5）
-
-### 做了什么
-
-- 用户真机手感验过（2026-10-24）：上一块的探针 21/21 之后，用户自己在测试库打了真实内容，确认弹框时机与候选顺序可接受，据此发版。
-- `npm run bump` 1.2.4 → 1.2.5（`manifest.json` / `package.json` / lockfile / `versions.json` / `release/manifest.json` 一并同步）；
-  `doc/testplan/` 48 处、`doc/spec/` 18 处「未发版」回填为 1.2.5，顺手补了版本号与汉字之间的空格（`1.2.5起` → `1.2.5 起`）。
-- 发布说明沿用上一块写好的 `doc/release-notes/1.2.5.md`，内容未改。
-- 门槛：`docs --check` / `prettier --check` / `eslint` / `tsc` 全绿；`vitest` 1007/1008，唯一红仍是已知 Windows ICU 假红
-  （`whitelist.test.ts` 的 CJK 排序）。
-
-### 没做什么
-
-- **没回 issue #10**：用户自己回并关闭。
-- 没把新构建重新拷进测试库 / 主力库：两边跑的就是这份代码（`main.js` 哈希一致），只是 `manifest.json` 还写着 1.2.4，
-  由用户自己走 BRAT / 商店更新。
-- 手机端、旧版 Obsidian（< 1.11）的设置页没看（与上一块同）。
-
-### 下一步
-
-- 推 master 等 CI 绿 → 打 tag 1.2.5 → 到 Community Hub 维护者面板点「Check for new releases」送审；用户在 issue #10 回复并关闭。
-
-### 验证方式
-
-- `git tag` 与 `manifest.json` 版本一致（Release 工作流会校验，不一致即失败）；真机 21/21 见上一块；本轮只动版本号与文档，`src/` 未变。
