@@ -245,6 +245,7 @@ const zh: Messages = {
 	cmdCopyOutline: "复制编号大纲",
 	cmdCopySectionLink: "复制当前小节链接",
 	cmdCopySectionEmbed: "复制当前小节的嵌入链接",
+	cmdInsertToc: "插入目录（ah-toc 块，带滑块）",
 	cmdToggleHeadingSkip: "跳过 / 恢复光标处标题的编号",
 	cmdPromoteSection: "升级当前小节",
 	cmdDemoteSection: "降级当前小节",

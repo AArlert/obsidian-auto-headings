@@ -259,6 +259,7 @@ const fr: Partial<Messages> = {
 	cmdCopyOutline: "Copier le plan numéroté",
 	cmdCopySectionLink: "Copier le lien de la section actuelle",
 	cmdCopySectionEmbed: "Copier le lien d'intégration de la section actuelle",
+	cmdInsertToc: "Insérer une table des matières (bloc ah-toc avec curseur)",
 	cmdToggleHeadingSkip: "Ignorer / rétablir la numérotation du titre sous le curseur",
 	cmdPromoteSection: "Promouvoir la section actuelle",
 	cmdDemoteSection: "Rétrograder la section actuelle",

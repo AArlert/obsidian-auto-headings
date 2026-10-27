@@ -250,6 +250,7 @@ const ja: Partial<Messages> = {
 	cmdCopyOutline: "番号付きアウトラインをコピー",
 	cmdCopySectionLink: "現在のセクションのリンクをコピー",
 	cmdCopySectionEmbed: "現在のセクションの埋め込みリンクをコピー",
+	cmdInsertToc: "目次を挿入（スライダー付き ah-toc ブロック）",
 	cmdToggleHeadingSkip: "カーソル位置の見出しの採番をスキップ／再開",
 	cmdPromoteSection: "現在のセクションを昇格",
 	cmdDemoteSection: "現在のセクションを降格",

@@ -238,6 +238,7 @@ const zhTW: Partial<Messages> = {
 	cmdCopyOutline: "複製編號大綱",
 	cmdCopySectionLink: "複製目前小節連結",
 	cmdCopySectionEmbed: "複製目前小節的嵌入連結",
+	cmdInsertToc: "插入目錄（ah-toc 區塊，附滑桿）",
 	cmdToggleHeadingSkip: "跳過／恢復游標處標題的編號",
 	cmdPromoteSection: "升級目前小節",
 	cmdDemoteSection: "降級目前小節",

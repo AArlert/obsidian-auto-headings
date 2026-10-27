@@ -12,6 +12,12 @@ import { computeVirtualNumbers } from "../../src/virtual/compute";
 import {
 	buildTocTree,
 	parseTocLevels,
+	parseTocDepth,
+	parseTocSlider,
+	pickTocLevel,
+	rewriteTocBlock,
+	tocInsertText,
+	selectableLevels,
 	TocBlockRenderer,
 	type TocHeading,
 	type TocNode,
@@ -120,6 +126,10 @@ class FakeEl {
 	createSpan(o: { cls?: string; text?: string } = {}): FakeEl {
 		return this.createEl("span", o);
 	}
+	addClass(_c: string): void {}
+	setText(t: string): void {
+		this.text = t;
+	}
 	appendText(t: string): void {
 		this.text += t;
 	}
@@ -133,7 +143,7 @@ class FakeEl {
 	/** 压平成可读文本：编号 span + 文字，嵌套按缩进。 */
 	dump(depth = 0): string[] {
 		return this.children.flatMap((c) => {
-			if (c.tag === "ul") {
+			if (c.tag === "ul" || c.tag === "div") {
 				return c.dump(depth);
 			}
 			if (c.tag === "li") {
@@ -161,25 +171,37 @@ function makeHost(files: Record<string, string>, virtual: Set<string>) {
 		readFileContent: vi.fn(async (path: string) => files[path] ?? null),
 		cachedHeadings: vi.fn((path: string) => (path in files ? headingsOf(files[path]) : null)),
 		openHeadingLink: vi.fn(),
+		processFile: vi.fn(async (path: string, transform: (c: string) => string | null) => {
+			const r = transform(files[path]);
+			if (r !== null) {
+				files[path] = r;
+			}
+		}),
 	};
 }
 
 /** 模拟 Obsidian 调用处理器：ctx.addChild 立刻 load。 */
-function mount(renderer: TocBlockRenderer, source: string, path: string) {
+function mount(
+	renderer: TocBlockRenderer,
+	source: string,
+	path: string,
+	section: { lineStart: number; lineEnd: number } | null = null,
+) {
 	const el = new FakeEl();
 	const children: Array<{ onload(): void; onunload(): void }> = [];
-	renderer.processor(
+	const done = renderer.processor(
 		source,
 		el as unknown as HTMLElement,
 		{
 			sourcePath: path,
+			getSectionInfo: () => section,
 			addChild: (c: { onload(): void; onunload(): void }) => {
 				children.push(c);
 				c.onload();
 			},
 		} as never,
 	);
-	return { el, children };
+	return { el, children, done };
 }
 
 describe("TocBlockRenderer：渲染、更新与退化（testplan V54 / V56 / V60 / V62）", () => {
@@ -190,7 +212,7 @@ describe("TocBlockRenderer：渲染、更新与退化（testplan V54 / V56 / V60
 		const { el } = mount(new TocBlockRenderer(host), "", "v.md");
 		await flush();
 		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "2 乙"]);
-		const a = el.children[0].children[0].children[0];
+		const a = el.children[0].children[0].children[0].children[0];
 		const evt = { preventDefault: vi.fn(), ctrlKey: true, metaKey: false };
 		a.listeners.get("click")?.(evt);
 		expect(evt.preventDefault).toHaveBeenCalled();
@@ -225,7 +247,7 @@ describe("TocBlockRenderer：渲染、更新与退化（testplan V54 / V56 / V60
 		const e = mount(r, "", "e.md");
 		await flush();
 		expect(m.el.dump()).toEqual(["1.1 甲一"]);
-		expect(e.el.children).toEqual([]);
+		expect(e.el.dump()).toEqual([]);
 	});
 
 	it("读不到文件内容 → 退化为不带编号的目录，不抛（V60）", async () => {
@@ -252,6 +274,243 @@ describe("TocBlockRenderer：渲染、更新与退化（testplan V54 / V56 / V60
 		renderer.refreshAll();
 		await flush();
 		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "2 乙"]);
+	});
+});
+
+describe("滑块（testplan V63–V67）", () => {
+	const doc = ["## 甲", "### 甲一", "#### 甲一一", "## 乙"].join("\n");
+
+	it("slider 参数的写法（V66）", () => {
+		for (const ok of [
+			"slider",
+			"  SLIDER  ",
+			"slider: on",
+			"slider: true",
+			"slider: yes",
+			"slider: 1",
+		]) {
+			expect(parseTocSlider(ok)).toBe(true);
+		}
+		for (const no of [
+			"",
+			"slider: off",
+			"slider: false",
+			"slider: 0",
+			"sliders",
+			"levels: 2",
+		]) {
+			expect(parseTocSlider(no)).toBe(false);
+		}
+		expect(parseTocSlider("levels: 2-3\nslider")).toBe(true);
+	});
+
+	it("可选级别 = levels 范围内文件里实际存在的级别（V64）", () => {
+		const heads = headingsOf(doc);
+		expect(selectableLevels(heads, { min: 1, max: 6 })).toEqual([2, 3, 4]);
+		expect(selectableLevels(heads, { min: 2, max: 3 })).toEqual([2, 3]);
+		expect(selectableLevels(heads, { min: 4, max: 4 })).toEqual([4]);
+		expect(selectableLevels([], { min: 1, max: 6 })).toEqual([]);
+	});
+
+	function sliderOf(el: FakeEl) {
+		const bar = el.children.find((c) => c.cls === "ah-toc-bar");
+		return {
+			bar,
+			input: bar?.children.find((c) => c.cls === "ah-toc-slider"),
+			label: bar?.children.find((c) => c.cls === "ah-toc-slider-label"),
+		};
+	}
+
+	it("默认最深一级；拖动只重画列表、不重建滑块；标签跟着变（V63）", async () => {
+		const host = makeHost({ "v.md": doc }, new Set(["v.md"]));
+		const { el } = mount(new TocBlockRenderer(host), "slider", "v.md");
+		await flush();
+		const { input, label } = sliderOf(el);
+		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "    1.1.1 甲一一", "2 乙"]);
+		expect(label?.text).toBe("H4");
+		input?.listeners.get("input")?.({ target: { value: "0" } });
+		expect(el.dump()).toEqual(["1 甲", "2 乙"]);
+		expect(sliderOf(el).input).toBe(input); // 同一个滑块元素，拖动不丢焦点
+		expect(label?.text).toBe("H2");
+		input?.listeners.get("input")?.({ target: { value: "1" } });
+		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "2 乙"]);
+	});
+
+	it("没写 slider / 范围内只剩一个级别 → 没有滑块（V64）", async () => {
+		const host = makeHost({ "v.md": doc }, new Set(["v.md"]));
+		const r = new TocBlockRenderer(host);
+		const plain = mount(r, "", "v.md");
+		const single = mount(r, "slider\nlevels: 3", "v.md");
+		const ranged = mount(r, "slider\nlevels: 2-3", "v.md");
+		await flush();
+		expect(sliderOf(plain.el).bar).toBeUndefined();
+		expect(sliderOf(single.el).bar).toBeUndefined();
+		expect(single.el.dump()).toEqual(["1.1 甲一"]);
+		expect(sliderOf(ranged.el).label?.text).toBe("H3");
+		expect(ranged.el.dump()).toEqual(["1 甲", "  1.1 甲一", "2 乙"]);
+	});
+
+	it("拖过之后文件变了：沿用选中级别；级别不存在了夹到现有范围；范围变了才重建滑块（V65）", async () => {
+		const files: Record<string, string> = { "v.md": doc };
+		const host = makeHost(files, new Set(["v.md"]));
+		const renderer = new TocBlockRenderer(host);
+		const { el } = mount(renderer, "slider", "v.md");
+		await flush();
+		const first = sliderOf(el).input;
+		first?.listeners.get("input")?.({ target: { value: "1" } });
+		files["v.md"] = ["## 新", doc].join("\n");
+		renderer.refreshPath("v.md");
+		await flush();
+		expect(el.dump()).toEqual(["1 新", "2 甲", "  2.1 甲一", "3 乙"]);
+		expect(sliderOf(el).input).toBe(first); // 范围没变，滑块还是原来的
+		files["v.md"] = ["## 甲", "### 甲一", "## 乙"].join("\n"); // 最深一级（H4）没了
+		renderer.refreshPath("v.md");
+		await flush();
+		expect(sliderOf(el).label?.text).toBe("H3");
+		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一", "2 乙"]);
+		expect(sliderOf(el).input).not.toBe(first); // 范围变了，重建
+	});
+});
+
+describe("边界：缩进相对、跳级、乱序（testplan V69 / V70）", () => {
+	const tree = (doc: string, range?: { min: number; max: number }) =>
+		buildTocTree(headingsOf(doc), null, range);
+
+	it("只有 H3–H5：H3 是顶层不缩进，H4 / H5 依次下一层，不空出两层缩进（V69）", () => {
+		const doc = ["### 甲", "#### 甲一", "##### 甲一一", "### 乙"].join("\n");
+		const t = tree(doc);
+		expect(flat(t)).toEqual(["甲", "  甲一", "    甲一一", "乙"]);
+		expect(t.map((n) => n.level)).toEqual([3, 3]); // 两个根都是 H3
+	});
+
+	it("只有 H3–H5 且仅显示：模板顶层覆盖不到的级别照列出、只是没编号；滑块是 3 档（V69）", () => {
+		const doc = ["### 甲", "#### 甲一", "##### 甲一一"].join("\n");
+		const labels = computeVirtualNumbers(doc, DEFAULT_TEMPLATE);
+		const t = buildTocTree(headingsOf(doc), labels);
+		expect(flat(t).map((x) => x.trim())).toHaveLength(3);
+		expect(selectableLevels(headingsOf(doc), { min: 1, max: 6 })).toEqual([3, 4, 5]);
+	});
+
+	it("跳级与乱序：H3→H5→H4；文首 H4 后才有 H3（V70）", () => {
+		expect(flat(tree(["### 甲", "##### 乙", "#### 丙"].join("\n")))).toEqual([
+			"甲",
+			"  乙",
+			"  丙",
+		]);
+		expect(flat(tree(["#### 深", "### 浅", "#### 浅下"].join("\n")))).toEqual([
+			"深",
+			"浅",
+			"  浅下",
+		]);
+	});
+});
+
+describe("depth：解析、选级与落盘（testplan V65 / V67 / V71 / V72）", () => {
+	it("parseTocDepth / pickTocLevel（V72）", () => {
+		expect(parseTocDepth("slider\ndepth: 3")).toBe(3);
+		for (const bad of ["", "depth: abc", "depth: 0", "depth: 9", "depth:"]) {
+			expect(parseTocDepth(bad)).toBeNull();
+		}
+		expect(pickTocLevel([3, 5], null)).toBe(5); // 缺省最深
+		expect(pickTocLevel([3, 5], 4)).toBe(3); // 不超过它的最大现存级别
+		expect(pickTocLevel([3, 5], 5)).toBe(5);
+		expect(pickTocLevel([3, 5], 1)).toBe(3); // 全比它深取最浅
+	});
+
+	const doc = ["# 书名", "", "```ah-toc", "slider", "```", "", "## 甲"].join("\n");
+
+	it("rewriteTocBlock：追加 / 改写 / 多行只留一行 / 其余字节不变（V67 / V71）", () => {
+		const r = rewriteTocBlock(doc, 2, 4, "slider", 3);
+		expect(r?.content).toBe(
+			["# 书名", "", "```ah-toc", "slider", "depth: 3", "```", "", "## 甲"].join("\n"),
+		);
+		expect(r?.source).toBe("slider\ndepth: 3");
+		const again = rewriteTocBlock(r!.content, 2, 5, r!.source, 2);
+		expect(again?.source).toBe("slider\ndepth: 2");
+		const dup = ["```ah-toc", "depth: 1", "slider", "depth: 2", "```"].join("\n");
+		expect(rewriteTocBlock(dup, 0, 4, "depth: 1\nslider\ndepth: 2", 4)?.source).toBe(
+			"depth: 4\nslider",
+		);
+	});
+
+	it("rewriteTocBlock：校验不过一律返回 null，绝不盲写（V71）", () => {
+		expect(rewriteTocBlock(doc, 3, 4, "slider", 3)).toBeNull(); // 开头行不是围栏
+		expect(rewriteTocBlock(doc, 2, 3, "slider", 3)).toBeNull(); // 结尾行不是配对围栏
+		expect(rewriteTocBlock(doc, 2, 4, "slider\nlevels: 2", 3)).toBeNull(); // 内容与渲染时不一致（被编辑过）
+		expect(rewriteTocBlock(doc, 2, 99, "slider", 3)).toBeNull(); // 区间越界
+		expect(rewriteTocBlock(doc, -1, 4, "slider", 3)).toBeNull();
+		expect(rewriteTocBlock(doc, 4, 2, "slider", 3)).toBeNull();
+		const other = ["```js", "slider", "```"].join("\n");
+		expect(rewriteTocBlock(other, 0, 2, "slider", 3)).toBeNull(); // 不是 ah-toc 块
+	});
+
+	it("rewriteTocBlock：CRLF 文件保持 CRLF；波浪线围栏；空块（V71）", () => {
+		const crlf = ["a", "```ah-toc", "slider", "```", "b"].join("\r\n");
+		const r = rewriteTocBlock(crlf, 1, 3, "slider", 2);
+		expect(r?.content).toBe(["a", "```ah-toc", "slider", "depth: 2", "```", "b"].join("\r\n"));
+		const tilde = ["~~~ah-toc", "~~~"].join("\n");
+		expect(rewriteTocBlock(tilde, 0, 1, "", 2)?.content).toBe(
+			["~~~ah-toc", "depth: 2", "~~~"].join("\n"),
+		);
+	});
+
+	it("拖动不写文件，松手（change）才落盘，区间对不上就放弃（V67 / V71）", async () => {
+		const files: Record<string, string> = { "v.md": doc };
+		const host = makeHost(files, new Set(["v.md"]));
+		const headings = ["## 甲", "### 甲一", "#### 甲一一"];
+		files["v.md"] = [doc, ...headings.slice(1)].join("\n");
+		const { el, done } = mount(new TocBlockRenderer(host), "slider", "v.md", {
+			lineStart: 2,
+			lineEnd: 4,
+		});
+		await done;
+		const input = el.children.find((c) => c.cls === "ah-toc-bar")?.children[0];
+		input?.listeners.get("input")?.({ target: { value: "0" } });
+		expect(host.processFile).not.toHaveBeenCalled(); // 拖动中不写
+		input?.listeners.get("change")?.({ target: { value: "0" } });
+		await flush();
+		expect(host.processFile).toHaveBeenCalledTimes(1);
+		// 现存级别 [1,2,3,4]，序号 0 = H1
+		expect(files["v.md"]).toContain("```ah-toc\nslider\ndepth: 1\n```");
+		// 区间还停在旧的两行之间（模拟块被挪动 / 区间过期）：校验不过，不写、不抛，文件保持第一次落盘后的样子
+		const afterFirst = files["v.md"];
+		input?.listeners.get("change")?.({ target: { value: "1" } });
+		await flush();
+		expect(files["v.md"]).toBe(afterFirst);
+	});
+
+	it("取不到块区间 / 校验不过 → 不落盘、不抛，内存选择保留（V71）", async () => {
+		const files: Record<string, string> = { "v.md": doc };
+		const host = makeHost(files, new Set(["v.md"]));
+		const noInfo = mount(new TocBlockRenderer(host), "slider", "v.md", null);
+		await noInfo.done;
+		const input = noInfo.el.children.find((c) => c.cls === "ah-toc-bar");
+		void input; // doc 只有两级以下标题，可能没有滑块；改用多级文件
+		files["v.md"] = [doc, "### 甲一"].join("\n");
+		const m = mount(new TocBlockRenderer(host), "slider", "v.md", null);
+		await m.done;
+		const slider = m.el.children.find((c) => c.cls === "ah-toc-bar")?.children[0];
+		slider?.listeners.get("change")?.({ target: { value: "0" } });
+		await flush();
+		expect(host.processFile).not.toHaveBeenCalled();
+	});
+});
+
+describe("插入目录与导出（testplan V68 / V73）", () => {
+	it("tocInsertText：空行 / 行内文字前后补空行（V68）", () => {
+		const block = "```ah-toc\nslider\n```";
+		expect(tocInsertText("", "")).toBe(block);
+		expect(tocInsertText("   ", "")).toBe(block);
+		expect(tocInsertText("abc", "")).toBe(`\n\n${block}`);
+		expect(tocInsertText("", "def")).toBe(`${block}\n\n`);
+		expect(tocInsertText("abc", "def")).toBe(`\n\n${block}\n\n`);
+	});
+
+	it("处理器等首次渲染完才返回：导出 PDF 截 DOM 时目录已经在（V73）", async () => {
+		const host = makeHost({ "v.md": ["## 甲", "### 甲一"].join("\n") }, new Set(["v.md"]));
+		const { el, done } = mount(new TocBlockRenderer(host), "slider", "v.md");
+		await done; // 不再 flush：处理器返回时 DOM 就该就绪
+		expect(el.dump()).toEqual(["1 甲", "  1.1 甲一"]);
 	});
 });
 

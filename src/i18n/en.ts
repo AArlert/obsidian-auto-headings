@@ -256,6 +256,7 @@ const en: Messages = {
 	cmdCopyOutline: "Copy numbered outline",
 	cmdCopySectionLink: "Copy current section link",
 	cmdCopySectionEmbed: "Copy current section embed link",
+	cmdInsertToc: "Insert table of contents (ah-toc block with slider)",
 	cmdToggleHeadingSkip: "Skip / restore numbering for heading at cursor",
 	cmdPromoteSection: "Promote current section",
 	cmdDemoteSection: "Demote current section",

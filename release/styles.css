@@ -1056,6 +1056,48 @@ button.ah-danger-text {
 }
 
 /* 只读目录块 ah-toc（spec §3.25）：普通嵌套列表，链接不加下划线，行距随正文。 */
+.ah-toc {
+	position: relative;
+}
+/* 层级滑块：叠在目录右上角的浮层，平时隐藏，鼠标移入目录块 / 键盘焦点进入才淡入（V63）。 */
+.ah-toc-bar {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: 0.6em;
+	padding: 2px 8px;
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+	opacity: 0;
+	transition: opacity 0.15s ease;
+}
+.ah-toc:hover .ah-toc-bar,
+.ah-toc:focus-within .ah-toc-bar {
+	opacity: 1;
+}
+/* 没有悬停能力的设备（触屏）上常显。 */
+@media (hover: none) {
+	.ah-toc-bar {
+		opacity: 1;
+	}
+}
+/* 导出 PDF / 打印：目录照常出，滑块不出（V73）。 */
+@media print {
+	.ah-toc-bar {
+		display: none;
+	}
+}
+.ah-toc-slider {
+	width: 9em;
+}
+.ah-toc-slider-label {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	min-width: 2em;
+}
 .ah-toc-list {
 	margin: 0;
 	padding-left: 1.4em;
