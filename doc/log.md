@@ -15,7 +15,7 @@
 
 ---
 
-## 2026-10-28 只读目录块 ah-toc（M17-B，不 bump、未合并，交接：claude/quiet-outline-show-only-numbers-7330df）
+## 2026-10-28 发版 1.3.0：Quiet Outline 面板显示编号 + 只读目录块 ah-toc（M17-B）（交接：claude/quiet-outline-show-only-numbers-7330df → master，tag 1.3.0）
 
 ### 做了什么
 
@@ -60,7 +60,9 @@
 
 ### 下一步
 
-- 补 user-guide 双语 + README 一句；补真机未试项；用户定后合并。
+- 已补 user-guide 双语 + README + `doc/release-notes/1.3.0.md`；`npm run bump minor` 1.2.6 → 1.3.0（新功能，升次版本）；testplan / spec 的「未发版」回填为 1.3.0。
+- 推 master 等 CI 绿 → 打 tag 1.3.0 → 内置浏览器点 Community Hub 的「Check for new releases」。
+- 未真机验证、已在 testplan 标明的项：写入模式文件目录点击跳转（V55）、边改边看的目录更新（V56）、与 Automatic Table Of Contents 同装（V59）、停用插件后块还原（V62）。
 
 ### 验证方式
 
@@ -68,7 +70,7 @@
 
 ---
 
-## 2026-10-28 Quiet Outline 面板显示仅显示编号（不 bump、未提交，交接：claude/quiet-outline-show-only-numbers-7330df）
+## 2026-10-28 Quiet Outline 面板显示仅显示编号（并入 1.3.0，交接：claude/quiet-outline-show-only-numbers-7330df）
 
 ### 做了什么
 
@@ -83,7 +85,7 @@
 
 ### 下一步
 
-- 用户定先不合并；V53 已回填 ✅。合并前如有空可再试省略设置 / 彩虹线。
+- V53 已回填 ✅，随 1.3.0 发布；省略设置 / 彩虹线开关未专门试。
 
 ### 验证方式
 
