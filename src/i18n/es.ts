@@ -257,6 +257,7 @@ const es: Partial<Messages> = {
 	cmdCopyOutline: "Copiar esquema numerado",
 	cmdCopySectionLink: "Copiar enlace de la sección actual",
 	cmdCopySectionEmbed: "Copiar enlace incrustado de la sección actual",
+	cmdInsertToc: "Insertar tabla de contenidos",
 	cmdToggleHeadingSkip: "Omitir / restaurar la numeración del encabezado bajo el cursor",
 	cmdPromoteSection: "Subir de nivel la sección actual",
 	cmdDemoteSection: "Bajar de nivel la sección actual",

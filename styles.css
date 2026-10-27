@@ -1055,6 +1055,101 @@ button.ah-danger-text {
 	white-space: pre;
 }
 
+/* 只读目录块 ah-toc（spec §3.25）。选择器一律带 .ah-toc 前缀：Obsidian 的 `.markdown-rendered ul / li`
+   特异性更高，不加前缀我们的边距 / 缩进会被它盖掉（第一版缩进错位的根因）。 */
+
+/* 层级滑块：在目录上方、靠左（避开实时预览里代码块右上角的 </> 按钮），平时隐藏，鼠标移入目录块 /
+   键盘焦点进入才淡入（V63）；隐藏时仍占这一行，显隐不会让目录跳动。滑块本身保持原生的圆头，只收紧外围空间。 */
+.ah-toc .ah-toc-bar {
+	display: flex;
+	align-items: center;
+	gap: 0.6em;
+	margin: 0;
+	padding: 0;
+	line-height: 1;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+}
+.ah-toc:hover .ah-toc-bar,
+.ah-toc:focus-within .ah-toc-bar {
+	opacity: 1;
+}
+/* 没有悬停能力的设备（触屏）上常显。 */
+@media (hover: none) {
+	.ah-toc .ah-toc-bar {
+		opacity: 1;
+	}
+}
+/* 导出 PDF / 打印：目录照常出，滑块不出（V73）。 */
+@media print {
+	.ah-toc .ah-toc-bar {
+		display: none;
+	}
+}
+/* 自绘滑块（不用原生 range：它会拿走焦点，实时预览里编辑器就把光标放进块、退回源码）。
+   轨道宽 = 9em，拇指直径 14px（与 tocBlock.ts 的 TOC_THUMB_PX 同值）；位置由 --ah-toc-pos（0–1）给。 */
+.ah-toc .ah-toc-track {
+	position: relative;
+	width: 9em;
+	height: 18px;
+	cursor: pointer;
+	touch-action: none;
+	user-select: none;
+}
+.ah-toc .ah-toc-rail {
+	position: absolute;
+	top: 50%;
+	left: 0;
+	right: 0;
+	height: 3px;
+	margin-top: -1.5px;
+	border-radius: 2px;
+	background: var(--background-modifier-border-hover);
+}
+.ah-toc .ah-toc-thumb {
+	position: absolute;
+	top: 50%;
+	left: calc(var(--ah-toc-pos, 1) * (100% - 14px));
+	width: 14px;
+	height: 14px;
+	margin-top: -7px;
+	border-radius: 50%;
+	background: var(--interactive-accent);
+	box-shadow: 0 0 0 3px var(--background-modifier-hover);
+}
+.ah-toc .ah-toc-track:hover .ah-toc-thumb {
+	background: var(--interactive-accent-hover);
+}
+.ah-toc .ah-toc-slider-label {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	min-width: 2em;
+}
+
+/* 目录列表：平铺，圆点自己画；每项缩进 = --ah-toc-indent（级别 − 最浅级别）× 1.5em，只看级别。 */
+.ah-toc .ah-toc-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.ah-toc .ah-toc-list li {
+	list-style: none;
+	position: relative;
+	margin: 0.1em 0;
+	padding-inline-start: calc(var(--ah-toc-indent, 0) * 1.5em + 1.2em);
+}
+.ah-toc .ah-toc-list li::before {
+	content: "•";
+	position: absolute;
+	inset-inline-start: calc(var(--ah-toc-indent, 0) * 1.5em + 0.3em);
+	color: var(--text-faint);
+}
+.ah-toc .ah-toc-link {
+	text-decoration: none;
+	/* 导出 PDF 时目录项是普通 a（没有 internal-link 类），颜色要自己给 */
+	color: var(--link-color);
+}
+
 /* 文件里还留着本插件以前写入的旧编号：虚线下划线提示，悬停有说明。 */
 .ah-virtual-number--stale {
 	/* 用虚线下边框代替 text-decoration 的复合写法（旧版 Electron 只部分支持）。 */
@@ -1067,6 +1162,16 @@ button.ah-danger-text {
 .tree-item-inner[data-ah-number]::before {
 	content: attr(data-ah-number);
 	white-space: pre;
+}
+
+/* Quiet Outline 面板（testplan V48）：文字容器里是块级的标题 div，::before 要与它同行，所以容器改弹性布局。 */
+.quiet-outline .n-tree-node-content__text[data-ah-number] {
+	display: flex;
+}
+.quiet-outline .n-tree-node-content__text[data-ah-number]::before {
+	content: attr(data-ah-number);
+	white-space: pre;
+	flex: none;
 }
 
 /* ==== 1.2.2 视觉更新：标题行按钮 / 模板卡片 / 模板编辑弹窗（spec Roadmap M15）==== */

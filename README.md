@@ -55,6 +55,10 @@ A built-in list keeps headings like "Contents", "Appendix" and "References" unnu
 
 The fold arrow beside a heading: **drag** it to move the whole section, **right-click** it for a menu (skip this heading / the whole section, promote / demote, copy link or embed). The status-bar "this note" label switches the template or auto-numbering for just that note. When you rename a heading, a link's `|alias` is updated too.
 
+### A table of contents with the numbers
+
+Run **Insert table of contents** (command palette or right-click menu) to drop an `ah-toc` block into a note. It shows the headings **with their numbers**, even in display-only mode, and works in reading view, Live Preview and exported PDFs. A slider above it (shown on hover) picks how many levels to expand; select entries and copy to get a numbered outline, or links when pasting into rich-text apps. The numbers also show in Obsidian's Outline and in the Quiet Outline plugin's panel.
+
 ### Link headings as you type
 
 Turn on "Suggest heading links as you type" in settings. Then type the name of any heading in your vault and it's suggested; press `Tab` to turn it into a link — no need to remember which note it's in. Enter still starts a new line, so nothing gets linked by accident. Off by default, so normal typing is never interrupted.
@@ -77,6 +81,7 @@ Notes with hand-typed or imported numbering can be cleaned up with one command, 
 | Skip / restore numbering for heading at cursor           | Add / remove a trailing `<!-- skip -->` so the heading is not numbered                 |
 | Skip / restore numbering for the whole section at cursor | Add / remove a trailing `<!-- skip-tree -->` — sub-headings are skipped too            |
 | Copy current section embed link                          | Copy the `![[Note#Heading]]` embed form                                                |
+| Insert table of contents                                 | Insert an `ah-toc` block (with a level slider) at the cursor                           |
 | Promote / demote current section                         | Raise / lower the section and its sub-headings by one level                            |
 | Choose template for current note…                        | Use a different template for this note only                                            |
 | Toggle auto-numbering for current note                   | Turn auto-numbering on / off for this note only                                        |

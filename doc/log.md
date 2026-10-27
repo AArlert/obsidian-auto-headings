@@ -15,6 +15,84 @@
 
 ---
 
+## 2026-10-28 发版 1.3.0：Quiet Outline 面板显示编号 + 只读目录块 ah-toc（M17-B）（交接：claude/quiet-outline-show-only-numbers-7330df → master，tag 1.3.0）
+
+### 做了什么
+
+- **§2.2 澄清 + 新规格 [3.25](spec/3.25-只读目录块.md)**：用户手写 `ah-toc` 围栏，插件只读渲染成目录（不写文件），边界与「不生成物理目录」不冲突。围栏名不用 `toc`（会与 Automatic Table Of Contents 抢处理器），唯一参数 `levels: A-B`。
+- **实现**：`src/virtual/tocBlock.ts`——纯函数 `parseTocLevels` / `buildTocTree`（相对级别栈式嵌套、按行号 + 级别配虚拟编号、残留旧编号不叠加）+ `TocBlockRenderer`（代码块处理器、块登记、元数据 / 设置变化原地重画）；`main.ts` 接入并加 `openHeadingLink`；样式 `.ah-toc-list`。无设置项。
+- testplan V54–V62；单测 `toc-block.test.ts` 13 条。门槛：docs / prettier / eslint / tsc 绿；`vitest` 1034/1035，唯一红仍是已知 ICU 假红。
+- 真机（Oblivion 库，深色）：阅读视图与实时预览都渲染带编号的嵌套目录，`levels: 2` 生效，点击跳转并高亮目标。
+
+### 追加（同日，用户反馈）
+
+- **层级滑块**：块里写 `slider` 带滑块，**浮动、默认隐藏**（鼠标移入目录块 / 键盘焦点进入才淡入，触屏常显，打印隐藏）；刻度按**现存级别的序号**布置（只有 H3–H5 就是 3 档，H3 + H5 就是 2 档）。
+- **状态落盘**：拖动即时只重画列表，**松手才把 `depth: N` 写进块内**（用户定：状态记在代码块里）；写前校验围栏 / 内容与渲染时一致 / 行区间，不符就放弃只留内存选择，`vault.process` 原子改写，CRLF 保持。§2.2 与 spec 3.25 的「只读」措辞相应改为「渲染只读、唯一写入是拖滑块」。
+- **插入命令**：「插入目录」（命令面板 + 编辑器右键，需编辑器焦点）插入带 `slider` 的块；10 种语言补 `cmdInsertToc`。
+- **导出 PDF**：代码块处理器改异步、**等首次渲染完才返回**（导出管线等 Promise 才截 DOM，否则会导出空块 / 源码）；CSS 打印隐藏滑块。
+- **边界**：缩进是**相对**的（栈式嵌套，只看祖先层数，与 H 几无关；只有 H3–H5 时 H3 是顶层）；跳级 / 乱序已单测。testplan V63–V73；单测 29 条。真机（滑块悬停显隐、实时预览拖动、落盘、插入命令、PDF）**待用户测**。
+
+### 再追加（用户首轮真机反馈）
+
+- 滑块位置：浮动在右上角会与实时预览代码块的 `</>` 重叠 → 改回目录**上方靠左**，仍默认隐藏、悬停淡入、隐藏时占一行不让目录跳动。
+- 缩进：跳级的标题要与同级别的别处对齐（H3 下的 H5 对齐 H4 下的 H5）→ 第一版（嵌套 `ul` + 给跳级项补 `margin-left`）真机仍对不齐，根因是嵌套列表的缩进本就是「祖先层数」；改成**平铺列表**，每项 `--ah-toc-indent = 级别 − 最浅级别`（`TocNode.indent`），缩进 = 该值 × 1.5em，彻底与挂在谁下面无关。第二轮真机仍不齐（H3→H4 只缩一点、H4→H5 缩很多），根因是**样式特异性**：Obsidian 的 `.markdown-rendered li` 比 `.ah-toc-list` 高，我们的边距被盖掉，且给 li 写内联 `margin-left` 会替换掉 Obsidian 默认的 li 边距，只有 indent 0 保留默认 → 台阶不等。现在所有选择器带 `.ah-toc` 前缀、圆点自绘、用 `padding-inline-start` 与 CSS 变量，**每一级距离相等**（用户要求）。推翻了最初「缩进只看祖先层数」的结论。
+- 滑块行压矮：第一版把滑块本身压扁了（头变成扁椭圆），用户指出应缩**外围空间**而不是滑块 → 恢复原生圆头，只收紧外边距 / 内边距（同样靠 `.ah-toc` 前缀盖过 Obsidian 的 `ul` 边距）。
+- 插入命令名精简为「插入目录」（10 种语言同步）。
+
+### 第三轮（用户实测反馈）
+
+- **实时预览里拖滑块仍进源码**（`depth:` 落盘 + 重开保持都正常）：阻止冒泡不够——原生 `<input type=range>` 拿焦点，编辑器因焦点 / 选区进了块的渲染结果而把光标放进块。从 `app.js` 看到 Obsidian 自己用 `.interactive-child` 标记「别当成点进块」，且 LP 的代码块上下文提供 `getSectionInfo` / `replaceCode`。改成**自绘滑块（div 轨道 + 拇指，不可聚焦，指针捕获拖动）**，容器带 `interactive-child`。真机待复测。
+- **目录项超链接**：`a` 补 `data-href`（Obsidian 识别内部链接、悬浮预览、PDF 导出转可点内部链接的依据）；点击 `stopPropagation` 防重复打开。PDF 里是否可点要真机导出看。
+- **选中复制**：拦 `copy`，`text/plain` 与「复制编号大纲」同格式（带编号 / 缩进），`text/html` 带 `obsidian://` 超链接（`headingUri`）。
+- **不抖动**：重画前算内容签名，没变不动 DOM（回答「文首放 toc、后面加标题会不会挤视角」：改字不会；加删标题多 / 少一行是固有代价）。
+
+### 第四轮（用户实测反馈）
+
+- **复制粘进 Obsidian 的排版**：第一版 HTML 是带左边距的段落，Obsidian 转 Markdown 后层级全丢、一行一段 → 改成**嵌套列表**（深度 = min(相对缩进, 上一项 + 1)），纯文本仍与「复制编号大纲」逐字一致。
+- **导出 PDF 里仍点不动**：从 `app.js` 查到 Obsidian 导出对所有 `a.internal-link` 执行 `removeAttribute("href")`，`data-href` 帮不上；标题元素也没有 `id`。改为导出时（块在 `div.print` 里）用普通 `a` + `#ah-h-下标`，并在块异步续跑时给导出 DOM 里对应标题补 `id`（`assignExportHeadingIds`，数量对不上不补）。依赖 Chromium 把 `<base>` 下指向本文档的 `#id` 转成 PDF 内部跳转，**待用户导出复测**。
+- 用户反馈：新增 / 删除标题目录不影响视图（内容签名不变不重绘 + 增删时不抖），好。
+
+### 没做什么
+
+- 未试：写入模式文件的点击跳转（含 WJ 锚点）、边改边看的实时更新、导出 PDF、停用插件后块还原、与 Automatic Table Of Contents 同装（该库里它没启用）、浅色主题。
+- 没写 README / user-guide：用户要手写围栏，**发版前必须补一节「怎么写 ah-toc 块」**，否则没人知道这个功能；没做插入命令（要动 10 种语言）。
+- 标题里的行内标记（粗体 / 链接 / 行内代码）按纯文本显示，没渲染。
+
+### 下一步
+
+- 已补 user-guide 双语 + README + `doc/release-notes/1.3.0.md`；`npm run bump minor` 1.2.6 → 1.3.0（新功能，升次版本）；testplan / spec 的「未发版」回填为 1.3.0。
+- 推 master 等 CI 绿 → 打 tag 1.3.0 → 内置浏览器点 Community Hub 的「Check for new releases」。
+- 未真机验证、已在 testplan 标明的项：写入模式文件目录点击跳转（V55）、边改边看的目录更新（V56）、与 Automatic Table Of Contents 同装（V59）、停用插件后块还原（V62）。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/toc-block.test.ts`；真机见上。
+
+---
+
+## 2026-10-28 Quiet Outline 面板显示仅显示编号（并入 1.3.0，交接：claude/quiet-outline-show-only-numbers-7330df）
+
+### 做了什么
+
+- **接入 Quiet Outline**（第三方，0.5.15 核对）：它是 Vue 树、没有条目对象，但节点 `id="no-N"` 的 N 即 `metadataCache` `headings` 下标；用它取行号后走与内置大纲相同的「行号 + 级别」配对。所示文件取自 `plugin.navigator.view.file`。固定开启、无设置项（`outlineView.ts` 抽出 `OutlineAdapter`，内置大纲与 Quiet Outline 各一个；`main.ts` 加 `cachedHeadings`；`styles.css` 把文字容器改 flex 让 `::before` 同行）。
+- testplan V48–V53、spec §3.22、架构目录树同步；单测 `virtual-outline.test.ts` 22 条（含 7 条 Quiet Outline 假 DOM 用例）。
+- 门槛：`docs --check` / `prettier` / `eslint` / `tsc` 绿；`vitest` 1021/1022，唯一红是已知 Windows ICU 假红。已 `npm run release` 并覆盖部署到 Oblivion 库（库内原为 1.2.6）。
+
+### 没做什么
+
+- **真机（Oblivion 库，深色主题，Quiet Outline 0.5.15）已看**：编号与标题同行、窄面板长标题换行后悬挂缩进、搜索过滤带编号、编辑加标题后面板实时更新，均正常。浅色主题用户实测通过，Quiet Outline 适配视为完成；**未专门试**：省略设置、彩虹线开关；节点 `id` 究竟挂在哪一层没读真实 DOM（渲染正确，无重复 id 的迹象）。
+- 没写 README / user-guide（等真机确认可用后再补一句）。
+
+### 下一步
+
+- V53 已回填 ✅，随 1.3.0 发布；省略设置 / 彩虹线开关未专门试。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/virtual-outline.test.ts`；真机见上。
+
+---
+
 ## 2026-10-27 发版 1.2.6：标题菜单层级子菜单 + 阅读视图落盘 + 菜单开关（交接：claude/title-menu-level-adjust-c3cecb → master，tag 1.2.6）
 
 ### 做了什么
@@ -39,68 +117,3 @@
 ### 验证方式
 
 - 单测见上；真机探针与用户手测见上；`git tag` 与 `manifest.json` 版本一致（Release 工作流会校验）。
-
-## 2026-10-24 发版 1.2.5：标题链接建议默认关 + 按重放数据收紧 + 设置页改版（issue #10，交接：claude/issue-10-feedback-49b340 → master，tag 1.2.5）
-
-### 做了什么
-
-- 用户真机手感验过（2026-10-24）：上一块的探针 21/21 之后，用户自己在测试库打了真实内容，确认弹框时机与候选顺序可接受，据此发版。
-- `npm run bump` 1.2.4 → 1.2.5（`manifest.json` / `package.json` / lockfile / `versions.json` / `release/manifest.json` 一并同步）；
-  `doc/testplan/` 48 处、`doc/spec/` 18 处「未发版」回填为 1.2.5，顺手补了版本号与汉字之间的空格（`1.2.5起` → `1.2.5 起`）。
-- 发布说明沿用上一块写好的 `doc/release-notes/1.2.5.md`，内容未改。
-- 门槛：`docs --check` / `prettier --check` / `eslint` / `tsc` 全绿；`vitest` 1007/1008，唯一红仍是已知 Windows ICU 假红
-  （`whitelist.test.ts` 的 CJK 排序）。
-
-### 没做什么
-
-- **没回 issue #10**：用户自己回并关闭。
-- 没把新构建重新拷进测试库 / 主力库：两边跑的就是这份代码（`main.js` 哈希一致），只是 `manifest.json` 还写着 1.2.4，
-  由用户自己走 BRAT / 商店更新。
-- 手机端、旧版 Obsidian（< 1.11）的设置页没看（与上一块同）。
-
-### 下一步
-
-- 推 master 等 CI 绿 → 打 tag 1.2.5 → 到 Community Hub 维护者面板点「Check for new releases」送审；用户在 issue #10 回复并关闭。
-
-### 验证方式
-
-- `git tag` 与 `manifest.json` 版本一致（Release 工作流会校验，不一致即失败）；真机 21/21 见上一块；本轮只动版本号与文档，`src/` 未变。
-
----
-
-## 2026-10-24 补真机探针：收紧后的规则与「不选就记住」21/21（不 bump、未提交，交接：claude/issue-10-feedback-49b340）
-
-### 做了什么
-
-- 新增 `tests/probes/suggest-signals.js`：把 Q30 / Q31 / Q62 / Q63 搬到真机（loom test-vault，Obsidian 1.14.4）。临时打开建议、
-  建 `探针-AH信号` 库，21 项全过；结束时删临时文件夹，建议开关还原成测前的「关」。
-  - 触发规则那段用真编辑器打字；「不选就记住」那段改用假编辑器（`onTrigger` 只用到 `editor.getLine`），免得 Obsidian 自己的
-    触发 / 关框在两次取样之间插进来改写记忆，把断言变成掷骰子。
-- **首轮结果是假红，原因值得记**：库里 `main.js` 确实是新构建（哈希与 `release/` 一致），但插件是 05:11 加载的、构建是 05:29 拷进去的，
-  内存里跑的还是旧规则（`sg.dismissed` 不存在、6 个字母就前缀弹、英文短词不要信号）。禁用再启用插件后复跑才 21/21。
-  教训写进 `tests/probes/README.md`「怎么跑」：拷完构建必须重载插件，并附一行 `typeof` 自查。
-- 探针自身修一处：`笔记.md` 里那条出链指向的标题文件必须**先建**——链接计数按建文件那一刻的解析结果算一次，目标还不存在就漏掉，
-  要等源文件下次变动才补（`headinglinks.ts` 已有的取舍）。改成最后建「当前笔记」后 `linksFrom` 正常。
-- `doc/testplan/Q-标题链接建议与VC联动.md`：Q30 / Q31 / Q62 / Q63 的状态格由「🔲 真机手验」改为
-  「✅ 真机探针（`suggest-signals.js`，2026-10-24）」+「🔲 打字手感」——行为有真机证据了，手感仍没人看过。
-- 顺手清库（用户授权）：主工作树切回 `master`；搬走重复克隆与 10-07 的旧 `release/auto-headings.zip`，删三个多余 worktree
-  与四个已并入 master 的分支（未提交内容已 `git diff` 存成 patch）。有一个空 worktree 目录被进程占着删不掉，git 已不再登记它，无害。
-
-### 没做什么
-
-- 没合并 master、没 bump、没发版、没回 issue #10（等用户定）。
-- **打字手感没测**：弹框出现的时机、候选顺序在真实输入节奏下顺不顺，没人试过；测试库平时关着建议，探针是临时开的。
-- 手机端、旧版 Obsidian（< 1.11）的设置页没看。
-
-### 下一步
-
-- 用户拿测试库打一轮（打开「打字时建议标题链接」）→ 满意就按 `CLAUDE.md` §5.1 合并、发 1.2.5、回并关 issue #10。
-- 主力库（Oblivion）**不用**为「升级统一关一次」做任何事：那次迁移只在 `vcIntegrationMode === "off"` 时改关，它开着 VC 联动
-  （`auto`），按设计算显式选择、保持开着；把 `headingSuggestOffMigrated` 复位也是空操作，所以没动它的 `data.json`。
-- 主力库的 `vc-heading-dictionary.json` 现在只有 `{"words":[]}`（04:53 关建议时清空的），下次重载本插件会按标题重建，不用手工补。
-
-### 验证方式
-
-- 真机：经 `loom-probe` 通道跑 `suggest-signals.js` → 21/21；跑完 `探针-AH信号` 已删、`headingLinkSuggestEnabled` 仍为 `false`、
-  `main.js` 哈希与 `release/` 一致。
-- 门槛：`node scripts/docs.mjs --check` 0、`prettier --check` 0（本次只动文档 + 新增探针脚本，`src/` 未动，故未重跑 vitest）。

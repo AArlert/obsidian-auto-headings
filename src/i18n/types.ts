@@ -277,6 +277,8 @@ export interface Messages {
 	/** 「复制当前小节链接」命令名（R 组；光标在第一个标题之前时不出现在命令面板）。 */
 	cmdCopySectionLink: string;
 	cmdCopySectionEmbed: string;
+	/** 「插入目录」命令 / 右键菜单项（ah-toc 块，spec §3.25）。 */
+	cmdInsertToc: string;
 
 	// —— 笔记内入口（M16，spec §3.24）——
 	cmdToggleHeadingSkip: string;

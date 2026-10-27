@@ -185,6 +185,31 @@ Do one-note things without opening settings:
     -   Choosing "**never for this note**" also removes the numbers this plugin wrote in that note (handwritten ones stay). Want to keep the numbers as plain text and just stop the plugin managing them? Press Ctrl+Z once: the numbers come back and the note stays "never".
 -   When you rename a heading, wikilinks to it update not just the `#anchor` but also an **`|alias` that equals the old heading**; aliases you wrote yourself are left alone.
 
+### A table of contents that shows the numbers: the `ah-toc` block
+
+In display-only mode the numbers aren't in the file, so other table-of-contents plugins can't show them. Put an `ah-toc` code block in a note and Auto Headings renders it as a table of contents — **with the same numbers as the editor** — in reading view, Live Preview and exported PDFs. Easiest: run **Insert table of contents** from the command palette or the editor's right-click menu; it inserts:
+
+````markdown
+```ah-toc
+slider
+```
+````
+
+Options, one per line, all optional:
+
+-   `slider` — adds a level slider above the list (it fades in when your mouse is over the block). Drag to choose how deep to expand; on release the choice is saved into the block as `depth: N`, so it stays next time.
+-   `levels: 2-3` — only list levels 2 to 3 (`levels: 3` for a single level).
+-   `depth: N` — the deepest level to show (written for you by the slider).
+
+Good to know:
+
+-   **Rendering never writes the table of contents into your file.** The only write is the slider saving `depth:` — just that one line inside the block, and only if the block is still exactly as it was when drawn.
+-   Indentation follows the heading level: the shallowest heading is flush left and every level is one equal step deeper, even if a note skips a level.
+-   Select some entries and copy: you get a numbered, indented outline (the same as **Copy numbered outline**), and pasting into rich-text apps gives clickable links back to the headings.
+-   Entries are links: click to jump, Ctrl/Cmd-click to open in a new tab. In an exported PDF they are links within the document.
+-   The fence is `ah-toc`, not `toc`, so it never fights other table-of-contents plugins.
+-   **Outline panels**: in display-only mode the numbers also appear in Obsidian's built-in Outline and in the **Quiet Outline** plugin's panel (on by default, nothing to set up).
+
 ### Cleanup commands, for when you need a clean slate
 
 -   **Renumber current note** — force an immediate renumber of the current file (see [Out of the box](#out-of-the-box) — this bypasses every switch)
@@ -217,7 +242,7 @@ The numbering is real text, so it travels with your documents. Where each egress
 -   **Copying into other apps**: eliminated — **copy sanitization** is always on (the switch was removed in 1.0.16), so interactive copy/cut no longer carries the invisible character (see the clipboard note above).
 -   **Pandoc**: the numbers are already baked into the text, so don't let Pandoc number them again — exporting with `--number-sections` yields double numbering like `1.1 1.1 Introduction`. Drop the ready-made filter [`assets/pandoc/strip-autoheadings.lua`](../assets/pandoc/strip-autoheadings.lua) into your pipeline: by default it removes the plugin's prefixes so `--number-sections` produces clean single numbering, and `-M autoheadings=strip-marker` instead keeps the plugin's numbers and removes only the invisible character. Either way inline formatting inside headings (**bold**, `code`, links) survives. Verified against pandoc 3.10.
 -   **PDF via Pandoc**: exporting with `--pdf-engine=typst` produced **no U+2060 anywhere in the PDF text layer** — even without the filter, the marker is dropped before it reaches the page. Copy and search in the resulting PDF behave normally. Other PDF engines are untested.
--   **Obsidian's built-in "Export to PDF"**: in display-only mode the exported PDF includes the numbers (verified in 1.2.0). In write mode the numbers are in the PDF too, but how the invisible marker behaves in the PDF text layer is still unverified — the Pandoc result above does **not** carry over.
+-   **Obsidian's built-in "Export to PDF"**: in display-only mode the exported PDF includes the numbers (verified in 1.2.0), including those in an `ah-toc` table of contents. In write mode the numbers are in the PDF too, but how the invisible marker behaves in the PDF text layer is still unverified — the Pandoc result above does **not** carry over.
 -   **Obsidian Publish**: still unverified. Display-only numbers don't appear on Publish (Publish doesn't run this plugin).
 -   Want numbers visible only inside Obsidian, with zero file changes? Use [display-only mode](#two-modes-display-only-and-write-to-file).
 
@@ -243,6 +268,7 @@ Its two longest-standing open requests are both **implemented here**: excluding 
 | Copy numbered outline | Copy the current note's headings as an indented, numbered outline — works in both write and display-only mode |
 | Copy current section link | Copy a link to the section under the cursor (or the section the cursor is inside) — works in both write and display-only mode |
 | Copy current section embed link | Same, but copies the `![[Note#Heading]]` embed form |
+| Insert table of contents | Insert an `ah-toc` block (with a level slider) at the cursor — also in the editor's right-click menu |
 | Skip / restore numbering for heading at cursor | Toggle a trailing `<!-- skip -->` |
 | Skip / restore numbering for the whole section at cursor | Toggle a trailing `<!-- skip-tree -->` (sub-headings included) |
 | Promote / demote current section | Raise / lower the section and its sub-headings by one level |

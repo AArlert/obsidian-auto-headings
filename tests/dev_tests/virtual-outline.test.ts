@@ -5,6 +5,8 @@
  * `cachedHeadingDom`，条目带 `heading` 与 `innerEl`），测「按行号 + 级别对编号」、刷新 / 设置 / 卸载
  * 时的增删，以及结构不认识时的静默。条目元素只需读写属性，不引入 jsdom。真实大纲的观感、搜索过滤、
  * 虚拟滚动留真机手验。
+ *
+ * 文末另有 Quiet Outline 插件的用例（testplan V48–V52）：用假 DOM 模拟它的 `id="no-N"` 节点。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_TEMPLATE, WORD_JOINER } from "../../src/numbering";
@@ -12,6 +14,7 @@ import { parseHeadings } from "../../src/parser";
 import { computeVirtualNumbers } from "../../src/virtual/compute";
 import {
 	OUTLINE_NUMBER_ATTR,
+	QUIET_OUTLINE_ADAPTER,
 	pickOutlineLabels,
 	setOutlineLabel,
 	VirtualOutlineDecorator,
@@ -75,6 +78,15 @@ function makeHost(files: Record<string, string>, virtual: Set<string>) {
 			virtual.has(path) ? computeVirtualNumbers(content, DEFAULT_TEMPLATE) : null,
 		),
 		readFileContent: vi.fn(async (path: string) => files[path] ?? null),
+		cachedHeadings: vi.fn((path: string) =>
+			path in files
+				? parseHeadings(files[path]).map((h) => ({
+						level: h.level,
+						heading: h.text,
+						position: { start: { line: h.lineIndex } },
+					}))
+				: null,
+		),
 	};
 }
 
@@ -312,5 +324,139 @@ describe("防御：环境里没有 MutationObserver（node）时照样能挂载�
 		d.attachAll();
 		await flush();
 		expect(labelsOf(view)).toEqual(["1 "]);
+	});
+});
+
+/** 假的 Quiet Outline 节点：`id="no-N"` + `level-L` 类，内含文字容器。 */
+class FakeQuietNode {
+	readonly text = new FakeInner();
+	constructor(
+		public id: string,
+		public className: string,
+	) {}
+	querySelector(selector: string): FakeInner | null {
+		return selector === ".n-tree-node-content__text" ? this.text : null;
+	}
+}
+
+function quietNodesFor(content: string): FakeQuietNode[] {
+	return parseHeadings(content).map(
+		(h, i) => new FakeQuietNode(`no-${i}`, `level-${h.level} located`),
+	);
+}
+
+/** 假的 Quiet Outline 视图；`navigatorFile` 即它跟着的 Markdown 视图所示的文件。 */
+function quietView(navigatorFile: { path: string; extension?: string } | null, content: string) {
+	const view = {
+		nodes: quietNodesFor(content),
+		plugin: { navigator: { view: navigatorFile ? { file: navigatorFile } : undefined } },
+		contentEl: {
+			querySelectorAll(selector: string): FakeInner[] | FakeQuietNode[] {
+				if (selector.startsWith("[id^=")) {
+					return view.nodes;
+				}
+				return view.nodes.map((n) => n.text).filter((t) => t.label !== null);
+			},
+		},
+	};
+	return view;
+}
+
+const quietLabels = (view: { nodes: FakeQuietNode[] }) => view.nodes.map((n) => n.text.label);
+
+function quietWorkspace(views: unknown[]) {
+	return {
+		getLeavesOfType: (type: string) =>
+			type === "quiet-outline" ? views.map((view) => ({ view })) : [],
+	};
+}
+
+describe("Quiet Outline 面板（testplan V48–V52）", () => {
+	const doc = ["## 甲", "### 甲一", "## 乙"].join("\n");
+
+	it("按节点 id 的下标取 metadataCache 标题，再按行号画编号；不编号的标题不画（V48）", async () => {
+		const withTitle = ["# 书名", doc].join("\n");
+		const host = makeHost({ "v.md": withTitle }, new Set(["v.md"]));
+		const view = quietView({ path: "v.md", extension: "md" }, withTitle);
+		const d = new VirtualOutlineDecorator(host, quietWorkspace([view]));
+		d.attachAll();
+		await flush();
+		expect(d.trackedCount).toBe(1);
+		expect(quietLabels(view)).toEqual([null, "1 ", "1.1 ", "2 "]); // 默认模板 H1 不编号
+	});
+
+	it("写入模式文件不画（V48）", async () => {
+		const host = makeHost({ "w.md": doc }, new Set());
+		const view = quietView({ path: "w.md", extension: "md" }, doc);
+		const d = new VirtualOutlineDecorator(host, quietWorkspace([view]));
+		d.attachAll();
+		await flush();
+		expect(quietLabels(view)).toEqual([null, null, null]);
+	});
+
+	it("所示文件取自面板跟着的 Markdown 视图；换文件后按新文件重算，节点只画新的（V49）", async () => {
+		const files = { "a.md": "## 甲", "b.md": "## 甲\n## 乙" };
+		const host = makeHost(files, new Set(["a.md", "b.md"]));
+		const view = quietView({ path: "a.md", extension: "md" }, files["a.md"]);
+		const d = new VirtualOutlineDecorator(host, quietWorkspace([view]));
+		d.attachAll();
+		await flush();
+		expect(quietLabels(view)).toEqual(["1 "]);
+		view.plugin.navigator.view = { file: { path: "b.md", extension: "md" } };
+		view.nodes = quietNodesFor(files["b.md"]);
+		await d.sync(view as unknown as OutlineViewLike);
+		expect(quietLabels(view)).toEqual(["1 ", "2 "]);
+	});
+
+	it("所示的是画布等非 Markdown 文件、或取不到所示文件 → 不画、不抛，并清掉旧编号（V50）", async () => {
+		const host = makeHost({ "x.md": doc }, new Set(["x.md"]));
+		const canvas = quietView({ path: "x.canvas", extension: "canvas" }, doc);
+		const none = quietView(null, doc);
+		const d = new VirtualOutlineDecorator(host, quietWorkspace([canvas, none]));
+		d.attachAll();
+		await flush();
+		expect(quietLabels(canvas)).toEqual([null, null, null]);
+		expect(quietLabels(none)).toEqual([null, null, null]);
+		expect(host.readFileContent).not.toHaveBeenCalled();
+	});
+
+	it("面板级别类与 metadataCache 对不上（面板没跟上）→ 该节点不画；残留旧编号标题不画（V51）", async () => {
+		const stale = ["## 甲", `## ${WJ}9 ${WJ}乙`, "## 丙"].join("\n");
+		const host = makeHost({ "v.md": stale }, new Set(["v.md"]));
+		const view = quietView({ path: "v.md", extension: "md" }, stale);
+		view.nodes[2].className = "level-3"; // 面板以为它是 H3，缓存里是 H2
+		const d = new VirtualOutlineDecorator(host, quietWorkspace([view]));
+		d.attachAll();
+		await flush();
+		expect(quietLabels(view)).toEqual(["1 ", null, null]);
+	});
+
+	it("节点 id 下标越界 / 格式不对 / 缺文字容器 → 跳过、不抛（V52）", async () => {
+		const host = makeHost({ "v.md": doc }, new Set(["v.md"]));
+		const view = quietView({ path: "v.md", extension: "md" }, doc);
+		view.nodes[0].id = "no-99";
+		view.nodes[1].id = "something-else";
+		const d = new VirtualOutlineDecorator(host, quietWorkspace([view]));
+		d.attachAll();
+		await flush();
+		expect(quietLabels(view)).toEqual([null, null, "2 "]);
+		// 结构全然不认识：视图没有 contentEl 就不挂
+		const broken = { plugin: {}, contentEl: {} };
+		const d2 = new VirtualOutlineDecorator(host, quietWorkspace([broken, null, 3]));
+		d2.attachAll();
+		expect(d2.trackedCount).toBe(0);
+		expect(QUIET_OUTLINE_ADAPTER.accepts(broken)).toBe(false);
+	});
+
+	it("停用插件 → 属性全部去掉；不留观察器（V52）", async () => {
+		const host = makeHost({ "v.md": doc }, new Set(["v.md"]));
+		const view = quietView({ path: "v.md", extension: "md" }, doc);
+		const d = new VirtualOutlineDecorator(host, quietWorkspace([view]));
+		d.attachAll();
+		await flush();
+		expect(quietLabels(view)).toEqual(["1 ", "1.1 ", "2 "]);
+		d.dispose();
+		expect(quietLabels(view)).toEqual([null, null, null]);
+		expect(d.trackedCount).toBe(0);
 	});
 });

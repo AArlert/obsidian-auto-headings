@@ -8,6 +8,7 @@ import {
 	type App,
 	type EditorChange,
 	type EditorRangeOrCaret,
+	type HeadingCache,
 	type MetadataCache,
 } from "obsidian";
 import {
@@ -68,6 +69,7 @@ import {
 import { virtualNumberingExtension, virtualRefreshEffect } from "./virtual/editorExtension";
 import { VirtualOutlineDecorator } from "./virtual/outlineView";
 import { VirtualReadingRenderer } from "./virtual/readingView";
+import { TOC_FENCE, TocBlockRenderer, tocInsertText } from "./virtual/tocBlock";
 import { diffNumberingModes, type ModeTransition } from "./virtual/modeSwitch";
 import { TemplateStore } from "./templates/TemplateStore";
 import {
@@ -227,6 +229,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 故调用处一律用可选链。
 	 */
 	private readingRenderer?: VirtualReadingRenderer;
+	private tocRenderer?: TocBlockRenderer;
 	private outlineDecorator?: VirtualOutlineDecorator;
 
 	/**
@@ -333,6 +336,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 		// 复制编号大纲 / 复制当前小节链接（R 组，spec.md §A.11）：接线在独立方法，纯逻辑在 copycommands.ts。
 		this.registerCopyCommands();
+		this.registerTocInsert();
 
 		// 虚拟编号渲染（M14，spec §3.22）：编辑视图用 CM6 装饰，阅读视图用 post-processor，永不写文件。
 		this.registerEditorExtension(virtualNumberingExtension(this));
@@ -343,8 +347,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.registerEvent(
 			this.app.metadataCache.on("changed", (file) => {
 				this.readingRenderer?.scheduleSweep(file.path);
+				this.tocRenderer?.refreshPath(file.path);
 			}),
 		);
+		// 只读目录块 `ah-toc`（M17-B，spec §3.25）：渲染成带虚拟编号的目录，不写文件。
+		this.tocRenderer = new TocBlockRenderer(this);
+		this.registerMarkdownCodeBlockProcessor(TOC_FENCE, this.tocRenderer.processor);
 		// 内置大纲面板也显示虚拟编号（1.2.0，见 virtual/outlineView.ts）：大纲自己刷新时由观察器跟上；
 		// 新开 / 关闭 / 延迟加载完的大纲靠布局事件挂上或摘掉观察器。
 		this.outlineDecorator = new VirtualOutlineDecorator(this, this.app.workspace);
@@ -503,6 +511,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		this.debounceTimers.clear();
 		this.readingRenderer?.dispose();
+		this.tocRenderer?.dispose();
 		this.outlineDecorator?.dispose(); // 大纲恢复原样，不留编号属性（testplan V43）。
 		this.headingSnapshots.clear();
 		this.activeGuardNotice?.notice.hide();
@@ -2111,6 +2120,33 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 拆成独立方法：纯 addCommand 接线，业务逻辑在 copycommands.ts；也让单测能在不跑完整
 	 * onload() 的前提下单独调用、断言注册结果与回调行为。
 	 */
+	/**
+	 * 「插入目录」：命令面板 + 编辑器右键菜单，在光标处插入带 `slider` 的 `ah-toc` 块（spec §3.25、testplan V68）。
+	 * 需要编辑器焦点，阅读视图里不可用。
+	 */
+	private registerTocInsert(): void {
+		const insert = (editor: Editor): void => {
+			const cursor = editor.getCursor();
+			const line = editor.getLine(cursor.line);
+			editor.replaceSelection(tocInsertText(line.slice(0, cursor.ch), line.slice(cursor.ch)));
+		};
+		this.addCommand({
+			id: "insert-toc",
+			name: this.messages().cmdInsertToc,
+			editorCallback: (editor) => insert(editor),
+		});
+		this.registerEvent(
+			this.app.workspace.on("editor-menu", (menu, editor) => {
+				menu.addItem((item) =>
+					item
+						.setTitle(this.messages().cmdInsertToc)
+						.setIcon("list")
+						.onClick(() => insert(editor)),
+				);
+			}),
+		);
+	}
+
 	private registerCopyCommands(): void {
 		const t = this.messages();
 		// 阅读视图也要可用，故用 checkCallback 而非要求编辑器焦点的 editorCallback。
@@ -2321,6 +2357,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			}
 		}
 		this.readingRenderer?.refreshAll();
+		this.tocRenderer?.refreshAll();
 		this.outlineDecorator?.refreshAll();
 	}
 
@@ -2347,6 +2384,31 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/** 残留样式编号的悬停提示（M14，供渲染器调用）。 */
 	staleTooltip(): string {
 		return this.messages().virtualStaleTooltip;
+	}
+
+	/** 某文件 metadataCache 里的标题（文档顺序）；Quiet Outline 面板节点的下标指向这里（testplan V48）。 */
+	cachedHeadings(path: string): HeadingCache[] | null {
+		return this.app.metadataCache.getCache(path)?.headings ?? null;
+	}
+
+	/** 目录块落盘：用 `vault.process` 原子改写，`transform` 返回 `null` 表示校验没过、不改（spec §3.25）。 */
+	async processFile(path: string, transform: (content: string) => string | null): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) {
+			return;
+		}
+		await this.app.vault.process(file, (data) => transform(data) ?? data);
+	}
+
+	/** 目录块复制成超链接时用：指向 `path#锚点` 的 `obsidian://open` 地址（spec §3.25）。 */
+	headingUri(path: string, anchor: string): string {
+		const vault = encodeURIComponent(this.app.vault.getName());
+		return `obsidian://open?vault=${vault}&file=${encodeURIComponent(`${path}#${anchor}`)}`;
+	}
+
+	/** 目录块里点标题：打开 `path#锚点`（spec §3.25）。 */
+	openHeadingLink(linkText: string, sourcePath: string, newLeaf: boolean): void {
+		void this.app.workspace.openLinkText(linkText, sourcePath, newLeaf);
 	}
 
 	/** 阅读视图拿不到段落信息时读文件全文（M14 兜底）；不是 Markdown 文件或读失败返回 `null`。 */

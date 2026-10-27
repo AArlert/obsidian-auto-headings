@@ -258,6 +258,7 @@ const de: Partial<Messages> = {
 	cmdCopyOutline: "Nummerierte Gliederung kopieren",
 	cmdCopySectionLink: "Link zum aktuellen Abschnitt kopieren",
 	cmdCopySectionEmbed: "Einbettungs-Link des aktuellen Abschnitts kopieren",
+	cmdInsertToc: "Inhaltsverzeichnis einfügen",
 	cmdToggleHeadingSkip: "Nummerierung der Überschrift am Cursor auslassen / wiederherstellen",
 	cmdPromoteSection: "Aktuellen Abschnitt höherstufen",
 	cmdDemoteSection: "Aktuellen Abschnitt herabstufen",
