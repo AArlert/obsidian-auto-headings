@@ -15,6 +15,29 @@
 
 ---
 
+## 2026-10-28 Quiet Outline 面板显示仅显示编号（不 bump、未提交，交接：claude/quiet-outline-show-only-numbers-7330df）
+
+### 做了什么
+
+- **接入 Quiet Outline**（第三方，0.5.15 核对）：它是 Vue 树、没有条目对象，但节点 `id="no-N"` 的 N 即 `metadataCache` `headings` 下标；用它取行号后走与内置大纲相同的「行号 + 级别」配对。所示文件取自 `plugin.navigator.view.file`。固定开启、无设置项（`outlineView.ts` 抽出 `OutlineAdapter`，内置大纲与 Quiet Outline 各一个；`main.ts` 加 `cachedHeadings`；`styles.css` 把文字容器改 flex 让 `::before` 同行）。
+- testplan V48–V53、spec §3.22、架构目录树同步；单测 `virtual-outline.test.ts` 22 条（含 7 条 Quiet Outline 假 DOM 用例）。
+- 门槛：`docs --check` / `prettier` / `eslint` / `tsc` 绿；`vitest` 1021/1022，唯一红是已知 Windows ICU 假红。已 `npm run release` 并覆盖部署到 Oblivion 库（库内原为 1.2.6）。
+
+### 没做什么
+
+- **真机（Oblivion 库，深色主题，Quiet Outline 0.5.15）已看**：编号与标题同行、窄面板长标题换行后悬挂缩进、搜索过滤带编号、编辑加标题后面板实时更新，均正常。**未看**：浅色主题、省略设置、彩虹线开关；节点 `id` 究竟挂在哪一层没读真实 DOM（渲染正确，无重复 id 的迹象）。
+- 没写 README / user-guide（等真机确认可用后再补一句）。
+
+### 下一步
+
+- 补看浅色主题 / 省略设置后把 V53 改 ✅；用户确认后提交、合并。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/virtual-outline.test.ts`；真机见上。
+
+---
+
 ## 2026-10-27 发版 1.2.6：标题菜单层级子菜单 + 阅读视图落盘 + 菜单开关（交接：claude/title-menu-level-adjust-c3cecb → master，tag 1.2.6）
 
 ### 做了什么
@@ -39,6 +62,8 @@
 ### 验证方式
 
 - 单测见上；真机探针与用户手测见上；`git tag` 与 `manifest.json` 版本一致（Release 工作流会校验）。
+
+---
 
 ## 2026-10-24 发版 1.2.5：标题链接建议默认关 + 按重放数据收紧 + 设置页改版（issue #10，交接：claude/issue-10-feedback-49b340 → master，tag 1.2.5）
 
@@ -65,42 +90,3 @@
 ### 验证方式
 
 - `git tag` 与 `manifest.json` 版本一致（Release 工作流会校验，不一致即失败）；真机 21/21 见上一块；本轮只动版本号与文档，`src/` 未变。
-
----
-
-## 2026-10-24 补真机探针：收紧后的规则与「不选就记住」21/21（不 bump、未提交，交接：claude/issue-10-feedback-49b340）
-
-### 做了什么
-
-- 新增 `tests/probes/suggest-signals.js`：把 Q30 / Q31 / Q62 / Q63 搬到真机（loom test-vault，Obsidian 1.14.4）。临时打开建议、
-  建 `探针-AH信号` 库，21 项全过；结束时删临时文件夹，建议开关还原成测前的「关」。
-  - 触发规则那段用真编辑器打字；「不选就记住」那段改用假编辑器（`onTrigger` 只用到 `editor.getLine`），免得 Obsidian 自己的
-    触发 / 关框在两次取样之间插进来改写记忆，把断言变成掷骰子。
-- **首轮结果是假红，原因值得记**：库里 `main.js` 确实是新构建（哈希与 `release/` 一致），但插件是 05:11 加载的、构建是 05:29 拷进去的，
-  内存里跑的还是旧规则（`sg.dismissed` 不存在、6 个字母就前缀弹、英文短词不要信号）。禁用再启用插件后复跑才 21/21。
-  教训写进 `tests/probes/README.md`「怎么跑」：拷完构建必须重载插件，并附一行 `typeof` 自查。
-- 探针自身修一处：`笔记.md` 里那条出链指向的标题文件必须**先建**——链接计数按建文件那一刻的解析结果算一次，目标还不存在就漏掉，
-  要等源文件下次变动才补（`headinglinks.ts` 已有的取舍）。改成最后建「当前笔记」后 `linksFrom` 正常。
-- `doc/testplan/Q-标题链接建议与VC联动.md`：Q30 / Q31 / Q62 / Q63 的状态格由「🔲 真机手验」改为
-  「✅ 真机探针（`suggest-signals.js`，2026-10-24）」+「🔲 打字手感」——行为有真机证据了，手感仍没人看过。
-- 顺手清库（用户授权）：主工作树切回 `master`；搬走重复克隆与 10-07 的旧 `release/auto-headings.zip`，删三个多余 worktree
-  与四个已并入 master 的分支（未提交内容已 `git diff` 存成 patch）。有一个空 worktree 目录被进程占着删不掉，git 已不再登记它，无害。
-
-### 没做什么
-
-- 没合并 master、没 bump、没发版、没回 issue #10（等用户定）。
-- **打字手感没测**：弹框出现的时机、候选顺序在真实输入节奏下顺不顺，没人试过；测试库平时关着建议，探针是临时开的。
-- 手机端、旧版 Obsidian（< 1.11）的设置页没看。
-
-### 下一步
-
-- 用户拿测试库打一轮（打开「打字时建议标题链接」）→ 满意就按 `CLAUDE.md` §5.1 合并、发 1.2.5、回并关 issue #10。
-- 主力库（Oblivion）**不用**为「升级统一关一次」做任何事：那次迁移只在 `vcIntegrationMode === "off"` 时改关，它开着 VC 联动
-  （`auto`），按设计算显式选择、保持开着；把 `headingSuggestOffMigrated` 复位也是空操作，所以没动它的 `data.json`。
-- 主力库的 `vc-heading-dictionary.json` 现在只有 `{"words":[]}`（04:53 关建议时清空的），下次重载本插件会按标题重建，不用手工补。
-
-### 验证方式
-
-- 真机：经 `loom-probe` 通道跑 `suggest-signals.js` → 21/21；跑完 `探针-AH信号` 已删、`headingLinkSuggestEnabled` 仍为 `false`、
-  `main.js` 哈希与 `release/` 一致。
-- 门槛：`node scripts/docs.mjs --check` 0、`prettier --check` 0（本次只动文档 + 新增探针脚本，`src/` 未动，故未重跑 vitest）。

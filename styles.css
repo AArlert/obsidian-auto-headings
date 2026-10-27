@@ -1069,6 +1069,16 @@ button.ah-danger-text {
 	white-space: pre;
 }
 
+/* Quiet Outline 面板（testplan V48）：文字容器里是块级的标题 div，::before 要与它同行，所以容器改弹性布局。 */
+.quiet-outline .n-tree-node-content__text[data-ah-number] {
+	display: flex;
+}
+.quiet-outline .n-tree-node-content__text[data-ah-number]::before {
+	content: attr(data-ah-number);
+	white-space: pre;
+	flex: none;
+}
+
 /* ==== 1.2.2 视觉更新：标题行按钮 / 模板卡片 / 模板编辑弹窗（spec Roadmap M15）==== */
 
 /* 设置标题行右侧的「图标 + 文字」普通按钮（「添加规则」「新增模板」，L32 / L34） */

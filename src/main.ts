@@ -8,6 +8,7 @@ import {
 	type App,
 	type EditorChange,
 	type EditorRangeOrCaret,
+	type HeadingCache,
 	type MetadataCache,
 } from "obsidian";
 import {
@@ -2347,6 +2348,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 	/** 残留样式编号的悬停提示（M14，供渲染器调用）。 */
 	staleTooltip(): string {
 		return this.messages().virtualStaleTooltip;
+	}
+
+	/** 某文件 metadataCache 里的标题（文档顺序）；Quiet Outline 面板节点的下标指向这里（testplan V48）。 */
+	cachedHeadings(path: string): HeadingCache[] | null {
+		return this.app.metadataCache.getCache(path)?.headings ?? null;
 	}
 
 	/** 阅读视图拿不到段落信息时读文件全文（M14 兜底）；不是 Markdown 文件或读失败返回 `null`。 */
