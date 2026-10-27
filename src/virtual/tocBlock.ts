@@ -264,7 +264,7 @@ export interface TocBlockHost {
 }
 
 /**
- * 把目录画进容器；没有节点就什么都不画。**平铺成一个列表、缩进由每项的 `margin-left` 按级别给**（不靠嵌套
+ * 把目录画进容器；没有节点就什么都不画。**平铺成一个列表、缩进由每项的 `--ah-toc-indent`（CSS 变量）按级别给**（不靠嵌套
  * `ul` 的内边距）：嵌套列表的缩进是「祖先层数」，H3 下直接出现的 H5 会比别处 H4 下的 H5 缩得少，对不齐。
  */
 function drawTree(
@@ -281,7 +281,7 @@ function drawTree(
 		for (const node of list) {
 			const li = ul.createEl("li");
 			if (node.indent > 0) {
-				li.setAttr("style", `margin-left: calc(var(--list-indent, 2em) * ${node.indent})`);
+				li.setAttr("style", `--ah-toc-indent: ${node.indent}`);
 			}
 			const a = li.createEl("a", {
 				cls: "internal-link ah-toc-link",

@@ -1055,17 +1055,18 @@ button.ah-danger-text {
 	white-space: pre;
 }
 
-/* 只读目录块 ah-toc（spec §3.25）：普通嵌套列表，链接不加下划线，行距随正文。 */
-/* 层级滑块：在目录上方、靠左（避开实时预览里代码块右上角的 </> 按钮），平时隐藏，鼠标移入目录块 / 键盘焦点进入才淡入（V63）；隐藏时仍占一行，显隐不会让目录跳动。 */
-.ah-toc-bar {
+/* 只读目录块 ah-toc（spec §3.25）。选择器一律带 .ah-toc 前缀：Obsidian 的 `.markdown-rendered ul / li`
+   特异性更高，不加前缀我们的边距 / 缩进会被它盖掉（第一版缩进错位的根因）。 */
+
+/* 层级滑块：在目录上方、靠左（避开实时预览里代码块右上角的 </> 按钮），平时隐藏，鼠标移入目录块 /
+   键盘焦点进入才淡入（V63）；隐藏时仍占这一行，显隐不会让目录跳动。滑块本身保持原生的圆头，只收紧外围空间。 */
+.ah-toc .ah-toc-bar {
 	display: flex;
 	align-items: center;
 	gap: 0.6em;
-	height: 1.4em;
 	margin: 0;
-	/* 滑块做细做小，一行只占一个字高 */
-	--slider-thumb-height: 12px;
-	--slider-track-height: 3px;
+	padding: 0;
+	line-height: 1;
 	opacity: 0;
 	transition: opacity 0.15s ease;
 }
@@ -1075,34 +1076,45 @@ button.ah-danger-text {
 }
 /* 没有悬停能力的设备（触屏）上常显。 */
 @media (hover: none) {
-	.ah-toc-bar {
+	.ah-toc .ah-toc-bar {
 		opacity: 1;
 	}
 }
 /* 导出 PDF / 打印：目录照常出，滑块不出（V73）。 */
 @media print {
-	.ah-toc-bar {
+	.ah-toc .ah-toc-bar {
 		display: none;
 	}
 }
-.ah-toc-slider {
+.ah-toc .ah-toc-slider {
 	width: 9em;
-	height: 1.4em;
 	margin: 0;
 }
-.ah-toc-slider-label {
+.ah-toc .ah-toc-slider-label {
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	min-width: 2em;
 }
-.ah-toc-list {
+
+/* 目录列表：平铺，圆点自己画；每项缩进 = --ah-toc-indent（级别 − 最浅级别）× 1.5em，只看级别。 */
+.ah-toc .ah-toc-list {
+	list-style: none;
 	margin: 0;
-	padding-left: 1.4em;
+	padding: 0;
 }
-.ah-toc-list .ah-toc-list {
-	margin-top: 0.1em;
+.ah-toc .ah-toc-list li {
+	list-style: none;
+	position: relative;
+	margin: 0.1em 0;
+	padding-inline-start: calc(var(--ah-toc-indent, 0) * 1.5em + 1.2em);
 }
-.ah-toc-link {
+.ah-toc .ah-toc-list li::before {
+	content: "•";
+	position: absolute;
+	inset-inline-start: calc(var(--ah-toc-indent, 0) * 1.5em + 0.3em);
+	color: var(--text-faint);
+}
+.ah-toc .ah-toc-link {
 	text-decoration: none;
 }
 

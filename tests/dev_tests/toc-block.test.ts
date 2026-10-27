@@ -158,7 +158,9 @@ class FakeEl {
 			if (c.tag === "li") {
 				const a = c.children[0];
 				const num = a.children.find((x) => x.cls === "ah-virtual-number")?.text ?? "";
-				const n = Number(/\* (\d+)\)/.exec(c.attrs.get("style") ?? "")?.[1] ?? 0);
+				const n = Number(
+					/--ah-toc-indent: (\d+)/.exec(c.attrs.get("style") ?? "")?.[1] ?? 0,
+				);
 				return [`${"  ".repeat(n)}${num}${a.text}`];
 			}
 			return [];
