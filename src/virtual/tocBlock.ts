@@ -38,6 +38,8 @@ export interface TocNode {
 	children: TocNode[];
 	/** 缩进格数 = 该级别 − 收录的最浅级别：缩进只看级别，与它挂在谁下面无关（H3 下的 H5 与 H4 下的 H5 对齐）。 */
 	indent: number;
+	/** 该标题在 metadataCache `headings` 里的下标：导出 PDF 时按它对应导出 DOM 里第几个标题元素。 */
+	index: number;
 }
 
 /** 收录的级别范围（含两端）。 */
@@ -228,7 +230,8 @@ export function buildTocTree(
 	const roots: TocNode[] = [];
 	const stack: TocNode[] = [];
 	const all: TocNode[] = [];
-	for (const h of headings) {
+	for (let hi = 0; hi < headings.length; hi++) {
+		const h = headings[hi];
 		if (h.level < range.min || h.level > range.max) {
 			continue;
 		}
@@ -248,6 +251,7 @@ export function buildTocTree(
 			label,
 			children: [],
 			indent: 0,
+			index: hi,
 		};
 		while (stack.length > 0 && stack[stack.length - 1].level >= node.level) {
 			stack.pop();
@@ -286,15 +290,62 @@ export function tocCopyPayload(
 	uri: (anchor: string) => string,
 ): { text: string; html: string } {
 	const label = (n: TocNode): string => `${n.label ?? ""}${n.text}`;
-	return {
-		text: nodes.map((n) => "  ".repeat(n.indent) + label(n)).join("\n"),
-		html: nodes
-			.map(
-				(n) =>
-					`<p style="margin:0 0 0 ${n.indent * 1.5}em"><a href="${escapeHtml(uri(n.anchor))}">${escapeHtml(label(n))}</a></p>`,
-			)
-			.join(""),
-	};
+	// HTML 用**嵌套列表**：粘进 Obsidian 会被转成缩进的 Markdown 列表、粘进 Word / Notion 是多级列表。列表嵌套不能跳级，
+	// 所以深度 = min(相对缩进, 上一项深度 + 1)（跳级的项只多缩一格）；纯文本仍按真实缩进，与「复制编号大纲」逐字一致。
+	const base = nodes.reduce((m, n) => Math.min(m, n.indent), Number.MAX_SAFE_INTEGER);
+	let html = "";
+	let cur = -1;
+	for (const n of nodes) {
+		const depth = Math.min(n.indent - base, cur + 1);
+		if (depth > cur) {
+			html += "<ul>";
+		} else {
+			html += "</li>" + "</ul></li>".repeat(cur - depth);
+		}
+		html += `<li><a href="${escapeHtml(uri(n.anchor))}">${escapeHtml(label(n))}</a>`;
+		cur = depth;
+	}
+	if (cur >= 0) {
+		html += "</li>" + "</ul></li>".repeat(cur) + "</ul>";
+	}
+	return { text: nodes.map((n) => "  ".repeat(n.indent) + label(n)).join("\n"), html };
+}
+
+/** 导出 PDF 时给标题元素加的 id 前缀（`ah-h-<下标>`）。 */
+export const EXPORT_ID_PREFIX = "ah-h-";
+
+/** 导出 DOM 的最小元素形状（单测传假对象）。 */
+interface ExportElLike {
+	getAttribute(name: string): string | null;
+	setAttribute(name: string, value: string): void;
+	closest(selector: string): unknown;
+}
+
+/**
+ * 导出 PDF 专用：给导出 DOM 里**第 k 个**（不在嵌入笔记里的）带 `data-heading` 的标题元素加 `id=ah-h-k`，k 与
+ * metadataCache `headings` 的下标一致，目录项的 `href="#ah-h-k"` 才有落点。
+ *
+ * 为什么要这样：Obsidian 导出时对**所有** `a.internal-link` 删掉 `href`（见 app.js `print`），内部链接在 PDF 里一律点不动；
+ * 且它渲染的标题元素只有 `data-heading`、没有 `id`，普通 `#标题` 锚点在 PDF 里没有目标。所以导出时目录项改成不带
+ * `internal-link` 类的普通 `a`，并在这里补 id。数量对不上（metadataCache 与导出渲染对标题的认定不同，如引用块里的标题）
+ * 就**不补**、返回 `false`，宁可点不动也不跳错。
+ */
+export function assignExportHeadingIds(
+	root: { querySelectorAll(selector: string): ArrayLike<unknown> },
+	expected: number,
+): boolean {
+	const els = (Array.from(root.querySelectorAll("[data-heading]")) as ExportElLike[]).filter(
+		(e) => !e.closest(".internal-embed, .markdown-embed"),
+	);
+	if (els.length !== expected) {
+		return false;
+	}
+	els.forEach((e, k) => {
+		if (!e.getAttribute("id")) {
+			e.setAttribute("id", `${EXPORT_ID_PREFIX}${k}`);
+		}
+	});
+	return true;
 }
 
 /** 目录块渲染需要插件提供的能力（接口隔离，便于单测）。 */
@@ -322,6 +373,7 @@ function drawTree(
 	nodes: readonly TocNode[],
 	path: string,
 	host: TocBlockHost,
+	exportMode = false,
 ): Array<{ li: HTMLElement; node: TocNode }> {
 	const entries: Array<{ li: HTMLElement; node: TocNode }> = [];
 	if (nodes.length === 0) {
@@ -335,21 +387,33 @@ function drawTree(
 			if (node.indent > 0) {
 				li.setAttr("style", `--ah-toc-indent: ${node.indent}`);
 			}
-			const a = li.createEl("a", {
-				cls: "internal-link ah-toc-link",
-				href: `#${node.anchor}`,
-				// data-href 是 Obsidian 识别内部链接的依据：悬浮预览、导出 PDF 时转成可点的文档内链接都靠它。
-				attr: { "data-href": `#${node.anchor}`, target: "_blank", rel: "noopener" },
-			});
+			// 导出 PDF：Obsidian 会删掉所有 `a.internal-link` 的 href，所以导出时用普通 `a` + `#ah-h-下标`（见 assignExportHeadingIds）。
+			const a = exportMode
+				? li.createEl("a", {
+						cls: "ah-toc-link",
+						href: `#${EXPORT_ID_PREFIX}${node.index}`,
+					})
+				: li.createEl("a", {
+						cls: "internal-link ah-toc-link",
+						href: `#${node.anchor}`,
+						// data-href 是 Obsidian 识别内部链接的依据：悬浮预览等都靠它。
+						attr: { "data-href": `#${node.anchor}`, target: "_blank", rel: "noopener" },
+					});
 			if (node.label !== null) {
 				a.createSpan({ cls: "ah-virtual-number", text: node.label });
 			}
 			a.appendText(node.text);
-			a.addEventListener("click", (evt) => {
-				evt.preventDefault();
-				evt.stopPropagation(); // 有了 data-href，别让 Obsidian 自己的点击处理再开一次
-				host.openHeadingLink(`${path}#${node.anchor}`, path, evt.ctrlKey || evt.metaKey);
-			});
+			if (!exportMode) {
+				a.addEventListener("click", (evt) => {
+					evt.preventDefault();
+					evt.stopPropagation(); // 有了 data-href，别让 Obsidian 自己的点击处理再开一次
+					host.openHeadingLink(
+						`${path}#${node.anchor}`,
+						path,
+						evt.ctrlKey || evt.metaKey,
+					);
+				});
+			}
 			walk(node.children);
 		}
 	};
@@ -372,6 +436,13 @@ class TocBlock extends MarkdownRenderChild {
 	/** 当前画着的目录项（li 与它对应的节点）：复制时据此取选中的项。 */
 	private entries: Array<{ li: HTMLElement; node: TocNode }> = [];
 	private copyHooked = false;
+
+	/** 导出 PDF 时的根（Obsidian 把导出内容放进 `div.print`）；普通视图返回 `null`。 */
+	private exportRoot():
+		| (HTMLElement & { querySelectorAll(s: string): NodeListOf<Element> })
+		| null {
+		return (this.el.closest?.(".print") ?? null) as never;
+	}
 	/** 上一次画出来的内容签名：没变就不动 DOM（正文里打字不引起目录重绘，避免无谓的抖动）。 */
 	private signature = "";
 
@@ -409,6 +480,11 @@ class TocBlock extends MarkdownRenderChild {
 					: this.owner.host.virtualNumberingFor(this.path, raw.replace(/\r\n/g, "\n"));
 			this.data = { headings, labels };
 			this.paint();
+			const root = this.exportRoot();
+			if (root) {
+				// 此刻（异步续跑）整篇导出 DOM 已经拼好：给标题补 id，目录项的 #ah-h-k 才有落点。
+				assignExportHeadingIds(root, headings.length);
+			}
 		} catch {
 			/* 取不到信息：保持原样，不抛（V60） */
 		}
@@ -456,7 +532,13 @@ class TocBlock extends MarkdownRenderChild {
 			const idx = levels.indexOf(chosen);
 			this.thumb?.setAttr("style", `--ah-toc-pos: ${idx / (levels.length - 1)}`);
 		}
-		this.entries = drawTree(this.body, tree, this.path, this.owner.host);
+		this.entries = drawTree(
+			this.body,
+			tree,
+			this.path,
+			this.owner.host,
+			this.exportRoot() !== null,
+		);
 		this.hookCopy();
 	}
 

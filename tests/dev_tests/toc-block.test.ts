@@ -17,6 +17,7 @@ import {
 	parseTocSlider,
 	pickTocLevel,
 	rewriteTocBlock,
+	assignExportHeadingIds,
 	tocCopyPayload,
 	tocIndexFromX,
 	tocInsertText,
@@ -137,6 +138,11 @@ class FakeEl {
 	addClass(_c: string): void {}
 	getBoundingClientRect(): { left: number; width: number } {
 		return { left: 0, width: 114 };
+	}
+	/** 单测里用来模拟「在导出容器 div.print 里」：设成非 null 即可。 */
+	closestPrint: unknown = null;
+	closest(_selector: string): unknown {
+		return this.closestPrint;
 	}
 	setPointerCapture(): void {}
 	releasePointerCapture(): void {}
@@ -625,8 +631,18 @@ describe("选中复制：与「复制编号大纲」同格式 + 超链接（test
 		);
 		expect(text).toBe(buildNumberedOutline(doc, labels).text);
 		expect(html).toContain('<a href="u:甲">1 甲</a>');
-		expect(html).toContain("margin:0 0 0 4.5em"); // 甲一一一：H5 比最浅 H2 深 3 级 × 1.5em
-		expect(html).toContain("2 乙 &amp; &lt;b&gt;");
+		// 嵌套列表（不能跳级）：甲一一一比甲一多跳了两级，但列表里只多嵌一层
+		expect(html).toBe(
+			[
+				"<ul>",
+				'<li><a href="u:甲">1 甲</a>',
+				'<ul><li><a href="u:甲一">1.1 甲一</a>',
+				'<ul><li><a href="u:甲一一一">1.1.0.1 甲一一一</a></li></ul>',
+				"</li></ul></li>",
+				'<li><a href="u:乙 &amp; &lt;b&gt;">2 乙 &amp; &lt;b&gt;</a></li>',
+				"</ul>",
+			].join(""),
+		);
 	});
 
 	it("选中部分目录项 → 只复制这些项；没选中就不拦（V74）", async () => {
@@ -663,6 +679,56 @@ describe("选中复制：与「复制编号大纲」同格式 + 超链接（test
 		const evt2 = { preventDefault: vi.fn(), clipboardData: { setData: () => {} } };
 		copy?.(evt2);
 		expect(evt2.preventDefault).not.toHaveBeenCalled(); // 没选中：保持默认行为
+	});
+});
+
+describe("导出 PDF：目录项链接与标题 id（testplan V76）", () => {
+	it("assignExportHeadingIds：按顺序给非嵌入的标题加 ah-h-k；数量对不上不补（V76）", () => {
+		const mk = (embedded: boolean) => {
+			const attrs = new Map<string, string>();
+			return {
+				attrs,
+				getAttribute: (k: string) => attrs.get(k) ?? null,
+				setAttribute: (k: string, v: string) => void attrs.set(k, v),
+				closest: () => (embedded ? {} : null),
+			};
+		};
+		const els = [mk(false), mk(true), mk(false), mk(false)];
+		expect(assignExportHeadingIds({ querySelectorAll: () => els }, 3)).toBe(true);
+		expect(els.map((e) => e.attrs.get("id") ?? null)).toEqual([
+			"ah-h-0",
+			null,
+			"ah-h-1",
+			"ah-h-2",
+		]);
+		const els2 = [mk(false), mk(false)];
+		expect(assignExportHeadingIds({ querySelectorAll: () => els2 }, 3)).toBe(false);
+		expect(els2.map((e) => e.attrs.get("id") ?? null)).toEqual([null, null]);
+	});
+
+	it("导出时目录项是不带 internal-link 类的普通 a、不挂点击；普通视图保持 internal-link（V76）", async () => {
+		const doc = ["## 甲", "### 甲一", "## 乙"].join("\n");
+		const host = makeHost({ "v.md": doc }, new Set(["v.md"]));
+		const renderer = new TocBlockRenderer(host);
+		const normal = mount(renderer, "", "v.md");
+		await normal.done;
+		const aNormal = normal.el.children[0].children[0].children[0].children[0];
+		expect(aNormal.cls).toBe("internal-link ah-toc-link");
+
+		const exp = new FakeEl();
+		exp.closestPrint = {};
+		await renderer.processor(
+			"",
+			exp as unknown as HTMLElement,
+			{
+				sourcePath: "v.md",
+				getSectionInfo: () => null,
+				addChild: () => {},
+			} as never,
+		);
+		const links = exp.children[0].children[0].children.map((li) => li.children[0]);
+		expect(links.map((a) => a.cls)).toEqual(["ah-toc-link", "ah-toc-link", "ah-toc-link"]);
+		expect(links.every((a) => a.listeners.size === 0)).toBe(true);
 	});
 });
 

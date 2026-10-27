@@ -1146,6 +1146,8 @@ button.ah-danger-text {
 }
 .ah-toc .ah-toc-link {
 	text-decoration: none;
+	/* 导出 PDF 时目录项是普通 a（没有 internal-link 类），颜色要自己给 */
+	color: var(--link-color);
 }
 
 /* 文件里还留着本插件以前写入的旧编号：虚线下划线提示，悬停有说明。 */

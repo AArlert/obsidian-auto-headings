@@ -46,6 +46,12 @@
 - **选中复制**：拦 `copy`，`text/plain` 与「复制编号大纲」同格式（带编号 / 缩进），`text/html` 带 `obsidian://` 超链接（`headingUri`）。
 - **不抖动**：重画前算内容签名，没变不动 DOM（回答「文首放 toc、后面加标题会不会挤视角」：改字不会；加删标题多 / 少一行是固有代价）。
 
+### 第四轮（用户实测反馈）
+
+- **复制粘进 Obsidian 的排版**：第一版 HTML 是带左边距的段落，Obsidian 转 Markdown 后层级全丢、一行一段 → 改成**嵌套列表**（深度 = min(相对缩进, 上一项 + 1)），纯文本仍与「复制编号大纲」逐字一致。
+- **导出 PDF 里仍点不动**：从 `app.js` 查到 Obsidian 导出对所有 `a.internal-link` 执行 `removeAttribute("href")`，`data-href` 帮不上；标题元素也没有 `id`。改为导出时（块在 `div.print` 里）用普通 `a` + `#ah-h-下标`，并在块异步续跑时给导出 DOM 里对应标题补 `id`（`assignExportHeadingIds`，数量对不上不补）。依赖 Chromium 把 `<base>` 下指向本文档的 `#id` 转成 PDF 内部跳转，**待用户导出复测**。
+- 用户反馈：新增 / 删除标题目录不影响视图（内容签名不变不重绘 + 增删时不抖），好。
+
 ### 没做什么
 
 - 未试：写入模式文件的点击跳转（含 WJ 锚点）、边改边看的实时更新、导出 PDF、停用插件后块还原、与 Automatic Table Of Contents 同装（该库里它没启用）、浅色主题。
