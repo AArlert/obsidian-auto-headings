@@ -1453,6 +1453,14 @@ export default class AutoHeadingsPlugin extends Plugin {
 		// 1.2.2（testplan J24）：一句话带处数，「查看并清理」另起一行。处数与清理预览同一口径
 		// （previewForeignNumberingCleanup），点进去看到的条数与提示一致。
 		const count = previewForeignNumberingCleanup(content).length;
+		// J26：全是「标题本身就是编号」（`# 第一章`）时清理框里没有可剥的条目，只说明原因、不给「查看并清理」。
+		if (count === 0) {
+			this.activeGuardNotice = {
+				path,
+				notice: new Notice(t.noticeNumberOnlyGuard(this.isVirtualFile(path)), 0),
+			};
+			return;
+		}
 		let link!: HTMLAnchorElement;
 		const frag = createFragment((el) => {
 			// 链接另起一行由 styles.css 的 `.ah-foreign-guard-link { display: block }` 负责。

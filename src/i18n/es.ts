@@ -438,6 +438,8 @@ const es: Partial<Messages> = {
 	foreignGuardConfirmCount: (count) => `Limpiar ${count}`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Esta nota tiene ${count} encabezado(s) que parecen numerados a mano; esta vez no se ${virtual ? "mostró" : "aplicó"} numeración.`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`Los encabezados de esta nota ya son números (p. ej., «Capítulo 1»); esta vez no se ${virtual ? "mostró" : "aplicó"} numeración.`,
 };
 
 export default es;

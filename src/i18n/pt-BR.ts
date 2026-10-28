@@ -434,6 +434,8 @@ const ptBR: Partial<Messages> = {
 	foreignGuardConfirmCount: (count) => `Limpar ${count}`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Esta nota tem ${count} cabeçalho(s) que parecem numeração manual; desta vez a numeração não foi ${virtual ? "exibida" : "aplicada"}.`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`Os cabeçalhos desta nota já são números (ex.: "Capítulo 1"); desta vez a numeração não foi ${virtual ? "exibida" : "aplicada"}.`,
 };
 
 export default ptBR;

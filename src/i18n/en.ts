@@ -428,6 +428,8 @@ const en: Messages = {
 	foreignGuardConfirmCount: (count) => `Clean up ${count}`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`${count} ${count === 1 ? "heading looks" : "headings look"} hand-numbered here, so numbers were ${virtual ? "not shown" : "not added"} this time.`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`The headings here are numbers themselves (like "Chapter 1"), so numbers were ${virtual ? "not shown" : "not added"} this time.`,
 };
 
 export default en;

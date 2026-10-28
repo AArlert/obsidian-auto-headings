@@ -434,6 +434,8 @@ const ru: Partial<Messages> = {
 	foreignGuardConfirmCount: (count) => `Очистить: ${count}`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`В этой заметке заголовков, похожих на ручную нумерацию: ${count}; на этот раз нумерация не ${virtual ? "показана" : "применена"}.`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`Заголовки в этой заметке сами являются номерами (например, «Глава 1»); на этот раз нумерация не ${virtual ? "показана" : "применена"}.`,
 };
 
 export default ru;
