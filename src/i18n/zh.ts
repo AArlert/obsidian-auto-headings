@@ -400,6 +400,8 @@ const zh: Messages = {
 	foreignGuardConfirmCount: (count) => `确认清理 ${count} 处`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`这篇有 ${count} 处标题像是手写编号，本次没有${virtual ? "显示" : "自动"}编号。`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`这篇的标题本身就是编号（如「第一章」），本次没有${virtual ? "显示" : "自动"}编号。`,
 };
 
 export default zh;

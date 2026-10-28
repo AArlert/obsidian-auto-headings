@@ -14,6 +14,7 @@ import { parseHeadings } from "./parser";
 import {
 	cleanDemotedResidue,
 	hasPluginPrefix,
+	isNumberOnlyHeading,
 	stripForeignNumbering,
 	stripPrefixBroad,
 	WORD_JOINER,
@@ -169,7 +170,9 @@ const CLAIMED_LINE_RE = new RegExp(`^[ \\t]*(?:#{1,6}[ \\t]+)?${WORD_JOINER}`, "
  * 判定条件**两者都满足**才为 true：
  * - 插件从未给这份内容写过编号：没有任何行以 {@link WORD_JOINER} 哨兵起头、也没有标题带插件前缀（避免把
  *   「已被本插件接管、只是新增了一个以数字起头的标题」误判为迁移场景，见 spec §3.10 相邻讨论）；
- * - 至少一个标题被 {@link stripForeignNumbering} 判定为「像外来编号」（剥离结果与原文不同）。
+ * - 至少一个标题被 {@link stripForeignNumbering} 判定为「像外来编号」（剥离结果与原文不同），**或**过半标题
+ *   像手写编号——后者把「标题本身就是编号」（`# 第一章`，{@link isNumberOnlyHeading}）也算进来（testplan J25）。
+ *   这类标题只按过半算、不按「一个就算」：它剥不掉，清理框里没有出口，个别一个就拦住整篇会永远没有编号。
  *
  * **已知风险**：与 {@link stripForeignNumbering} 共享同一误伤面（如 `## API 设计`）——但落在这里
  * 代价是「跳过写入 + 提示」而非「内容被吃」，比清理命令本身更安全，故接受。
@@ -190,7 +193,9 @@ export function hasUnclaimedForeignNumbering(content: string): boolean {
 	if (headings.some((h) => hasPluginPrefix(h.rawText))) {
 		return false;
 	}
-	return headings.some((h) => looksForeignNumbered(h.rawText));
+	return (
+		headings.some((h) => looksForeignNumbered(h.rawText)) || isMostlyForeignHeadings(headings)
+	);
 }
 
 /**
@@ -212,12 +217,21 @@ export function looksForeignNumbered(rawText: string): boolean {
  * 以 WJ 打头的标题是本插件写过的残留，不算外来编号。
  */
 export function isMostlyForeignNumbered(content: string): boolean {
-	const headings = parseHeadings(content);
+	return isMostlyForeignHeadings(parseHeadings(content));
+}
+
+/**
+ * {@link isMostlyForeignNumbered} 的本体：超过一半的标题带手写编号，或**本身就是编号**（`# 第一章`，
+ * {@link isNumberOnlyHeading}；剥不掉，但套模板会叠成「第一章 第一章」，testplan J25 / V77）。
+ */
+function isMostlyForeignHeadings(headings: ReturnType<typeof parseHeadings>): boolean {
 	if (headings.length === 0) {
 		return false;
 	}
 	const foreign = headings.filter(
-		(h) => !h.rawText.startsWith(WORD_JOINER) && looksForeignNumbered(h.rawText),
+		(h) =>
+			!h.rawText.startsWith(WORD_JOINER) &&
+			(looksForeignNumbered(h.rawText) || isNumberOnlyHeading(h.rawText)),
 	).length;
 	return foreign * 2 > headings.length;
 }

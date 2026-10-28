@@ -463,4 +463,6 @@ export interface Messages {
 	foreignGuardUndoHint: string;
 	foreignGuardConfirmCount: (count: number) => string;
 	noticeForeignGuardCount: (count: number, virtual: boolean) => string;
+	/** J25 / J26：外来编号守卫命中但没有可清理的条目（标题本身就是编号，如「第一章」）。 */
+	noticeNumberOnlyGuard: (virtual: boolean) => string;
 }

@@ -423,3 +423,24 @@ export function stripForeignNumbering(rawText: string): string {
 	const pattern = new RegExp(`^${cjkPrefix}${open}${numberPattern}${cjkUnit}${trail}`);
 	return rawText.replace(pattern, "").replace(/\s+$/, "");
 }
+
+/**
+ * 标题**整个就是一个编号**、没有别的文字（`第一章` / `第3节` / `一、` / `1.` / `(1)` / `②`）——
+ * {@link stripForeignNumbering} 剥不了它（剥完标题就空了），但再套模板会叠成「第一章 第一章」（testplan J25 / V77）。
+ *
+ * 只认阿拉伯数字 / 中文数字 / 圈码，且须带至少一个编号标志：`第`、量词（章 / 节…）、括号、末尾标点，或本身是圈码。
+ * 故 `2024`、`三` 这类可能是真实标题的纯数，以及 `API.`、`Summary:` 这类字母词都不算。
+ */
+export function isNumberOnlyHeading(rawText: string): boolean {
+	const circled = "[\\u2460-\\u2473\\u3251-\\u325F\\u32B1-\\u32BF]";
+	const token = `(?:\\d+|[〇零一二三四五六七八九十百千万亿兆]+|${circled})`;
+	const number = `(?:${token}${NUMBER_SEPARATOR_CLASS}+)*${token}`;
+	const m = new RegExp(
+		`^(第)?[(（\\[【〔《〈]?(${number})([章节條条讲講篇部回卷课課])?([)）\\]】〕》〉])?([.,;:、，。．·：；-]*)$`,
+	).exec(rawText.trim());
+	if (!m) {
+		return false;
+	}
+	const [, di, num, unit, close, punct] = m;
+	return Boolean(di || unit || close || punct || new RegExp(`^${circled}$`).test(num));
+}

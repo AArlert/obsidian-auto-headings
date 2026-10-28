@@ -421,6 +421,8 @@ const ja: Partial<Messages> = {
 	foreignGuardConfirmCount: (count) => `${count} 件を整理する`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`このノートには手書きの番号らしき見出しが ${count} 件あり、今回は${virtual ? "表示" : "自動採番"}されませんでした。`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`このノートの見出しはそれ自体が番号（「第一章」など）なので、今回は${virtual ? "表示" : "自動採番"}されませんでした。`,
 };
 
 export default ja;

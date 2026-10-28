@@ -441,6 +441,8 @@ const de: Partial<Messages> = {
 	foreignGuardConfirmCount: (count) => `${count} bereinigen`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Diese Notiz hat ${count} Überschrift(en), die wie handgeschriebene Nummerierung aussehen; diesmal wurde nicht ${virtual ? "angezeigt" : "automatisch nummeriert"}.`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`Die Überschriften dieser Notiz sind selbst schon Nummern (z. B. „Kapitel 1“); diesmal wurde nicht ${virtual ? "angezeigt" : "automatisch nummeriert"}.`,
 };
 
 export default de;

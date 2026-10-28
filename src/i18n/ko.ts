@@ -406,6 +406,8 @@ const ko: Partial<Messages> = {
 	foreignGuardConfirmCount: (count) => `${count}개 정리`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`이 노트에는 직접 쓴 번호로 보이는 제목이 ${count}개 있어, 이번에는 번호를 ${virtual ? "표시하" : "자동으로 매기"}지 않았습니다.`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`이 노트의 제목은 그 자체가 번호(예: "제1장")여서, 이번에는 번호를 ${virtual ? "표시하" : "자동으로 매기"}지 않았습니다.`,
 };
 
 export default ko;

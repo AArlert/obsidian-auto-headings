@@ -391,6 +391,8 @@ const zhTW: Partial<Messages> = {
 	foreignGuardConfirmCount: (count) => `確認清理 ${count} 處`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`這篇有 ${count} 處標題像是手寫編號，本次沒有${virtual ? "顯示" : "自動"}編號。`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`這篇的標題本身就是編號（如「第一章」），本次沒有${virtual ? "顯示" : "自動"}編號。`,
 };
 
 export default zhTW;

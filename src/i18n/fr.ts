@@ -436,6 +436,8 @@ const fr: Partial<Messages> = {
 	foreignGuardConfirmCount: (count) => `Nettoyer ${count}`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Cette note a ${count} titre(s) qui ressemblent à une numérotation manuelle ; cette fois, la numérotation n'a pas été ${virtual ? "affichée" : "appliquée"}.`,
+	noticeNumberOnlyGuard: (virtual) =>
+		`Les titres de cette note sont déjà des numéros (par ex. « Chapitre 1 ») ; cette fois, la numérotation n'a pas été ${virtual ? "affichée" : "appliquée"}.`,
 };
 
 export default fr;

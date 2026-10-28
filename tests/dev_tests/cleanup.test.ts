@@ -7,7 +7,12 @@ import {
 	isMostlyForeignNumbered,
 	previewForeignNumberingCleanup,
 } from "../../src/cleanup";
-import { renumberContent, DEFAULT_TEMPLATE, WORD_JOINER } from "../../src/numbering";
+import {
+	renumberContent,
+	DEFAULT_TEMPLATE,
+	isNumberOnlyHeading,
+	WORD_JOINER,
+} from "../../src/numbering";
 
 describe("clearNumberingContent（M6 H 类场景）", () => {
 	// H1: 对已编号文件执行清除 → 所有前缀剥成裸标题
@@ -442,5 +447,44 @@ describe("isMostlyForeignNumbered：仅显示模式的外来编号判定（M14�
 
 	it("没有标题 → 不算", () => {
 		expect(isMostlyForeignNumbered("正文")).toBe(false);
+	});
+});
+
+describe("标题本身就是编号（testplan J25 / J26 / V77）", () => {
+	it("isNumberOnlyHeading：带 第 / 量词 / 括号 / 末尾标点 / 圈码的纯编号才算", () => {
+		for (const t of [
+			"第一章",
+			"第3节",
+			"一、",
+			"1.",
+			"(1)",
+			"（一）",
+			"1)",
+			"②",
+			"1.2.",
+			"第十二回 ",
+		]) {
+			expect(isNumberOnlyHeading(t), t).toBe(true);
+		}
+		for (const t of ["2024", "三", "1.2", "API.", "Summary:", "第一章 概述", "概述", "(1"]) {
+			expect(isNumberOnlyHeading(t), t).toBe(false);
+		}
+	});
+
+	it("V77：过半标题本身就是编号 → 仅显示模式视同外来编号（不叠「第一章 第一章」）", () => {
+		const demo =
+			"# 第一章\n正文一段。\n## 第一节\n内容。\n## 第二节\n更多内容。\n# 第二章\n结束。";
+		expect(isMostlyForeignNumbered(demo)).toBe(true);
+		expect(isMostlyForeignNumbered("# 第一章\n## 背景\n## 方法")).toBe(false);
+	});
+
+	it("J25：写入模式守卫——过半才拦，个别一个照常编号", () => {
+		expect(hasUnclaimedForeignNumbering("# 第一章\n## 第一节\n# 第二章")).toBe(true);
+		expect(hasUnclaimedForeignNumbering("# 第一章\n## 背景\n## 方法")).toBe(false);
+		expect(hasUnclaimedForeignNumbering("# 2024\n## 背景")).toBe(false);
+	});
+
+	it("J26：全是纯编号时清理预览没有条目（提示据此改文案、不给清理链接）", () => {
+		expect(previewForeignNumberingCleanup("# 第一章\n## 第一节\n# 第二章")).toEqual([]);
 	});
 });
