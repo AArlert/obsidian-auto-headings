@@ -2,7 +2,9 @@
  * 模板存储（Milestone 3）。
  *
  * 负责模板文件的增删改查：每个模板保存为插件文件夹 `templates/` 子目录下的独立
- * `.json` 文件。首次使用时自动创建该目录并写入内置默认模板 `default.json`。
+ * `.json` 文件。目录**懒建**：直到第一次有模板要落盘才创建；在此之前默认模板只在内存（内置默认）。
+ * 为什么不在加载时就建：新装判据看 `templates/` 在不在（spec §3.22「新装与升级」），插件自己一建，
+ * 下次启动就把没改过设置的新用户认成老用户（testplan V5 / V78）。
  *
  * 内存中以「模板名 → 模板」的有序映射维护全部模板（默认模板恒为第一项）；
  * 所有写操作即时落盘（`app.vault.adapter`）。GUI 直接操作本存储。
@@ -33,10 +35,21 @@ export class TemplateStore {
 	/** 模板名 → 模板的有序映射（插入序即面板显示序；默认模板恒在最前）。 */
 	private templates = new Map<string, Template>();
 
-	constructor(adapter: DataAdapter, pluginDir: string) {
+	/** `templates/` 是否已确认存在（避免每次写入都探测）。 */
+	private dirReady = false;
+
+	/**
+	 * 第一次建 `templates/` **之前**调用（testplan V79）：主插件借此先落盘 data.json。否则新装用户
+	 * 只改了模板（如只改白名单、新建后取消）时，磁盘上「有 `templates/`、无 data.json」，又会被认成老用户。
+	 * 先 data.json 后目录：中途失败最多是「有设置、没模板」，安全。
+	 */
+	private readonly beforeCreateDir?: () => Promise<void>;
+
+	constructor(adapter: DataAdapter, pluginDir: string, beforeCreateDir?: () => Promise<void>) {
 		this.adapter = adapter;
 		this.pluginDir = pluginDir;
 		this.templatesDir = normalizePath(`${pluginDir}/templates`);
+		this.beforeCreateDir = beforeCreateDir;
 	}
 
 	/** 模板文件的完整路径（由模板名安全化得来）。 */
@@ -45,17 +58,10 @@ export class TemplateStore {
 	}
 
 	/**
-	 * 初始化：确保 `templates/` 目录与 `default.json` 存在，然后载入全部模板到内存。
-	 * 在插件 `onload` 时调用一次。
+	 * 初始化：载入全部模板到内存。在插件 `onload` 时调用一次。**不建目录、不写文件**（见文件头）；
+	 * `default.json` 缺失时默认模板取内置默认。
 	 */
 	async init(): Promise<void> {
-		if (!(await this.adapter.exists(this.templatesDir))) {
-			await this.adapter.mkdir(this.templatesDir);
-		}
-		const defaultPath = normalizePath(`${this.templatesDir}/${DEFAULT_TEMPLATE_FILENAME}`);
-		if (!(await this.adapter.exists(defaultPath))) {
-			await this.adapter.write(defaultPath, serializeTemplate(createDefaultTemplate()));
-		}
 		await this.reload();
 	}
 
@@ -66,8 +72,9 @@ export class TemplateStore {
 		// 默认模板始终存在且置顶；缺失或损坏时回退为内置默认。
 		loaded.set(DEFAULT_TEMPLATE_NAME, await this.readOrDefault());
 
-		const listing = await this.adapter.list(this.templatesDir);
-		for (const filePath of listing.files) {
+		this.dirReady = await this.adapter.exists(this.templatesDir);
+		const files = this.dirReady ? (await this.adapter.list(this.templatesDir)).files : [];
+		for (const filePath of files) {
 			if (!filePath.toLowerCase().endsWith(".json")) {
 				continue;
 			}
@@ -107,6 +114,18 @@ export class TemplateStore {
 		} catch {
 			return null;
 		}
+	}
+
+	/** 写模板前确保 `templates/` 存在；第一次创建前先调 {@link beforeCreateDir}。 */
+	private async ensureDir(): Promise<void> {
+		if (this.dirReady) {
+			return;
+		}
+		if (!(await this.adapter.exists(this.templatesDir))) {
+			await this.beforeCreateDir?.();
+			await this.adapter.mkdir(this.templatesDir);
+		}
+		this.dirReady = true;
 	}
 
 	/** 取路径的最后一段（文件名）。 */
@@ -162,7 +181,9 @@ export class TemplateStore {
 		const tpl = createDefaultTemplate();
 		tpl.name = this.nextUntitledName();
 		this.templates.set(tpl.name, tpl);
-		void this.adapter.write(this.filePath(tpl.name), serializeTemplate(tpl)).catch(() => {});
+		void this.ensureDir()
+			.then(() => this.adapter.write(this.filePath(tpl.name), serializeTemplate(tpl)))
+			.catch(() => {});
 		return tpl;
 	}
 
@@ -171,6 +192,7 @@ export class TemplateStore {
 	 */
 	async save(template: Template): Promise<void> {
 		this.templates.set(template.name, template);
+		await this.ensureDir();
 		await this.adapter.write(this.filePath(template.name), serializeTemplate(template));
 	}
 
@@ -231,6 +253,7 @@ export class TemplateStore {
 		this.templates = rebuilt;
 
 		// 先写新文件，再删旧文件（即便文件名因安全化后相同，也以覆写为准）。
+		await this.ensureDir();
 		await this.adapter.write(this.filePath(trimmed), serializeTemplate(tpl));
 		const newPath = this.filePath(trimmed);
 		if (oldPath !== newPath && (await this.adapter.exists(oldPath))) {

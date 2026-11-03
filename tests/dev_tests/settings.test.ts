@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import AutoHeadingsPlugin from "../../src/main";
+import { TemplateStore } from "../../src/templates/TemplateStore";
+import { FakeDisk, PLUGIN_DIR } from "./fake-disk";
 import {
 	DEFAULT_SETTINGS,
 	clampDebounceDelay,
@@ -53,11 +53,7 @@ describe("Backlink 同步默认值（0.7.11 曝光度决策）", () => {
  * 用假 adapter 模拟插件目录下 templates/ 在不在。
  */
 describe("M14：新装默认仅显示，升级保持写入", () => {
-	function makeLoadable(
-		data: unknown,
-		hasTemplatesDir: boolean,
-		localStore: Map<string, unknown> = new Map(),
-	) {
+	function makeLoadable(data: unknown, hasTemplatesDir: boolean) {
 		const PluginCtor = AutoHeadingsPlugin as unknown as new (
 			app: unknown,
 			manifest: unknown,
@@ -68,8 +64,6 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		const app = {
 			vault: { configDir: ".obsidian", adapter: { exists } },
 			workspace: { getLeavesOfType: () => [] },
-			loadLocalStorage: (key: string) => localStore.get(key) ?? null,
-			saveLocalStorage: (key: string, value: unknown) => localStore.set(key, value),
 		};
 		const plugin = new PluginCtor(app, { id: "auto-headings", dir: "plugins/auto-headings" });
 		const saveData = vi.fn(async () => {});
@@ -80,6 +74,28 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		host.loadData = async () => data;
 		host.saveData = saveData;
 		return { plugin, exists, saveData };
+	}
+
+	/** 让插件的 loadData / saveData 读写假磁盘上的 data.json（V78 / V79 走真实重启链路）。 */
+	function makeOnDisk(disk: FakeDisk) {
+		const PluginCtor = AutoHeadingsPlugin as unknown as new (
+			app: unknown,
+			manifest: unknown,
+		) => AutoHeadingsPlugin;
+		const app = {
+			vault: { configDir: ".obsidian", adapter: disk },
+			workspace: { getLeavesOfType: () => [] },
+		};
+		const plugin = new PluginCtor(app, { id: "auto-headings", dir: PLUGIN_DIR });
+		const dataPath = `${PLUGIN_DIR}/data.json`;
+		const host = plugin as unknown as {
+			loadData(): Promise<unknown>;
+			saveData(d: unknown): Promise<void>;
+		};
+		host.loadData = async () =>
+			(await disk.exists(dataPath)) ? JSON.parse(await disk.read(dataPath)) : null;
+		host.saveData = (d) => disk.write(dataPath, JSON.stringify(d));
+		return { plugin };
 	}
 
 	it("V1：无 data.json 且无 templates/ → 根规则为仅显示", async () => {
@@ -130,48 +146,39 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		expect(plugin.settings.pathRules).toEqual([{ pattern: "/", template: "默认" }]);
 	});
 
-	// V78：首次加载建好 templates/、data.json 又不落盘，第二次启动不能被当成老用户切到写入。
-	it("V78：新装后不改设置再启动 → 仍是仅显示（本机标记优先于目录判据）", async () => {
-		const store = new Map<string, unknown>();
-		const first = makeLoadable(undefined, false, store);
+	// V78：真实链路——插件加载 + TemplateStore.init 在同一块假磁盘上跑两遍，第二遍不能被认成老用户。
+	it("V78：新装后不改设置再启动 → 仍是仅显示", async () => {
+		const disk = new FakeDisk();
+		for (let launch = 0; launch < 3; launch++) {
+			const { plugin } = makeOnDisk(disk);
+			await plugin.loadSettings();
+			expect(plugin.settings.pathRules[0].mode).toBe("virtual");
+			await new TemplateStore(disk.asAdapter(), PLUGIN_DIR, () =>
+				plugin.saveSettings(),
+			).init();
+		}
+		expect(disk.paths()).toEqual([]); // 磁盘上什么都没写：另一台设备同步过去也是空的，同样判为新装。
+	});
+
+	it("V79：新装后第一次写模板 → 先落盘 data.json 再建目录，之后重启仍是仅显示", async () => {
+		const disk = new FakeDisk();
+		const first = makeOnDisk(disk);
 		await first.plugin.loadSettings();
-		expect(first.plugin.settings.pathRules[0].mode).toBe("virtual");
-		const second = makeLoadable(undefined, true, store); // templates/ 已由首次加载建好。
+		const store = new TemplateStore(disk.asAdapter(), PLUGIN_DIR, () =>
+			first.plugin.saveSettings(),
+		);
+		await store.init();
+		const tpl = store.getDefault();
+		tpl.whitelist = ["参考文献"]; // 只改白名单：不触发样式历史，不会顺带保存设置。
+		await store.save(tpl);
+		expect(disk.log.slice(0, 3)).toEqual([
+			`write ${PLUGIN_DIR}/data.json`,
+			`mkdir ${PLUGIN_DIR}/templates`,
+			`write ${PLUGIN_DIR}/templates/default.json`,
+		]);
+		const second = makeOnDisk(disk);
 		await second.plugin.loadSettings();
 		expect(second.plugin.settings.pathRules[0].mode).toBe("virtual");
-		expect(second.saveData).not.toHaveBeenCalled(); // V4 不变：仍不落盘。
-	});
-
-	it("V78：有 data.json 时本机标记不起作用，按 data.json 内容", async () => {
-		const store = new Map<string, unknown>([["auto-headings-fresh-install", true]]);
-		const { plugin } = makeLoadable(
-			{ pathRules: [{ pattern: "/", template: "默认" }] },
-			true,
-			store,
-		);
-		await plugin.loadSettings();
-		expect(plugin.settings.pathRules).toEqual([{ pattern: "/", template: "默认" }]);
-	});
-
-	it("V78：老用户（有 templates/、本机无标记）不写标记，保持写入", async () => {
-		const store = new Map<string, unknown>();
-		const { plugin } = makeLoadable(undefined, true, store);
-		await plugin.loadSettings();
-		expect(plugin.settings.pathRules).toEqual([{ pattern: "/", template: "默认" }]);
-		expect(store.size).toBe(0);
-	});
-
-	it("V5：onload 里 loadSettings 先于 templateStore.init（否则新装判据永远失效）", () => {
-		const src = readFileSync(
-			fileURLToPath(new URL("../../src/main.ts", import.meta.url)),
-			"utf8",
-		);
-		const onload = src.slice(src.indexOf("async onload()"));
-		const load = onload.indexOf("await this.loadSettings()");
-		const init = onload.indexOf("await this.templateStore.init()");
-		expect(load).toBeGreaterThan(-1);
-		expect(init).toBeGreaterThan(-1);
-		expect(load).toBeLessThan(init);
 	});
 
 	it("S39：标题右键菜单 / 状态栏标签开关，老用户升级缺省为开", async () => {
