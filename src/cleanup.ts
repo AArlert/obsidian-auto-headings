@@ -174,8 +174,8 @@ const CLAIMED_LINE_RE = new RegExp(`^[ \\t]*(?:#{1,6}[ \\t]+)?${WORD_JOINER}`, "
  *   像手写编号——后者把「标题本身就是编号」（`# 第一章`，{@link isNumberOnlyHeading}）也算进来（testplan J25）。
  *   这类标题只按过半算、不按「一个就算」：它剥不掉，清理框里没有出口，个别一个就拦住整篇会永远没有编号。
  *
- * **已知风险**：与 {@link stripForeignNumbering} 共享同一误伤面（`## 2024 总结`、纯罗马字母词如
- * `## civil 权利`；拉丁词起头的标题自本次修复起不再命中，testplan J27）——但落在这里
+ * **已知风险**：与 {@link stripForeignNumbering} 共享同一误伤面（`## 2024 总结`；拉丁词起头的
+ * 标题自本次修复起不再命中，testplan J27 / J28）——但落在这里
  * 代价是「跳过写入 + 提示」而非「内容被吃」，比清理命令本身更安全，故接受。
  *
  * **1.0.15 修**（testplan J12）：比较基准必须先去掉行尾空白。{@link stripForeignNumbering} 末尾带一道

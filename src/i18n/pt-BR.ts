@@ -241,7 +241,7 @@ const ptBR: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Possível numeração alheia ao plugin",
 	foreignGuardModalBody: (count) =>
-		`Estes ${count} cabeçalho(s) parecem numerados, mas o plugin não tem certeza de que você os escreveu («Design de API», «Lista TODO» etc. podem ser falsos positivos). Todos vêm marcados; desmarcar mantém o texto como está (o plugin ainda adicionará a própria numeração):`,
+		`Estes ${count} cabeçalho(s) parecem numerados, mas o plugin não tem certeza de que você os escreveu («2024 em revisão», «3 pontos-chave» etc. podem ser falsos positivos). Todos vêm marcados; desmarcar mantém o texto como está (o plugin ainda adicionará a própria numeração):`,
 	foreignGuardItemToggle: (before) => `Limpar a numeração alheia de «${before}»`,
 	foreignGuardSearchPlaceholder: "Buscar cabeçalhos…",
 	foreignGuardSearchEmpty: "Nenhum cabeçalho correspondente",

@@ -244,7 +244,7 @@ const es: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Posible numeración ajena al complemento",
 	foreignGuardModalBody: (count) =>
-		`Estos ${count} encabezado(s) parecen numerados, pero el complemento no puede asegurar que los escribieras tú («Diseño de API», «Lista TODO», etc. pueden ser falsos positivos). Todos están marcados por defecto; al desmarcar uno se conserva su texto tal cual (el complemento añadirá igualmente su numeración):`,
+		`Estos ${count} encabezado(s) parecen numerados, pero el complemento no puede asegurar que los escribieras tú («2024 en resumen», «3 puntos clave», etc. pueden ser falsos positivos). Todos están marcados por defecto; al desmarcar uno se conserva su texto tal cual (el complemento añadirá igualmente su numeración):`,
 	foreignGuardItemToggle: (before) => `Limpiar la numeración ajena de «${before}»`,
 	foreignGuardSearchPlaceholder: "Buscar encabezados…",
 	foreignGuardSearchEmpty: "No hay encabezados coincidentes",

@@ -184,9 +184,39 @@ describe("clearForeignNumberingContent（0.6.6「清理非本插件的标题编�
 	it("J27 反例：单字母、罗马、阿拉伯手写编号照旧剥离", () => {
 		expect(clearForeignNumberingContent("## a) 概述")).toBe("## 概述");
 		expect(clearForeignNumberingContent("## A. 概述")).toBe("## 概述");
-		expect(clearForeignNumberingContent("## a 备注")).toBe("## 备注");
+		expect(clearForeignNumberingContent("## (a) 备注")).toBe("## 备注");
+		expect(clearForeignNumberingContent("## IV、结论")).toBe("## 结论");
+		expect(clearForeignNumberingContent("## A.1 背景")).toBe("## 背景");
 		expect(clearForeignNumberingContent("## iv. 结论")).toBe("## 结论");
 		expect(clearForeignNumberingContent("## 1.1 背景")).toBe("## 背景");
+	});
+
+	// J28：字母 / 罗马序号后只跟空格不算编号——罗马字母能拼出大量真词，单字母 + 空格也多是正文。
+	it("J28: 罗马字母词、单字母 + 空格、单字母连字符词不被剥", () => {
+		const input = [
+			"## vim 配置",
+			"## XML 解析",
+			"## CLI 工具",
+			"## CI 配置",
+			"## MVC 架构",
+			"## mix 说明",
+			"## C 语言",
+			"## B 站",
+			"## a 备注",
+			"## IV 结论",
+			"## K-means 聚类",
+			"## X-ray 说明",
+		].join("\n");
+		expect(clearForeignNumberingContent(input)).toBe(input);
+		expect(hasUnclaimedForeignNumbering(input)).toBe(false);
+		expect(previewForeignNumberingCleanup(input)).toEqual([]);
+	});
+
+	it("J28 反例：带标点 / 括号的字母罗马编号与连字符后非字母的照旧剥", () => {
+		expect(clearForeignNumberingContent("## C. 语言")).toBe("## 语言");
+		expect(clearForeignNumberingContent("## iv) 结论")).toBe("## 结论");
+		expect(clearForeignNumberingContent("## A- 概述")).toBe("## 概述");
+		expect(clearForeignNumberingContent("## 1 概述\n## vim 配置")).toBe("## 概述\n## vim 配置");
 	});
 
 	it("J27: 同一篇里真外来编号照旧剥，拉丁词标题不动", () => {

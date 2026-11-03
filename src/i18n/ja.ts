@@ -237,7 +237,7 @@ const ja: Partial<Messages> = {
 
 	foreignGuardModalTitle: "他プラグインの番号の疑い",
 	foreignGuardModalBody: (count) =>
-		`次の ${count} 件の見出しは番号付きに見えますが、あなたの手書きかどうか判断できません（「API 設計」「TODO リスト」などは誤判定の可能性があります）。既定ではすべて整理対象としてチェックされています。チェックを外すと原文を残し、プラグインはテンプレートに従って自分の番号を付けます：`,
+		`次の ${count} 件の見出しは番号付きに見えますが、あなたの手書きかどうか判断できません（「2024 振り返り」「3 つの要点」などは誤判定の可能性があります）。既定ではすべて整理対象としてチェックされています。チェックを外すと原文を残し、プラグインはテンプレートに従って自分の番号を付けます：`,
 	foreignGuardItemToggle: (before) => `「${before}」の外部番号を整理`,
 	foreignGuardSearchPlaceholder: "見出しを検索…",
 	foreignGuardSearchEmpty: "一致する見出しがありません",

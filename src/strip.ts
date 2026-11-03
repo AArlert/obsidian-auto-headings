@@ -431,8 +431,8 @@ function foreignNumeralTokenPattern(style: NumeralStyle): string {
  * - 之后须跟分隔标点 / 空白（{@link TITLE_SEPARATOR_CLASS}），故「纯数字无分隔」的真实标题（`100`）不被误剥。
  *
  * **已知风险（与「清除编号」同源、属预期，spec §3.10）：** 以序号样字开头紧跟分隔符的真实标题可能被
- * 误剥（`2024 总结` → `总结`，以及纯由罗马数字字母组成的词如 `civil`）。字母词不再落入这里——见
- * {@link foreignNumeralTokenPattern}。本命令是**用户主动**的一次性清理，已接受。
+ * 误剥（`2024 总结` → `总结`）。拉丁词不再落入这里：字母词见 {@link foreignNumeralTokenPattern}，
+ * 「字母 / 罗马 + 空格」见 {@link isLatinWordPrefix}。本命令是**用户主动**的一次性清理，已接受。
  */
 export function stripForeignNumbering(rawText: string): string {
 	const allToken = `(?:${ALL_NUMERAL_STYLES.map(foreignNumeralTokenPattern).join("|")})`;
@@ -445,7 +445,25 @@ export function stripForeignNumbering(rawText: string): string {
 	// 如 `100`、`三` 不被误剥）。右括号兼作分隔（`（一）背景` 中 `）` 即边界，无需空格）。
 	const trail = `(?:[)）\\]】〕》〉]|${TITLE_SEPARATOR_CLASS})+`;
 	const pattern = new RegExp(`^${cjkPrefix}${open}${numberPattern}${cjkUnit}${trail}`);
+	const m = pattern.exec(rawText);
+	if (m && isLatinWordPrefix(m[0], rawText.slice(m[0].length))) {
+		return rawText.replace(/\s+$/, "");
+	}
 	return rawText.replace(pattern, "").replace(/\s+$/, "");
+}
+
+/**
+ * 命中的「编号前缀」其实是标题开头的拉丁词（testplan J28）：整段只有字母、后面**只跟空白**
+ * （`vim 配置`、`XML 解析`、`C 语言`），或单个连字符紧接字母（`K-means`、`X-ray`）。
+ *
+ * 字母 / 罗马序号的手写惯例都带标点或括号（`a.` / `A)` / `(a)` / `iv.`），光跟空格的多半是正文；
+ * 罗马字母又能拼出大量真词（`vim` / `mix` / `CLI` / `MD`），连规范罗马数字判定也挡不住（`CLI`=151）。
+ * 代价：`IV 结论` 这类「罗马 + 空格」写法不再认。含数字或段间标点的（`A.1 背景`）不受影响。
+ */
+function isLatinWordPrefix(prefix: string, rest: string): boolean {
+	return (
+		/^[A-Za-z]+[ \t]+$/.test(prefix) || (/^[A-Za-z]+-$/.test(prefix) && /^[A-Za-z]/.test(rest))
+	);
 }
 
 /**

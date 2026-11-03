@@ -15,6 +15,30 @@
 
 ---
 
+## 2026-11-03 合入外部 PR #11：拉丁词开头的标题不再被当成手写编号（未发版，交接：claude/pr11-latin-word-numbering）
+
+### 做了什么
+
+- 合入外部 PR [#11](https://github.com/AArlert/obsidian-auto-headings/pull/11)（@smallerxie，`5c03a19`，`merge --no-ff` 保留作者）：`stripForeignNumbering` 的字母序号从 `[a-z]+` 收窄成单字母，`## git 相关`、`## GPG 签名策略`、`## API 设计` 不再被迁移守卫拦整篇、不再被清理命令删字（testplan J27 / H21）。`stripPrefixBroad` 不收窄（要剥本插件写出的 `aa`），取舍对。
+- 补 PR 漏的（testplan J28）：罗马 token `[ivxlcdm]+` 没跟着收窄，`vim 配置`、`XML 解析`、`CLI 工具`、`MVC 架构` 照旧误判；单字母 + 空格（`C 语言`、`B 站`）与 `K-means` 也是。`src/strip.ts` 新增 `isLatinWordPrefix`：命中的前缀若只有字母、后面只跟空白（或单连字符紧接字母），否决剥离。规范罗马数字判定救不了（`CLI`=151），故走「须带标点 / 括号」口径。代价：`IV 结论` 不再认。PR 原测试 `## a 备注` → `## 备注` 改为保留。
+- 10 个 locale 清理框文案的误判举例「API 设计 / TODO 清单」→「2024 总结 / 3 个要点」（合入后旧例子已不成立）；spec 2.8 / 3.9 / 3.10、Roadmap「整篇判断」条补进展。
+
+### 没做什么
+
+- 没在 PR 上留言致谢（本机无 `gh`）；合入推送后 GitHub 会自动把 PR 标为 merged。
+- 真机没测；没发版。`2024 总结` 误判与 `Step 1` / `Chapter 2` 漏判留给 Roadmap「整篇判断（序列证据）」。
+
+### 下一步
+
+- 随下个补丁版发（与 10-29 的「标题本身就是编号」一起）；发版说明致谢 @smallerxie。
+- 启发：spec 里「已接受」的误伤（3.9 当初说守卫误判只是「跳过 + 提示」）在技术用户的笔记里代价远大于估计——Roadmap 序列证据一项值得提优先级。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/cleanup.test.ts` 68/68；全量 1070/1071，唯一红是已知 ICU 排序假红（whitelist.test.ts）；lint 0 错误；`npm run docs` 守卫全过。
+
+---
+
 ## 2026-10-29 标题本身就是编号时不再叠编号（未发版，交接：claude/auto-headings-plugin-review-1076f5）
 
 ### 做了什么
@@ -93,26 +117,3 @@
 ### 验证方式
 
 - `npx vitest run tests/dev_tests/toc-block.test.ts`；真机见上。
-
----
-
-## 2026-10-28 Quiet Outline 面板显示仅显示编号（并入 1.3.0，交接：claude/quiet-outline-show-only-numbers-7330df）
-
-### 做了什么
-
-- **接入 Quiet Outline**（第三方，0.5.15 核对）：它是 Vue 树、没有条目对象，但节点 `id="no-N"` 的 N 即 `metadataCache` `headings` 下标；用它取行号后走与内置大纲相同的「行号 + 级别」配对。所示文件取自 `plugin.navigator.view.file`。固定开启、无设置项（`outlineView.ts` 抽出 `OutlineAdapter`，内置大纲与 Quiet Outline 各一个；`main.ts` 加 `cachedHeadings`；`styles.css` 把文字容器改 flex 让 `::before` 同行）。
-- testplan V48–V53、spec §3.22、架构目录树同步；单测 `virtual-outline.test.ts` 22 条（含 7 条 Quiet Outline 假 DOM 用例）。
-- 门槛：`docs --check` / `prettier` / `eslint` / `tsc` 绿；`vitest` 1021/1022，唯一红是已知 Windows ICU 假红。已 `npm run release` 并覆盖部署到 Oblivion 库（库内原为 1.2.6）。
-
-### 没做什么
-
-- **真机（Oblivion 库，深色主题，Quiet Outline 0.5.15）已看**：编号与标题同行、窄面板长标题换行后悬挂缩进、搜索过滤带编号、编辑加标题后面板实时更新，均正常。浅色主题用户实测通过，Quiet Outline 适配视为完成；**未专门试**：省略设置、彩虹线开关；节点 `id` 究竟挂在哪一层没读真实 DOM（渲染正确，无重复 id 的迹象）。
-- 没写 README / user-guide（等真机确认可用后再补一句）。
-
-### 下一步
-
-- V53 已回填 ✅，随 1.3.0 发布；省略设置 / 彩虹线开关未专门试。
-
-### 验证方式
-
-- `npx vitest run tests/dev_tests/virtual-outline.test.ts`；真机见上。
