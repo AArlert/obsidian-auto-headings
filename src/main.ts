@@ -116,6 +116,9 @@ export interface BatchResult {
 /** M13：初始标题索引扫描的批量大小（文件数），每批让出主线程一次（方案 §2.4，可调常量）。 */
 const INITIAL_SCAN_BATCH_SIZE = 200;
 
+/** V78：本机判过新装的 vault 级 `localStorage` 键（见 `isFreshInstall`）。 */
+const FRESH_INSTALL_KEY = "auto-headings-fresh-install";
+
 /**
  * obsidian-auto-headings 插件入口。
  *
@@ -2452,16 +2455,37 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 是否全新安装（M14，spec §3.22「新装与升级」）：data.json 为空 **且** 插件目录下没有 templates/。
 	 * 老用户可能从没改过设置（没有 data.json），但首次启用时一定建过 templates/default.json。
 	 * 探测失败一律按升级处理——宁可保持老行为，也不把老用户误切到仅显示。
+	 *
+	 * **判过新装要记在本机**（testplan V78）：首次加载随后就建了 templates/，而新装分支又不落盘
+	 * data.json（V4），第二次启动若只看目录，会把没改过设置的新用户当成老用户切到写入。故判为新装时在
+	 * vault 级 `localStorage` 记一笔，之后无 data.json 时以它为准；它不随同步走，V6 的竞态对策不受影响。
+	 * 读写失败按没记过处理（退回目录判据）。
 	 */
 	private async isFreshInstall(data: Record<string, unknown>): Promise<boolean> {
 		if (Object.keys(data).length > 0) {
 			return false;
 		}
 		try {
-			return !(await this.app.vault.adapter.exists(`${this.pluginDir()}/templates`));
+			if (this.app.loadLocalStorage(FRESH_INSTALL_KEY) === true) {
+				return true;
+			}
+		} catch {
+			// 读不到本机标记：退回目录判据。
+		}
+		let fresh: boolean;
+		try {
+			fresh = !(await this.app.vault.adapter.exists(`${this.pluginDir()}/templates`));
 		} catch {
 			return false;
 		}
+		if (fresh) {
+			try {
+				this.app.saveLocalStorage(FRESH_INSTALL_KEY, true);
+			} catch {
+				// 记不下来只是退回旧行为（下次启动按目录判），不影响本次加载。
+			}
+		}
+		return fresh;
 	}
 
 	/**
