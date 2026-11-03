@@ -116,9 +116,6 @@ export interface BatchResult {
 /** M13：初始标题索引扫描的批量大小（文件数），每批让出主线程一次（方案 §2.4，可调常量）。 */
 const INITIAL_SCAN_BATCH_SIZE = 200;
 
-/** V78：本机判过新装的 vault 级 `localStorage` 键（见 `isFreshInstall`）。 */
-const FRESH_INSTALL_KEY = "auto-headings-fresh-install";
-
 /**
  * obsidian-auto-headings 插件入口。
  *
@@ -126,7 +123,7 @@ const FRESH_INSTALL_KEY = "auto-headings-fresh-install";
  * 「立即重新编号」命令；面板全局开关 ↔ 全局命令双向同步；读取 frontmatter 单文件开关。
  * 注：插件**永不改写标题层级**，多个 H1 按各模板的「起始编号层级」处理（见 numbering.ts）。
  *
- * Milestone 3：接入 {@link TemplateStore}（首次启用自动创建 templates/default.json）。
+ * Milestone 3：接入 {@link TemplateStore}（templates/ 懒建，第一次有模板落盘才创建）。
  *
  * Milestone 4：白名单随模板自动生效——{@link renumberContent} 缺省即按 `template.whitelist`
  * 计算豁免（命中者不写前缀、不占计数器槽位，见 numbering.ts）。
@@ -261,10 +258,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 			mtm.setPropertyInfo(SWITCH_KEY, { type: "checkbox" });
 		}
 
-		// 初始化模板存储：确保 templates/ 目录与 default.json 存在并载入全部模板。
-		// **必须在 loadSettings 之后**：新装判据要看 templates/ 在不在（M14，spec §3.22「顺序约束」），
-		// init 一跑目录就建好了，判据永远失效。有单测锁住这个先后顺序。
-		this.templateStore = new TemplateStore(this.app.vault.adapter, this.pluginDir());
+		// 初始化模板存储：载入全部模板，不建 templates/（新装判据看它在不在，testplan V5 / V78）。
+		// 第一次有模板要落盘时，先把设置落盘再建目录（V79），否则新装用户只改模板会被认成老用户。
+		this.templateStore = new TemplateStore(this.app.vault.adapter, this.pluginDir(), () =>
+			this.saveSettings(),
+		);
 		await this.templateStore.init();
 
 		this.settingTab = new AutoHeadingsSettingTab(this.app, this);
@@ -2453,39 +2451,20 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 	/**
 	 * 是否全新安装（M14，spec §3.22「新装与升级」）：data.json 为空 **且** 插件目录下没有 templates/。
-	 * 老用户可能从没改过设置（没有 data.json），但首次启用时一定建过 templates/default.json。
+	 * 老用户可能从没改过设置（没有 data.json），但 1.3.0 及以前首次启用时一定建过 templates/default.json。
 	 * 探测失败一律按升级处理——宁可保持老行为，也不把老用户误切到仅显示。
-	 *
-	 * **判过新装要记在本机**（testplan V78）：首次加载随后就建了 templates/，而新装分支又不落盘
-	 * data.json（V4），第二次启动若只看目录，会把没改过设置的新用户当成老用户切到写入。故判为新装时在
-	 * vault 级 `localStorage` 记一笔，之后无 data.json 时以它为准；它不随同步走，V6 的竞态对策不受影响。
-	 * 读写失败按没记过处理（退回目录判据）。
+	 * 这条判据成立的前提是插件自己**不在加载时建 templates/**（`TemplateStore` 懒建，testplan V5 / V78），
+	 * 且第一次建目录前先落盘 data.json（V79）。
 	 */
 	private async isFreshInstall(data: Record<string, unknown>): Promise<boolean> {
 		if (Object.keys(data).length > 0) {
 			return false;
 		}
 		try {
-			if (this.app.loadLocalStorage(FRESH_INSTALL_KEY) === true) {
-				return true;
-			}
-		} catch {
-			// 读不到本机标记：退回目录判据。
-		}
-		let fresh: boolean;
-		try {
-			fresh = !(await this.app.vault.adapter.exists(`${this.pluginDir()}/templates`));
+			return !(await this.app.vault.adapter.exists(`${this.pluginDir()}/templates`));
 		} catch {
 			return false;
 		}
-		if (fresh) {
-			try {
-				this.app.saveLocalStorage(FRESH_INSTALL_KEY, true);
-			} catch {
-				// 记不下来只是退回旧行为（下次启动按目录判），不影响本次加载。
-			}
-		}
-		return fresh;
 	}
 
 	/**

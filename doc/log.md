@@ -15,28 +15,27 @@
 
 ---
 
-## 2026-11-04 新装后重启一次就从「仅显示」变成写入（未发版，交接：claude/fresh-install-restart-mode）
+## 2026-11-04 新装后重启一次就从「仅显示」变成写入（未发版，交接：claude/fresh-install-restart-mode → claude/fresh-install-no-templates-dir）
 
 ### 做了什么
 
-- 起因：真机验 PR #11 时，Test 库（新装、没改过设置）在替换插件重载后进了写入模式，笔记被写上编号。根因：新装判据 `isFreshInstall` 只看「data.json 为空且没有 `templates/`」，而首次加载随后就建了 `templates/`、新装分支又刻意不落盘 data.json（V4）——第二次启动被当成「从没改过设置的老用户」切到写入。V4、V5 各自有测，「新装后重启」这条没人测。
-- `src/main.ts`：判为新装时在 vault 级 `localStorage`（`app.saveLocalStorage`，1.8.7+ = minAppVersion）记 `auto-headings-fresh-install`，之后 data.json 为空时以它为准；有 data.json 就按内容。标记只在本机、不随同步走，V4 / V6 不变；读写失败退回目录判据。
-- testplan V78、spec 3.22「新装与升级」补一条；`settings.test.ts` V78 三例。
-- 1.2.0–1.3.0 已被这样切到写入的库不回迁（无从区分是否用户本意），写进 spec。
+- 起因：真机验 PR #11 时，Test 库（新装、没改过设置）替换插件重载后进了写入模式，笔记被写上编号。根因：新装判据 `isFreshInstall` 看「data.json 为空且没有 `templates/`」，而 `TemplateStore.init` 首次加载就自己建了 `templates/default.json`、新装分支又刻意不落盘 data.json（V4）——第二次启动被认成「从没改过设置的老用户」切到写入。原 V5 顺序约束只保住了第一次加载。
+- 第一版（`6f58e56`，已被取代）用 vault 级 `localStorage` 记「判过新装」；用户追问全平台后改掉：移动端 WebView 存储可能被系统回收，也不随同步走（新装库同步到第二台设备照样切写入）。
+- 最终方案：**`templates/` 懒建**（`src/templates/TemplateStore.ts`）。`init` 不建目录、不写文件，默认模板走内置默认；`create` / `save` / `rename` 写前过 `ensureDir`，第一次建目录**之前**回调主插件 `saveSettings`（先 data.json 后目录，中途失败最多是有设置无模板）。新装不改设置时磁盘零写入，各设备都判为新装；老用户目录已在，行为不变、不额外落盘。
+- testplan V5 改写、V78 改写、新增 V79；spec 3.22 / 3.6 / 4 / 7 同步；`tests/dev_tests/fake-disk.ts`（最严格平台语义：`write` 不自动建父目录、`list` 对缺失目录抛错）+ `template-store.test.ts` 5 例 + `settings.test.ts` V78 / V79 走真实重启链路。
 
 ### 没做什么
 
-- 真机还没验：Test 库已重置成新装状态（`templates/` 挪到 scratchpad、无 data.json、验证2 恢复成无编号原文），待用户重载两次确认仍是仅显示。
+- 真机未验。1.2.0–1.3.0 期间已被切到写入的库不回迁（目录已在，无从区分）。
+- 已知边界（spec 3.22）：新装用户改过模板后，另一台设备先同步到 `templates/`、data.json 未到时启动，会短暂按写入处理——与 V6 同类，接受。
 
 ### 下一步
 
-- 真机验 V78 与 PR #11 三篇验证笔记，通过后发 1.3.1（含 10-29、11-03、本块三项修复；发版说明致谢 @smallerxie）。
+- 真机验 V78 / V79 与 PR #11 三篇验证笔记，通过后发 1.3.1（含 10-29、11-03、本块三项修复；发版说明致谢 @smallerxie）。
 
 ### 验证方式
 
-- `settings.test.ts` 25/25；全量 1073/1074（唯一红是已知 ICU 排序假红）；lint 0 错误；docs 守卫全过。
-
----
+- `settings.test.ts` + `template-store.test.ts` 28/28；全量 1076/1077（唯一红是已知 ICU 排序假红）；lint 0 错误；docs 守卫全过。
 
 ## 2026-11-03 合入外部 PR #11：拉丁词开头的标题不再被当成手写编号（未发版，交接：claude/pr11-latin-word-numbering）
 
