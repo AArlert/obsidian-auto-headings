@@ -53,7 +53,11 @@ describe("Backlink 同步默认值（0.7.11 曝光度决策）", () => {
  * 用假 adapter 模拟插件目录下 templates/ 在不在。
  */
 describe("M14：新装默认仅显示，升级保持写入", () => {
-	function makeLoadable(data: unknown, hasTemplatesDir: boolean) {
+	function makeLoadable(
+		data: unknown,
+		hasTemplatesDir: boolean,
+		localStore: Map<string, unknown> = new Map(),
+	) {
 		const PluginCtor = AutoHeadingsPlugin as unknown as new (
 			app: unknown,
 			manifest: unknown,
@@ -64,6 +68,8 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		const app = {
 			vault: { configDir: ".obsidian", adapter: { exists } },
 			workspace: { getLeavesOfType: () => [] },
+			loadLocalStorage: (key: string) => localStore.get(key) ?? null,
+			saveLocalStorage: (key: string, value: unknown) => localStore.set(key, value),
 		};
 		const plugin = new PluginCtor(app, { id: "auto-headings", dir: "plugins/auto-headings" });
 		const saveData = vi.fn(async () => {});
@@ -122,6 +128,37 @@ describe("M14：新装默认仅显示，升级保持写入", () => {
 		});
 		await plugin.onExternalSettingsChange();
 		expect(plugin.settings.pathRules).toEqual([{ pattern: "/", template: "默认" }]);
+	});
+
+	// V78：首次加载建好 templates/、data.json 又不落盘，第二次启动不能被当成老用户切到写入。
+	it("V78：新装后不改设置再启动 → 仍是仅显示（本机标记优先于目录判据）", async () => {
+		const store = new Map<string, unknown>();
+		const first = makeLoadable(undefined, false, store);
+		await first.plugin.loadSettings();
+		expect(first.plugin.settings.pathRules[0].mode).toBe("virtual");
+		const second = makeLoadable(undefined, true, store); // templates/ 已由首次加载建好。
+		await second.plugin.loadSettings();
+		expect(second.plugin.settings.pathRules[0].mode).toBe("virtual");
+		expect(second.saveData).not.toHaveBeenCalled(); // V4 不变：仍不落盘。
+	});
+
+	it("V78：有 data.json 时本机标记不起作用，按 data.json 内容", async () => {
+		const store = new Map<string, unknown>([["auto-headings-fresh-install", true]]);
+		const { plugin } = makeLoadable(
+			{ pathRules: [{ pattern: "/", template: "默认" }] },
+			true,
+			store,
+		);
+		await plugin.loadSettings();
+		expect(plugin.settings.pathRules).toEqual([{ pattern: "/", template: "默认" }]);
+	});
+
+	it("V78：老用户（有 templates/、本机无标记）不写标记，保持写入", async () => {
+		const store = new Map<string, unknown>();
+		const { plugin } = makeLoadable(undefined, true, store);
+		await plugin.loadSettings();
+		expect(plugin.settings.pathRules).toEqual([{ pattern: "/", template: "默认" }]);
+		expect(store.size).toBe(0);
 	});
 
 	it("V5：onload 里 loadSettings 先于 templateStore.init（否则新装判据永远失效）", () => {
