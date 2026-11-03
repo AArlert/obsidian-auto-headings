@@ -397,21 +397,45 @@ export function stripPrefixBroad(
 }
 
 /**
+ * {@link stripForeignNumbering} 专用的序号 token：**字母样式只认单个字母**（`a` / `A`），不认字母词。
+ *
+ * 为什么不沿用 {@link numeralTokenPattern} 的 `[a-z]+` / `[A-Z]+`：那个量词是给**渲染**端留的
+ * （第 27 个字母序号会写成 `aa`），但用来**猜**「这段像不像手写编号」时，任何以拉丁词起头的真实标题
+ * 都会被吞——`## git 相关`、`### git commit 和 git push 的时机`、`## GPG 签名策略`、`## API 设计`、
+ * `## TODO 清单` 都会被当成「`git` / `GPG` / `API` / `TODO` 是字母序号」：清理命令直接删字，迁移守卫
+ * 更会把整篇文件的自动编号拦掉（本次修复，testplan J27）。手写字母编号的实际惯例是 `a.` / `A)` / `(a)`，
+ * 单字母足够；多字母（`aa.`）不再被认，属可接受取舍。与 {@link isNumberOnlyHeading} 的「`API.` /
+ * `Summary:` 不算编号」同一口径。
+ */
+function foreignNumeralTokenPattern(style: NumeralStyle): string {
+	switch (style) {
+		case "lower-alpha":
+			return "[a-z]";
+		case "upper-alpha":
+			return "[A-Z]";
+		default:
+			return numeralTokenPattern(style);
+	}
+}
+
+/**
  * 剥离一段标题文本里**外来 / 手写**的编号前缀——用于 0.6.6「清理非本插件的标题编号」命令
  * （见 `cleanup.ts` 与 spec §3.10）。**调用方须保证传入的是不含 WJ 的标题**（含 WJ = 本插件写的，
  * 由命令层跳过、不动）。
  *
  * 比 {@link stripPrefixBroad} 覆盖**更多手写惯例**，独立于任何模板：
- * - 全部序号样式（arabic / cjk / circled / 字母 / 罗马）+ 多段（`1.2.3`）；
+ * - 全部序号样式（arabic / cjk / circled / 字母 / 罗马）+ 多段（`1.2.3`）；字母样式只认单字母
+ *   （见 {@link foreignNumeralTokenPattern}）；
  * - 可选 `第`、可选成对括号（`(1)` / `（一）` / `[1]` / `【1】` / `〔1〕` / `《1》`）；
  * - 可选中文量词单位（`第3章` / `一节` / `2条`…）；
  * - 之后须跟分隔标点 / 空白（{@link TITLE_SEPARATOR_CLASS}），故「纯数字无分隔」的真实标题（`100`）不被误剥。
  *
- * **已知风险（与「清除编号」同源、属预期，spec §3.10）：** 以序号样字（含字母）开头紧跟分隔符的真实
- * 标题可能被误剥（`API 设计` → `设计`、`2024 总结` → `总结`）。本命令是**用户主动**的一次性清理，已接受。
+ * **已知风险（与「清除编号」同源、属预期，spec §3.10）：** 以序号样字开头紧跟分隔符的真实标题可能被
+ * 误剥（`2024 总结` → `总结`，以及纯由罗马数字字母组成的词如 `civil`）。字母词不再落入这里——见
+ * {@link foreignNumeralTokenPattern}。本命令是**用户主动**的一次性清理，已接受。
  */
 export function stripForeignNumbering(rawText: string): string {
-	const allToken = `(?:${ALL_NUMERAL_STYLES.map(numeralTokenPattern).join("|")})`;
+	const allToken = `(?:${ALL_NUMERAL_STYLES.map(foreignNumeralTokenPattern).join("|")})`;
 	const sep = `${NUMBER_SEPARATOR_CLASS}+`;
 	const numberPattern = `(?:${allToken}${sep})*${allToken}`;
 	const cjkPrefix = "(?:第)?";

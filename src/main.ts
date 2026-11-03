@@ -1392,7 +1392,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 一条已经不成立的告警。
 	 *
 	 * Notice 可点击（{@link showForeignNumberingGuardNotice}）：打开预览确认框逐条列出「现状 →
-	 * 清理后」对照（J14）——清理命令与本守卫共享同一误伤面（如 `## API 设计`），无预览的一键执行
+	 * 清理后」对照（J14）——清理命令与本守卫共享同一误伤面（如 `## 2024 总结`），无预览的一键执行
 	 * 等于吃用户内容，不能做。
 	 *
 	 * @returns 是否命中守卫（命中即调用方应跳过本次 {@link applyRenumber}）。
