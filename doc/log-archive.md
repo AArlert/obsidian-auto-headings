@@ -8,6 +8,32 @@
 
 ---
 
+## 2026-10-29 标题本身就是编号时不再叠编号（未发版，交接：claude/auto-headings-plugin-review-1076f5）
+
+### 做了什么
+
+- 起因：Grok 外部测评用 Demo 笔记（`# 第一章` / `## 第一节` / `## 第二节` / `# 第二章`）套章节模板，仅显示模式渲染成「第一章 第一章」。核实：`第一章 概述` 这类早有守卫拦截；漏的是**整行只有编号**的标题——`stripForeignNumbering` 要求编号后跟分隔符，剥不掉它，于是过半判定没算它。
+- `src/strip.ts` 新增 `isNumberOnlyHeading`：只认阿拉伯 / 中文数字 / 圈码，且须带 `第`、量词、括号、末尾标点或本身是圈码；`2024`、`三`、`1.2`、`API.`、`Summary:` 不算。
+- `src/cleanup.ts`：`isMostlyForeignNumbered`（仅显示模式、ah-toc、大纲同源）把它计入过半；写入模式守卫 `hasUnclaimedForeignNumbering` 在「任一可剥的外来编号」之外加「过半（含纯编号）」——纯编号不按「一个就算」，否则个别一个就永远拦住整篇。
+- 提示：命中但清理预览为空（全是纯编号）时，`main.ts` 改弹「这篇的标题本身就是编号（如「第一章」），本次没有自动 / 显示编号。」，不给「查看并清理」；11 种语言加 `noticeNumberOnlyGuard`。
+- testplan J25 / J26 / V77；spec 3.22 补一条；单测 4 例。
+
+### 没做什么
+
+- 真机没复测（Demo 笔记打开看不叠编号、提示文案）。
+- `npm run test:fuzz` 在 worktree 里找不到 vitest 入口没跑；新函数只接在守卫判定上，没进编号引擎。
+- 测评里的其他条目没动：改语言后命令名需重载（spec 3.11 已知限制，可用同 id 重新注册修，待定）、「固化编号并交还所有权」文案待用户定。
+
+### 下一步
+
+- 真机打开 Demo 笔记确认 V77 / J26，随下个补丁版发。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/cleanup.test.ts`（59 例全绿）；全量 1061/1062，唯一红是已知 ICU 排序假红（whitelist.test.ts）。
+
+---
+
 ## 2026-10-28 发版 1.3.0：Quiet Outline 面板显示编号 + 只读目录块 ah-toc（M17-B）（交接：claude/quiet-outline-show-only-numbers-7330df → master，tag 1.3.0）
 
 ### 做了什么
