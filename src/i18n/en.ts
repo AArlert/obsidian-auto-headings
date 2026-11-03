@@ -243,7 +243,7 @@ const en: Messages = {
 
 	foreignGuardModalTitle: "Possible non-plugin numbering",
 	foreignGuardModalBody: (count) =>
-		`The following ${count} heading(s) look numbered, but the plugin can't be sure you wrote them yourself ("API design", "TODO list", etc. can false-positive). All are checked by default; unchecking one keeps its text as-is (the plugin will still add its own numbering):`,
+		`The following ${count} heading(s) look numbered, but the plugin can't be sure you wrote them yourself ("2024 review", "3 key points", etc. can false-positive). All are checked by default; unchecking one keeps its text as-is (the plugin will still add its own numbering):`,
 	foreignGuardItemToggle: (before) => `Clean up foreign numbering in "${before}"`,
 	foreignGuardSearchPlaceholder: "Search headings…",
 	foreignGuardSearchEmpty: "No matching headings",

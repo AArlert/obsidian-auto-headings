@@ -234,7 +234,7 @@ const ko: Partial<Messages> = {
 
 	foreignGuardModalTitle: "플러그인이 아닌 번호로 의심됨",
 	foreignGuardModalBody: (count) =>
-		`다음 제목 ${count}개는 번호가 있는 것처럼 보이지만, 직접 쓴 것인지 확신할 수 없습니다 ('API 설계', 'TODO 목록' 등은 오탐일 수 있음). 기본적으로 모두 선택되어 있으며, 선택을 해제하면 원문을 그대로 두고 플러그인이 자체 번호를 추가합니다:`,
+		`다음 제목 ${count}개는 번호가 있는 것처럼 보이지만, 직접 쓴 것인지 확신할 수 없습니다 ('2024 회고', '3가지 요점' 등은 오탐일 수 있음). 기본적으로 모두 선택되어 있으며, 선택을 해제하면 원문을 그대로 두고 플러그인이 자체 번호를 추가합니다:`,
 	foreignGuardItemToggle: (before) => `'${before}'의 외부 번호 정리`,
 	foreignGuardSearchPlaceholder: "제목 검색…",
 	foreignGuardSearchEmpty: "일치하는 제목이 없습니다",

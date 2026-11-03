@@ -167,6 +167,62 @@ describe("clearForeignNumberingContent（0.6.6「清理非本插件的标题编�
 		expect(clearForeignNumberingContent("## 三")).toBe("## 三");
 	});
 
+	// J27：字母样式只认单字母。`git` / `GPG` / `API` / `TODO` 这类拉丁词是标题正文，不是字母序号。
+	it("J27: 拉丁词开头的真实标题不被当成字母序号剥掉", () => {
+		const input = [
+			"## git 相关",
+			"### git commit 和 git push 的时机",
+			"## GPG 签名策略（保持 / 添加 / 取消）",
+			"## API 设计",
+			"## TODO 清单",
+			"## Kubernetes 部署",
+		].join("\n");
+		expect(clearForeignNumberingContent(input)).toBe(input);
+	});
+
+	// J27 反例：收窄只针对「多字母的字母词」，真正的字母 / 罗马 / 阿拉伯手写编号照旧剥。
+	it("J27 反例：单字母、罗马、阿拉伯手写编号照旧剥离", () => {
+		expect(clearForeignNumberingContent("## a) 概述")).toBe("## 概述");
+		expect(clearForeignNumberingContent("## A. 概述")).toBe("## 概述");
+		expect(clearForeignNumberingContent("## (a) 备注")).toBe("## 备注");
+		expect(clearForeignNumberingContent("## IV、结论")).toBe("## 结论");
+		expect(clearForeignNumberingContent("## A.1 背景")).toBe("## 背景");
+		expect(clearForeignNumberingContent("## iv. 结论")).toBe("## 结论");
+		expect(clearForeignNumberingContent("## 1.1 背景")).toBe("## 背景");
+	});
+
+	// J28：字母 / 罗马序号后只跟空格不算编号——罗马字母能拼出大量真词，单字母 + 空格也多是正文。
+	it("J28: 罗马字母词、单字母 + 空格、单字母连字符词不被剥", () => {
+		const input = [
+			"## vim 配置",
+			"## XML 解析",
+			"## CLI 工具",
+			"## CI 配置",
+			"## MVC 架构",
+			"## mix 说明",
+			"## C 语言",
+			"## B 站",
+			"## a 备注",
+			"## IV 结论",
+			"## K-means 聚类",
+			"## X-ray 说明",
+		].join("\n");
+		expect(clearForeignNumberingContent(input)).toBe(input);
+		expect(hasUnclaimedForeignNumbering(input)).toBe(false);
+		expect(previewForeignNumberingCleanup(input)).toEqual([]);
+	});
+
+	it("J28 反例：带标点 / 括号的字母罗马编号与连字符后非字母的照旧剥", () => {
+		expect(clearForeignNumberingContent("## C. 语言")).toBe("## 语言");
+		expect(clearForeignNumberingContent("## iv) 结论")).toBe("## 结论");
+		expect(clearForeignNumberingContent("## A- 概述")).toBe("## 概述");
+		expect(clearForeignNumberingContent("## 1 概述\n## vim 配置")).toBe("## 概述\n## vim 配置");
+	});
+
+	it("J27: 同一篇里真外来编号照旧剥，拉丁词标题不动", () => {
+		expect(clearForeignNumberingContent("## 1 概述\n## git 相关")).toBe("## 概述\n## git 相关");
+	});
+
 	it("无标题 / 无外来编号时原样返回", () => {
 		expect(clearForeignNumberingContent("正文一行\n另一行")).toBe("正文一行\n另一行");
 		expect(clearForeignNumberingContent("## 裸标题\n### 另一个")).toBe("## 裸标题\n### 另一个");
@@ -216,6 +272,21 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 		expect(previewForeignNumberingCleanup("## 概述\n### 背景与动机")).toEqual([]);
 	});
 
+	// J27：拉丁词开头的标题不是外来编号——预览里没有它，守卫也就不会为它弹框 / 拦编号。
+	it("J27: 拉丁词开头的标题不出现在预览列表里", () => {
+		expect(
+			previewForeignNumberingCleanup(
+				"## git 相关\n### git commit 和 git push 的时机\n## GPG 签名策略",
+			),
+		).toEqual([]);
+	});
+
+	it("J27: 拉丁词标题与真外来编号混排时，只有后者进入预览", () => {
+		expect(previewForeignNumberingCleanup("## 1 概述\n## git 相关")).toEqual([
+			{ lineIndex: 0, before: "## 1 概述", after: "## 概述" },
+		]);
+	});
+
 	it("仅行尾空白（J12 同一误报口径）不出现在预览列表里：不该让用户以为「这条会被改」", () => {
 		expect(previewForeignNumberingCleanup("## 章一 \n## 章二")).toEqual([]);
 	});
@@ -255,6 +326,19 @@ describe("hasUnclaimedForeignNumbering（迁移守卫探测，testplan J10）", 
 
 	it("裸标题（无任何疑似编号）→ 不命中", () => {
 		expect(hasUnclaimedForeignNumbering("## 概述\n### 背景与动机")).toBe(false);
+	});
+
+	// J27：运维 / 开发笔记里以英文术语起头的标题很常见，不能因为「第一个词是字母」就拦下整篇。
+	it("J27: 只有拉丁词开头的标题 → 不命中，照常自动编号", () => {
+		expect(hasUnclaimedForeignNumbering("## git 相关\n### git commit 和 git push 的时机")).toBe(
+			false,
+		);
+		expect(hasUnclaimedForeignNumbering("## GPG 签名策略\n## 密钥管理")).toBe(false);
+		expect(hasUnclaimedForeignNumbering("## TODO 清单\n## API 设计")).toBe(false);
+	});
+
+	it("J27: 拉丁词标题不影响真外来编号的判定", () => {
+		expect(hasUnclaimedForeignNumbering("## 1 概述\n## git 相关")).toBe(true);
 	});
 
 	it("无标题的纯文本 → 不命中", () => {

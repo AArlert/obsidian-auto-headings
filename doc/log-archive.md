@@ -8,6 +8,29 @@
 
 ---
 
+## 2026-10-28 Quiet Outline 面板显示仅显示编号（并入 1.3.0，交接：claude/quiet-outline-show-only-numbers-7330df）
+
+### 做了什么
+
+- **接入 Quiet Outline**（第三方，0.5.15 核对）：它是 Vue 树、没有条目对象，但节点 `id="no-N"` 的 N 即 `metadataCache` `headings` 下标；用它取行号后走与内置大纲相同的「行号 + 级别」配对。所示文件取自 `plugin.navigator.view.file`。固定开启、无设置项（`outlineView.ts` 抽出 `OutlineAdapter`，内置大纲与 Quiet Outline 各一个；`main.ts` 加 `cachedHeadings`；`styles.css` 把文字容器改 flex 让 `::before` 同行）。
+- testplan V48–V53、spec §3.22、架构目录树同步；单测 `virtual-outline.test.ts` 22 条（含 7 条 Quiet Outline 假 DOM 用例）。
+- 门槛：`docs --check` / `prettier` / `eslint` / `tsc` 绿；`vitest` 1021/1022，唯一红是已知 Windows ICU 假红。已 `npm run release` 并覆盖部署到 Oblivion 库（库内原为 1.2.6）。
+
+### 没做什么
+
+- **真机（Oblivion 库，深色主题，Quiet Outline 0.5.15）已看**：编号与标题同行、窄面板长标题换行后悬挂缩进、搜索过滤带编号、编辑加标题后面板实时更新，均正常。浅色主题用户实测通过，Quiet Outline 适配视为完成；**未专门试**：省略设置、彩虹线开关；节点 `id` 究竟挂在哪一层没读真实 DOM（渲染正确，无重复 id 的迹象）。
+- 没写 README / user-guide（等真机确认可用后再补一句）。
+
+### 下一步
+
+- V53 已回填 ✅，随 1.3.0 发布；省略设置 / 彩虹线开关未专门试。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/virtual-outline.test.ts`；真机见上。
+
+---
+
 ## 2026-10-27 发版 1.2.6：标题菜单层级子菜单 + 阅读视图落盘 + 菜单开关（交接：claude/title-menu-level-adjust-c3cecb → master，tag 1.2.6）
 
 ### 做了什么

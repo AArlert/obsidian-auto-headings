@@ -225,7 +225,7 @@ const zhTW: Partial<Messages> = {
 
 	foreignGuardModalTitle: "疑似非本外掛的編號",
 	foreignGuardModalBody: (count) =>
-		`以下 ${count} 處標題看起來帶有編號，但無法確認是否為你手寫（如「API 設計」「TODO 清單」可能誤判）。預設全部勾選清理；取消勾選則保留原文，外掛仍會依範本加上自己的編號：`,
+		`以下 ${count} 處標題看起來帶有編號，但無法確認是否為你手寫（如「2024 總結」「3 個重點」可能誤判）。預設全部勾選清理；取消勾選則保留原文，外掛仍會依範本加上自己的編號：`,
 	foreignGuardItemToggle: (before) => `清理「${before}」的外來編號`,
 	foreignGuardSearchPlaceholder: "搜尋標題…",
 	foreignGuardSearchEmpty: "沒有符合的標題",

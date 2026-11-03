@@ -232,7 +232,7 @@ const zh: Messages = {
 
 	foreignGuardModalTitle: "疑似非本插件的编号",
 	foreignGuardModalBody: (count) =>
-		`以下 ${count} 处标题看起来带编号，但无法确认是否你手写（如「API 设计」「TODO 清单」可能误判）。默认全勾清理；取消勾选则保留原文，插件仍会按模板加上自己的编号：`,
+		`以下 ${count} 处标题看起来带编号，但无法确认是否你手写（如「2024 总结」「3 个要点」可能误判）。默认全勾清理；取消勾选则保留原文，插件仍会按模板加上自己的编号：`,
 	foreignGuardItemToggle: (before) => `清理「${before}」的外来编号`,
 	foreignGuardSearchPlaceholder: "搜索标题…",
 	foreignGuardSearchEmpty: "没有匹配的标题",

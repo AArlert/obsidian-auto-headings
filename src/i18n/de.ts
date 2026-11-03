@@ -245,7 +245,7 @@ const de: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Mögliche Nummerierung von außerhalb des Plugins",
 	foreignGuardModalBody: (count) =>
-		`Diese ${count} Überschrift(en) wirken nummeriert, doch das Plugin kann nicht sicher sein, dass Sie sie selbst geschrieben haben („API-Design“, „TODO-Liste“ usw. können Fehltreffer sein). Standardmäßig sind alle angehakt; ohne Haken bleibt der Text unverändert (das Plugin setzt trotzdem seine eigene Nummer davor):`,
+		`Diese ${count} Überschrift(en) wirken nummeriert, doch das Plugin kann nicht sicher sein, dass Sie sie selbst geschrieben haben („2024 Rückblick“, „3 Kernpunkte“ usw. können Fehltreffer sein). Standardmäßig sind alle angehakt; ohne Haken bleibt der Text unverändert (das Plugin setzt trotzdem seine eigene Nummer davor):`,
 	foreignGuardItemToggle: (before) => `Fremde Nummerierung in „${before}“ bereinigen`,
 	foreignGuardSearchPlaceholder: "Überschriften suchen…",
 	foreignGuardSearchEmpty: "Keine passenden Überschriften",

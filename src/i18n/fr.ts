@@ -246,7 +246,7 @@ const fr: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Numérotation possiblement étrangère à l'extension",
 	foreignGuardModalBody: (count) =>
-		`Ces ${count} titre(s) semblent numérotés, mais l'extension ne peut pas être sûre que vous les avez écrits vous-même (« Conception d'API », « Liste TODO », etc. peuvent être de faux positifs). Tous sont cochés par défaut ; en décocher un conserve son texte tel quel (l'extension ajoutera quand même sa numérotation) :`,
+		`Ces ${count} titre(s) semblent numérotés, mais l'extension ne peut pas être sûre que vous les avez écrits vous-même (« 2024 en bref », « 3 points clés », etc. peuvent être de faux positifs). Tous sont cochés par défaut ; en décocher un conserve son texte tel quel (l'extension ajoutera quand même sa numérotation) :`,
 	foreignGuardItemToggle: (before) => `Nettoyer la numérotation étrangère de « ${before} »`,
 	foreignGuardSearchPlaceholder: "Rechercher des titres…",
 	foreignGuardSearchEmpty: "Aucun titre correspondant",

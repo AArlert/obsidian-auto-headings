@@ -397,21 +397,45 @@ export function stripPrefixBroad(
 }
 
 /**
+ * {@link stripForeignNumbering} 专用的序号 token：**字母样式只认单个字母**（`a` / `A`），不认字母词。
+ *
+ * 为什么不沿用 {@link numeralTokenPattern} 的 `[a-z]+` / `[A-Z]+`：那个量词是给**渲染**端留的
+ * （第 27 个字母序号会写成 `aa`），但用来**猜**「这段像不像手写编号」时，任何以拉丁词起头的真实标题
+ * 都会被吞——`## git 相关`、`### git commit 和 git push 的时机`、`## GPG 签名策略`、`## API 设计`、
+ * `## TODO 清单` 都会被当成「`git` / `GPG` / `API` / `TODO` 是字母序号」：清理命令直接删字，迁移守卫
+ * 更会把整篇文件的自动编号拦掉（本次修复，testplan J27）。手写字母编号的实际惯例是 `a.` / `A)` / `(a)`，
+ * 单字母足够；多字母（`aa.`）不再被认，属可接受取舍。与 {@link isNumberOnlyHeading} 的「`API.` /
+ * `Summary:` 不算编号」同一口径。
+ */
+function foreignNumeralTokenPattern(style: NumeralStyle): string {
+	switch (style) {
+		case "lower-alpha":
+			return "[a-z]";
+		case "upper-alpha":
+			return "[A-Z]";
+		default:
+			return numeralTokenPattern(style);
+	}
+}
+
+/**
  * 剥离一段标题文本里**外来 / 手写**的编号前缀——用于 0.6.6「清理非本插件的标题编号」命令
  * （见 `cleanup.ts` 与 spec §3.10）。**调用方须保证传入的是不含 WJ 的标题**（含 WJ = 本插件写的，
  * 由命令层跳过、不动）。
  *
  * 比 {@link stripPrefixBroad} 覆盖**更多手写惯例**，独立于任何模板：
- * - 全部序号样式（arabic / cjk / circled / 字母 / 罗马）+ 多段（`1.2.3`）；
+ * - 全部序号样式（arabic / cjk / circled / 字母 / 罗马）+ 多段（`1.2.3`）；字母样式只认单字母
+ *   （见 {@link foreignNumeralTokenPattern}）；
  * - 可选 `第`、可选成对括号（`(1)` / `（一）` / `[1]` / `【1】` / `〔1〕` / `《1》`）；
  * - 可选中文量词单位（`第3章` / `一节` / `2条`…）；
  * - 之后须跟分隔标点 / 空白（{@link TITLE_SEPARATOR_CLASS}），故「纯数字无分隔」的真实标题（`100`）不被误剥。
  *
- * **已知风险（与「清除编号」同源、属预期，spec §3.10）：** 以序号样字（含字母）开头紧跟分隔符的真实
- * 标题可能被误剥（`API 设计` → `设计`、`2024 总结` → `总结`）。本命令是**用户主动**的一次性清理，已接受。
+ * **已知风险（与「清除编号」同源、属预期，spec §3.10）：** 以序号样字开头紧跟分隔符的真实标题可能被
+ * 误剥（`2024 总结` → `总结`）。拉丁词不再落入这里：字母词见 {@link foreignNumeralTokenPattern}，
+ * 「字母 / 罗马 + 空格」见 {@link isLatinWordPrefix}。本命令是**用户主动**的一次性清理，已接受。
  */
 export function stripForeignNumbering(rawText: string): string {
-	const allToken = `(?:${ALL_NUMERAL_STYLES.map(numeralTokenPattern).join("|")})`;
+	const allToken = `(?:${ALL_NUMERAL_STYLES.map(foreignNumeralTokenPattern).join("|")})`;
 	const sep = `${NUMBER_SEPARATOR_CLASS}+`;
 	const numberPattern = `(?:${allToken}${sep})*${allToken}`;
 	const cjkPrefix = "(?:第)?";
@@ -421,7 +445,25 @@ export function stripForeignNumbering(rawText: string): string {
 	// 如 `100`、`三` 不被误剥）。右括号兼作分隔（`（一）背景` 中 `）` 即边界，无需空格）。
 	const trail = `(?:[)）\\]】〕》〉]|${TITLE_SEPARATOR_CLASS})+`;
 	const pattern = new RegExp(`^${cjkPrefix}${open}${numberPattern}${cjkUnit}${trail}`);
+	const m = pattern.exec(rawText);
+	if (m && isLatinWordPrefix(m[0], rawText.slice(m[0].length))) {
+		return rawText.replace(/\s+$/, "");
+	}
 	return rawText.replace(pattern, "").replace(/\s+$/, "");
+}
+
+/**
+ * 命中的「编号前缀」其实是标题开头的拉丁词（testplan J28）：整段只有字母、后面**只跟空白**
+ * （`vim 配置`、`XML 解析`、`C 语言`），或单个连字符紧接字母（`K-means`、`X-ray`）。
+ *
+ * 字母 / 罗马序号的手写惯例都带标点或括号（`a.` / `A)` / `(a)` / `iv.`），光跟空格的多半是正文；
+ * 罗马字母又能拼出大量真词（`vim` / `mix` / `CLI` / `MD`），连规范罗马数字判定也挡不住（`CLI`=151）。
+ * 代价：`IV 结论` 这类「罗马 + 空格」写法不再认。含数字或段间标点的（`A.1 背景`）不受影响。
+ */
+function isLatinWordPrefix(prefix: string, rest: string): boolean {
+	return (
+		/^[A-Za-z]+[ \t]+$/.test(prefix) || (/^[A-Za-z]+-$/.test(prefix) && /^[A-Za-z]/.test(rest))
+	);
 }
 
 /**
