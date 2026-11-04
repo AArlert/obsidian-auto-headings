@@ -1171,6 +1171,8 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14/J17）",
 			onConfirm: (keepLines: ReadonlySet<number>) => void;
 		};
 		expect(modal.options.renumbers).toBe(false);
+		// 真机实测：原提示末尾的「。」要去掉再接后半句，不能读成「…恢复接管。；另有 …」。
+		expect(Notice.messages.join("\n")).not.toMatch(/[。.]\s*[；;。.]/);
 		modal.onConfirm(new Set());
 		expect(ed.getValue()).toContain("## 概述\n## 总结");
 		expect(ed.getValue()).not.toContain(WORD_JOINER);

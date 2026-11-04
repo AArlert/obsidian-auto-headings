@@ -1589,7 +1589,13 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 		let link!: HTMLAnchorElement;
 		const frag = createFragment((el) => {
-			el.appendText(t.noticeForeignUnsureSkipped(unsure, base ?? undefined));
+			// 原提示末尾的句号去掉再接后半句，免得读成「…即可恢复接管。；另有 …」（真机实测）。
+			el.appendText(
+				t.noticeForeignUnsureSkipped(
+					unsure,
+					base?.replace(/[。．.!！]\s*$/, "") ?? undefined,
+				),
+			);
 			link = el.createEl("a", {
 				text: t.noticeForeignUnsureAction,
 				href: "#",
