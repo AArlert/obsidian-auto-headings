@@ -448,6 +448,8 @@ export function stripForeignNumbering(rawText: string): string {
 export interface ForeignPrefixMatch {
 	/** 整段前缀（含其后的分隔标点 / 空白），剥离即 `rawText.slice(prefix.length)`。 */
 	prefix: string;
+	/** 序号前的前导词，小写（`Step 1` → `step`，`§1` → `§`；无则空串，testplan J35）。 */
+	lead: string;
 	/** 是否以 `第` 起头。 */
 	di: boolean;
 	/** 左括号（无则空串）。 */
@@ -460,6 +462,43 @@ export interface ForeignPrefixMatch {
 	trail: string;
 	/** 命中的其实是拉丁词（`vim 配置`、`K-means`，J28）：{@link stripForeignNumbering} 不剥。 */
 	latinWord: boolean;
+}
+
+/**
+ * 序号前的前导词（testplan J35）：`Step 1`、`Chapter 2`、`Part II`、`Appendix A`、`§1`。封闭短表，首字母大小写
+ * 与全大写都认；词后须跟空白，`§` 后空白可有可无。不在表里的词（`Python 3`、`Windows 11`）照旧不当编号。
+ */
+const LEAD_WORDS = [
+	"step",
+	"chapter",
+	"part",
+	"section",
+	"lesson",
+	"lecture",
+	"unit",
+	"module",
+	"phase",
+	"stage",
+	"appendix",
+	"week",
+	"day",
+];
+
+/** {@link LEAD_WORDS} 的正则片段：第 1 组是前导词，第 2 组是 `§`。 */
+const LEAD_PATTERN = `(?:(${LEAD_WORDS.flatMap((w) => [
+	`[${w[0].toUpperCase()}${w[0]}]${w.slice(1)}`,
+	w.toUpperCase(),
+]).join("|")})[ \\t]+|(§)[ \\t]*)`;
+
+/**
+ * 序号后的中文量词（可选的一组）。`步`、`部分` 只认 `第` 起头的（`第1步`、`第一部分`，testplan J35）——不带 `第` 的
+ * `3步`、`两部分` 是数量，由调用方见 {@link isDiOnlyUnit} 作废。`部分` 放在前面，`第一部分` 不会只吃到 `部`。
+ */
+const UNIT_PATTERN = "(部分|[章节條条讲講篇部回卷课課步])?";
+
+/** 只在 `第` 起头时才算编号量词的单位（见 {@link UNIT_PATTERN}）。 */
+function isDiOnlyUnit(unit: string | undefined): boolean {
+	return unit === "步" || unit === "部分";
 }
 
 /** 手写编号前缀的正则（{@link matchForeignPrefix} 惰性构建一次）。 */
@@ -478,22 +517,28 @@ export function matchForeignPrefix(rawText: string): ForeignPrefixMatch | null {
 		// 如 `100`、`三` 不被误剥）。右括号兼作分隔（`（一）背景` 中 `）` 即边界，无需空格）。
 		const trail = `(?:[)）\\]】〕》〉]|${TITLE_SEPARATOR_CLASS})+`;
 		foreignPrefixRe = new RegExp(
-			`^(第)?([(（\\[【〔《〈]?)(${numberPattern})([章节條条讲講篇部回卷课課]?)(${trail})`,
+			`^(?:${LEAD_PATTERN}|(第))?([(（\\[【〔《〈]?)(${numberPattern})${UNIT_PATTERN}(${trail})`,
 		);
 	}
 	const m = foreignPrefixRe.exec(rawText);
 	if (!m) {
 		return null;
 	}
-	const [prefix, di, open, num, unit, trail] = m;
+	const [prefix, leadWord, section, di, open, num, unit = "", trail] = m;
+	if (!di && isDiOnlyUnit(unit)) {
+		return null;
+	}
+	const lead = (leadWord ?? section ?? "").toLowerCase();
 	return {
 		prefix,
+		lead,
 		di: Boolean(di),
 		open,
 		segments: num.split(new RegExp(`${NUMBER_SEPARATOR_CLASS}+`)),
 		unit,
 		trail,
-		latinWord: isLatinWordPrefix(prefix, rawText.slice(prefix.length)),
+		// 前导词后的字母就是序号（`Appendix A`、`Part II`），不是拉丁词。
+		latinWord: !lead && isLatinWordPrefix(prefix, rawText.slice(prefix.length)),
 	};
 }
 
@@ -517,17 +562,26 @@ function isLatinWordPrefix(prefix: string, rest: string): boolean {
  *
  * 只认阿拉伯数字 / 中文数字 / 圈码，且须带至少一个编号标志：`第`、量词（章 / 节…）、括号、末尾标点，或本身是圈码。
  * 故 `2024`、`三` 这类可能是真实标题的纯数，以及 `API.`、`Summary:` 这类字母词都不算。
+ * 前导词本身也是标志（`Chapter 2`、`Day 1`、`§3`、`Part II`、`Appendix A`，testplan J35），其后还认单个字母与罗马数字。
  */
 export function isNumberOnlyHeading(rawText: string): boolean {
 	const circled = "[\\u2460-\\u2473\\u3251-\\u325F\\u32B1-\\u32BF]";
 	const token = `(?:\\d+|[〇零一二三四五六七八九十百千万亿兆]+|${circled})`;
 	const number = `(?:${token}${NUMBER_SEPARATOR_CLASS}+)*${token}`;
+	const text = rawText.trim();
+	const leadNumber = `(?:${number}|[A-Za-z]|[IVXLCDM]+|[ivxlcdm]+)`;
+	if (new RegExp(`^${LEAD_PATTERN}${leadNumber}[.:：]?$`).test(text)) {
+		return true;
+	}
 	const m = new RegExp(
-		`^(第)?[(（\\[【〔《〈]?(${number})([章节條条讲講篇部回卷课課])?([)）\\]】〕》〉])?([.,;:、，。．·：；-]*)$`,
-	).exec(rawText.trim());
+		`^(第)?[(（\\[【〔《〈]?(${number})${UNIT_PATTERN}([)）\\]】〕》〉])?([.,;:、，。．·：；-]*)$`,
+	).exec(text);
 	if (!m) {
 		return false;
 	}
 	const [, di, num, unit, close, punct] = m;
+	if (!di && isDiOnlyUnit(unit)) {
+		return false;
+	}
 	return Boolean(di || unit || close || punct || new RegExp(`^${circled}$`).test(num));
 }

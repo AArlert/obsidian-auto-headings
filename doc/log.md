@@ -15,6 +15,37 @@
 
 ---
 
+## 2026-11-05 手写编号识别补前导词：`Step 1` / `Chapter 2` / `§1` / `第1步` / `第一部分`（未发版，交接：claude/foreign-lead-words）
+
+### 做了什么
+
+- 修漏判：`Step 1 安装` 这类标题此前对不上手写编号正则，守卫不拦，写入模式会叠成 `1 Step 1 安装`。`strip.ts` 的
+  `matchForeignPrefix` 加前导词封闭短表（Step / Chapter / Part / Section / Lesson / Lecture / Unit / Module / Phase / Stage /
+  Appendix / Week / Day，首字母大小写与全大写，及 `§`），结果多交出 `lead`；量词加 `步`、`部分`，只认 `第` 起头的
+  （`3步`、`两部分` 是数量）。`isNumberOnlyHeading` 认 `# Chapter 2`、`## Day 1`、`Part II` 这类只有前导词 + 序号的标题。
+- `foreignassess.ts`：带前导词的形状封顶为「中」（`Part 2 of the series` 这类正文常见），成串、上下级、值 = 序位照常升档；
+  前导词计入读法签名，不同前导词、有无前导词不互相成串；前导词后的字母不按拉丁词、冒号不按标签处理（`Appendix A: 术语`）。
+- testplan J35 新增并 ✅；spec 3.10「按置信度分级」、Roadmap（并记下 `number headings` 属性的评估结论）、用户指南中英同步。
+- 同场评估了 Roadmap 第 3 步（守卫提示只弹一次 + 状态栏）：建议等 1.3.2 上线、用一阵再定。
+
+### 没做什么
+
+- 真机未测；主力库 Oblivion 没有这类标题（只有 10 个 UVM 的 `phase …`，正确地未被认），语料统计前后完全一致，漏判一侧
+  只有单测覆盖。
+- 守卫提示只弹一次、`number headings` 属性证据未做（见上）；1.3.2 未发、PR #11 未回复。
+
+### 下一步
+
+- 与用户评审本块后决定是否并入 1.3.2 发版，发版后回复 PR #11。
+
+### 验证方式
+
+- `npm run check` 的测试全过（唯一红为已知 ICU 排序假红 whitelist.test.ts），eslint、tsc 通过；改动文件
+  `prettier --end-of-line auto --check` 通过（本机 CRLF 误报）；`npm run test:fuzz` 全绿；`node scripts/foreign-corpus.mjs`
+  主力库改动前后统计一致（确定 74 / 存疑 34，守卫拦 17 篇）。
+
+---
+
 ## 2026-11-04 手写编号按置信度分级：整篇判定确定 / 存疑（未发版，交接：claude/foreign-confidence-tiers）
 
 ### 做了什么
@@ -60,26 +91,3 @@
 ### 验证方式
 
 - `npm run check`：docs 守卫、eslint、prettier 全过，测试仅已知 ICU 排序假红 whitelist.test.ts；`npm run test:fuzz` 全绿。
-
----
-
-## 2026-11-04 发版 1.3.1：拉丁词误判 + 纯编号标题叠号 + 新装重启切写入（交接：claude/release-1.3.1 → master，tag 1.3.1）
-
-### 做了什么
-
-- `npm run bump`：1.3.0 → 1.3.1；`doc/release-notes/1.3.1.md` 双语，致谢 @smallerxie（PR #11）。
-- 合入三项修复（11-03 / 11-04 见下方两块，10-29 已滚入 log-archive.md）：10-29「标题本身就是编号」不再叠号（J25 / J26 / V77）；11-03 PR #11 + 后续，拉丁词开头的标题不再当手写编号（J27 / J28 / H21）；11-04 新装 `templates/` 懒建，重启不再切写入（V5 / V78 / V79）。
-- testplan 状态格「未发版」→「1.3.1」；spec 3.10 / 3.22 / Roadmap 本次条目同步。
-
-### 没做什么
-
-- J25 / J26（纯编号标题）真机只看了守卫不叠号，提示文案未单独确认；iOS / Android / macOS / Linux 未上真机。
-- 「数字 + 空格」误判（`2024 总结`，写入模式下任一即拦）与 `Step 1` 漏判未修，已提新会话卡片「手写编号识别改为整篇判断（序列证据）」。
-
-### 下一步
-
-- 推送 master 与 tag 后核实 Release 工作流产物；用户到 Community Hub 点「Check for new releases」。
-
-### 验证方式
-
-- `npm run preflight` 全绿（唯一红为已知 ICU 排序假红 whitelist.test.ts）；真机见 11-03 / 11-04 两块。

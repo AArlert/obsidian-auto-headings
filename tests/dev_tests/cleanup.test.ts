@@ -616,6 +616,25 @@ describe("标题本身就是编号（testplan J25 / J26 / V77）", () => {
 		}
 	});
 
+	it("isNumberOnlyHeading J35：前导词 + 序号、第…步 / 第…部分 也算；不带 第 的 3步 不算", () => {
+		for (const t of [
+			"Chapter 2",
+			"chapter 2:",
+			"Day 1",
+			"§3",
+			"§ 3.1",
+			"Part II",
+			"Appendix A",
+			"第3步",
+			"第一部分",
+		]) {
+			expect(isNumberOnlyHeading(t), t).toBe(true);
+		}
+		for (const t of ["Chapter", "Stage Manager", "Python 3", "3步", "两部分", "Day One"]) {
+			expect(isNumberOnlyHeading(t), t).toBe(false);
+		}
+	});
+
 	it("V77：过半标题本身就是编号 → 仅显示模式视同外来编号（不叠「第一章 第一章」）", () => {
 		const demo =
 			"# 第一章\n正文一段。\n## 第一节\n内容。\n## 第二节\n更多内容。\n# 第二章\n结束。";

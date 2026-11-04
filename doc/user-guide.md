@@ -223,6 +223,7 @@ Good to know:
 -   In the preview dialog they start **unchecked** (shown faded); clear cases start checked.
 -   Confirm with nothing checked and the button reads **"Don't clean up, just number"**: every heading keeps its text, the plugin adds its own numbering, and the note won't be flagged again.
 -   Headings that start with a word such as `vim config`, `C language`, `Q: …` or `A tier — …` are treated as text — never cleaned up, never flagged.
+-   Numbering with a lead word — `Step 1`, `Chapter 2`, `Part II`, `Appendix A`, `§1` — is recognised too, and cleanup removes the word along with the number (`Step 1 Install` → `Install`). It is a clear case when it runs in sequence (`Step 1`, `Step 2`, …) or matches its position at that level; a lone `Part 2 Results` is uncertain. A heading that is nothing but `Chapter 2` or `Day 1` counts as "the heading itself is the number", like `第一章`.
 
 ## How it works — and one thing you should know
 

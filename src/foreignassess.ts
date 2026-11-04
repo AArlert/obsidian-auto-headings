@@ -131,9 +131,14 @@ function shapeKind(m: ForeignPrefixMatch, rest: string, hasValue: boolean): Cand
 	}
 	// 字母 / 罗马 + 冒号是标签（`Q：…`、`ID：…`、`CDC：…`），读不出值的字母词（`ID`、`CDC`）也不可能是强编号。
 	if (!DIGIT_RE.test(m.segments[0]) && !CIRCLED_RE.test(m.segments[0])) {
-		if (/^[:：]/.test(m.trail) || !hasValue) {
+		if ((!m.lead && /^[:：]/.test(m.trail)) || !hasValue) {
 			return "weak";
 		}
+	}
+	// 前导词（`Step 1`、`Part 2：…`，J35）单独出现至多存疑：英文正文里也说 `Part 2 of the series`、`Section 3`，
+	// 要成串、上下级对得上或值 = 同级序位才确定。
+	if (m.lead) {
+		return "medium";
 	}
 	if (m.di || m.unit || (m.open && CLOSE_BRACKET_RE.test(m.trail))) {
 		return "strong";
@@ -206,7 +211,11 @@ export function assessForeignNumbering(content: string): ForeignAssessment[] {
 		if (!match || match.prefix.endsWith("-") || stripped.trim() === "") {
 			return;
 		}
-		const readings = readingsOf(match.segments);
+		// 前导词算进读法签名：`Step 1` / `Step 2` 成串，`Step 1` 与 `2 分析` 不串（J35）。
+		const readings = readingsOf(match.segments).map((r) => ({
+			...r,
+			sig: `${match.lead}|${r.sig}`,
+		}));
 		const kind = shapeKind(match, stripped, readings.length > 0);
 		const measure =
 			kind === "medium" &&
