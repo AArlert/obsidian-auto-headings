@@ -121,6 +121,18 @@ describe("J30 成串但剥后重名", () => {
 		expect(tiers("## 1 号线\n## 2 号线")).toEqual(["unsure", "unsure"]);
 	});
 
+	it("剥后重名也不用「值 = 序位」猜：序号在区分内容，清除命令剥完会分不清", () => {
+		expect(tiers("## 1 计划\n## 2 计划")).toEqual(["unsure", "unsure"]);
+		expect(tiers("## Week 1 计划\n## Week 2 计划")).toEqual(["unsure", "unsure"]);
+		expect(clearForeignNumberingContent("## Week 1 计划\n## Week 2 计划")).toBe(
+			"## Week 1 计划\n## Week 2 计划",
+		);
+		// 与同级里本就没编号的标题撞名同样算。
+		expect(tiers("## Week 1 计划\n## 计划")).toEqual(["unsure", "-"]);
+		// 不同父标题下的同名不算撞。
+		expect(tiers("# A\n## 1 计划\n# B\n## 1 计划")).toEqual(["-", "sure", "-", "sure"]);
+	});
+
 	it("主力库实测：字母只跟空格的串，剥后都以同一个字起头 → 字母是修饰语，整串作废", () => {
 		expect(
 			tiers("### A 档 — 外企在华\n### B 档 — 国产 AI 芯片\n### C 档 — 国产 GPU 四小龙"),
