@@ -3,7 +3,8 @@
  *
  * - {@link stripPrefix}（常规重排）：**纯 Word Joiner 边界**——只剥插件自己写的（带 WJ）前缀，
  *   无 WJ 一律视为正文（方案 A，0.6.6，见 spec.md §2.4）。
- * - {@link stripPrefixBroad}（「清除编号」命令）：全样式正则、独立于模板与 WJ，把一切像编号的都抹掉。
+ * - {@link stripPrefixBroad}（「清除编号」命令）：独立于模板，带 WJ 的精确剥、残缺前缀用全样式正则剥；
+ *   完全不带 WJ 的标题与「清理非本插件编号」同一口径（testplan H22）。
  * - {@link stripForeignNumbering}（「清理非本插件编号」命令）：覆盖更多手写惯例，但只作用于
  *   **不含 WJ** 的标题（含 WJ = 本插件写的，由命令层跳过）。
  */
@@ -17,8 +18,8 @@ import { getLevelFormat, normalizeTopLevel, type NumeralStyle, type Template } f
  * `render.ts` 的 `buildPrefix` 在每个前缀末尾追加该字符作为**精确结束标记**，无歧义地区分「前缀」
  * 与「正文」：`1 ⁠标题` 中 WJ 不可见。**方案 A（0.6.6）起，WJ 是 {@link stripPrefix} 唯一的剥离
  * 依据**——含 WJ 才剥、剥到标记之后；不含 WJ 一律视为正文。彻底消除「2024 年度总结」首次被吃等
- * 历史歧义（见 spec §2.4）。「清除编号」命令的 {@link stripPrefixBroad} 仍用全样式正则（独立于 WJ）
- * 处理手写 / 历史前缀。
+ * 历史歧义（见 spec §2.4）。「清除编号」命令的 {@link stripPrefixBroad} 仍用全样式正则处理尾哨兵被毁的
+ * 残缺前缀，不带 WJ 的手写前缀交给 {@link stripForeignNumbering}。
  */
 export const WORD_JOINER = "⁠";
 
@@ -344,16 +345,15 @@ export function stripHeadingPrefix(
 }
 
 /**
- * 全样式宽松前缀剥离——用于 M6「清除编号」命令（见 `cleanup.ts`）。
+ * 宽松前缀剥离——用于 M6「清除编号」命令（见 `cleanup.ts`）。不依赖任何模板参数，仅剥一层
+ * （「2024 折中」，同 {@link stripPrefix}）。按有没有插件痕迹分三路（spec §3.10，testplan H22）：
+ * - 首尾哨兵都在 → 精确剥到尾哨兵（含 `toAlpha` 写出的 `aa` 多字母序号）；旧单哨兵同理剥到该 WJ 之后；
+ * - 首哨兵在、尾哨兵被毁 → **全样式正则**剥残缺前缀：有结构证据，末段也认字母样式才安全；
+ * - 完全没有插件痕迹（含中间只有链接锚点 WJ 的）→ {@link stripForeignNumbering}，与「清理非本插件
+ *   编号」同一口径。此前这一路也套全样式正则，`### vim 配置`、`## C 语言` 被剥成 `配置` / `语言`。
  *
- * 与 {@link stripPrefix} 相比更激进：**末段也纳入字母样式**（lower-alpha / upper-alpha），
- * 不依赖任何模板参数（不查 `template.levels[*].numeral` 是否在用字母）。仅剥一层
- * （「2024 折中」，同 {@link stripPrefix}）。
- *
- * **已知风险（spec §3.10 / §2.3 预期取舍）：** 以序号样字（含字母）开头紧跟分隔符的标题
- * 可能被误剥——如 `a) 概述` → `概述` ✓，但 `API 设计` → `设计` ⚠️。
- * 「清除编号」是用户主动操作，此风险已被接受。与调高 topLevel 时的 C3 修复不同——后者
- * 走模板感知的 {@link stripHeadingPrefix}，仅当模板实际使用字母时才剥字母前缀，误伤面更小。
+ * **已知风险（spec §3.10 / §2.3 预期取舍）：** 同 {@link stripForeignNumbering}——`2024 总结` 这类
+ * 以数字开头紧跟空格的真实标题仍会被误剥。「清除编号」是用户主动操作，此风险已被接受。
  *
  * @param rawText 标题的原始文本（含行尾空白，见 {@link Heading.rawText}）
  * @param knownPrefixes 已知前缀候选（含空串；由 main.ts 传入全模板前缀并集）
@@ -364,8 +364,7 @@ export function stripPrefixBroad(
 	knownPrefixes: readonly string[] = [],
 	knownSuffixes: readonly string[] = [],
 ): string {
-	// WJ 快速路径：buildPrefix 写入 WJ（0.6.4 起单哨兵、0.7.20 起首尾双哨兵），此路径生效；旧格式由
-	// 下方正则路径兼容。
+	// WJ 快速路径：buildPrefix 写入 WJ（0.6.4 起单哨兵、0.7.20 起首尾双哨兵），此路径生效。
 	const wjIdx = rawText.indexOf(WORD_JOINER);
 	if (wjIdx === 0) {
 		// 双哨兵：首字符即 WJ。尾哨兵在 → 剥到**第二个** WJ 之后（整段前缀清净）；尾哨兵被毁（或第二个
@@ -382,9 +381,12 @@ export function stripPrefixBroad(
 			strippableSuffixes: knownSuffixes,
 		})
 	) {
-		// 旧单哨兵：前一段整段像编号才剥到该 WJ 之后；否则 WJ 属于正文（链接锚点），交给下方正则
-		// 只剥行首真正像编号的部分（testplan E40）。
+		// 旧单哨兵：前一段整段像编号才剥到该 WJ 之后。
 		return rawText.slice(wjIdx + 1).replace(/\s+$/, "");
+	} else {
+		// 没有插件痕迹（WJ 缺席，或只在正文链接锚点里，testplan E40）：按手写编号口径只剥行首真正像
+		// 编号的部分，拉丁词开头的标题不动（testplan H22）。
+		return stripForeignNumbering(rawText);
 	}
 	const allToken = `(?:${ALL_NUMERAL_STYLES.map(numeralTokenPattern).join("|")})`;
 	const sep = `${NUMBER_SEPARATOR_CLASS}+`;

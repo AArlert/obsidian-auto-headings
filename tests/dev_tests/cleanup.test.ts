@@ -27,9 +27,9 @@ describe("clearNumberingContent（M6 H 类场景）", () => {
 		expect(clearNumberingContent(input)).toBe("## 子节\n### 细节\n## 另一子节");
 	});
 
-	// H3: 混合样式（cjk + circled + alpha）
+	// H3: 混合样式（cjk + circled + alpha）；不带 WJ 的字母序号须带标点（H22）
 	it("H3: 中文 / 带圈 / 字母混合历史前缀都能剥", () => {
-		const input = "## 一 概述\n### ① 细节\n#### a 备注\n## 二 结论";
+		const input = "## 一 概述\n### ① 细节\n#### a. 备注\n## 二 结论";
 		expect(clearNumberingContent(input)).toBe("## 概述\n### 细节\n#### 备注\n## 结论");
 	});
 
@@ -78,6 +78,58 @@ describe("clearNumberingContent（M6 H 类场景）", () => {
 	it("H6 深度的多段编号被剥净", () => {
 		const input = "## 1 a\n### 1.1 b\n#### 1.1.1 c\n##### 1.1.1.1 d\n###### 1.1.1.1.1 e";
 		expect(clearNumberingContent(input)).toBe("## a\n### b\n#### c\n##### d\n###### e");
+	});
+
+	// H22: 不带 WJ 的标题与「清理非本插件编号」同一口径，拉丁词开头的正文不被删字
+	it("H22: 已编号笔记里没编号的拉丁词标题原样保留，本插件编号照旧剥净", () => {
+		const W = WORD_JOINER;
+		const input = [
+			`## ${W}1 ${W}概述`,
+			"### vim 配置",
+			`### ${W}1.1 ${W}背景`,
+			"## XML 解析",
+			"## C 语言",
+			"## K-means 聚类",
+			"## git 相关",
+			`## ${W}aa ${W}附录`,
+		].join("\n");
+		expect(clearNumberingContent(input)).toBe(
+			[
+				"## 概述",
+				"### vim 配置",
+				"### 背景",
+				"## XML 解析",
+				"## C 语言",
+				"## K-means 聚类",
+				"## git 相关",
+				"## 附录",
+			].join("\n"),
+		);
+	});
+
+	it("H22: 不带 WJ 的手写编号照旧剥，只跟空格的单字母当正文", () => {
+		const input = [
+			"## 1 概述",
+			"### 1.1 背景",
+			"## a. 备注",
+			"## a 备注",
+			"## （一）背景",
+			"## 第三章 总结",
+		].join("\n");
+		expect(clearNumberingContent(input)).toBe(
+			["## 概述", "### 背景", "## 备注", "## a 备注", "## 背景", "## 总结"].join("\n"),
+		);
+	});
+
+	it("H22: 首哨兵在、尾哨兵被毁的残缺前缀仍按全样式剥净（含多字母序号）", () => {
+		const W = WORD_JOINER;
+		expect(clearNumberingContent(`## ${W}aa) 附录\n## ${W}①） 三`)).toBe("## 附录\n## 三");
+	});
+
+	it("H22: 只在链接锚点里有 WJ 的拉丁词标题不被删字", () => {
+		const W = WORD_JOINER;
+		const input = `## vim 参见 [[a#${W}1 ${W}概述]]`;
+		expect(clearNumberingContent(input)).toBe(input);
 	});
 });
 

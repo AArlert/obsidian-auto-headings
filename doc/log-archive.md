@@ -8,6 +8,30 @@
 
 ---
 
+## 2026-11-03 合入外部 PR #11：拉丁词开头的标题不再被当成手写编号（未发版，交接：claude/pr11-latin-word-numbering）
+
+### 做了什么
+
+- 合入外部 PR [#11](https://github.com/AArlert/obsidian-auto-headings/pull/11)（@smallerxie，`5c03a19`，`merge --no-ff` 保留作者）：`stripForeignNumbering` 的字母序号从 `[a-z]+` 收窄成单字母，`## git 相关`、`## GPG 签名策略`、`## API 设计` 不再被迁移守卫拦整篇、不再被清理命令删字（testplan J27 / H21）。`stripPrefixBroad` 不收窄（要剥本插件写出的 `aa`），取舍对。
+- 补 PR 漏的（testplan J28）：罗马 token `[ivxlcdm]+` 没跟着收窄，`vim 配置`、`XML 解析`、`CLI 工具`、`MVC 架构` 照旧误判；单字母 + 空格（`C 语言`、`B 站`）与 `K-means` 也是。`src/strip.ts` 新增 `isLatinWordPrefix`：命中的前缀若只有字母、后面只跟空白（或单连字符紧接字母），否决剥离。规范罗马数字判定救不了（`CLI`=151），故走「须带标点 / 括号」口径。代价：`IV 结论` 不再认。PR 原测试 `## a 备注` → `## 备注` 改为保留。
+- 10 个 locale 清理框文案的误判举例「API 设计 / TODO 清单」→「2024 总结 / 3 个要点」（合入后旧例子已不成立）；spec 2.8 / 3.9 / 3.10、Roadmap「整篇判断」条补进展。
+
+### 没做什么
+
+- 没在 PR 上留言致谢（本机无 `gh`）；合入推送后 GitHub 会自动把 PR 标为 merged。
+- 真机没测；没发版。`2024 总结` 误判与 `Step 1` / `Chapter 2` 漏判留给 Roadmap「整篇判断（序列证据）」。
+
+### 下一步
+
+- 随下个补丁版发（与 10-29 的「标题本身就是编号」一起）；发版说明致谢 @smallerxie。
+- 启发：spec 里「已接受」的误伤（3.9 当初说守卫误判只是「跳过 + 提示」）在技术用户的笔记里代价远大于估计——Roadmap 序列证据一项值得提优先级。
+
+### 验证方式
+
+- `npx vitest run tests/dev_tests/cleanup.test.ts` 68/68；全量 1070/1071，唯一红是已知 ICU 排序假红（whitelist.test.ts）；lint 0 错误；`npm run docs` 守卫全过。
+
+---
+
 ## 2026-10-29 标题本身就是编号时不再叠编号（未发版，交接：claude/auto-headings-plugin-review-1076f5）
 
 ### 做了什么
