@@ -245,7 +245,7 @@ const de: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Mögliche Nummerierung von außerhalb des Plugins",
 	foreignGuardModalBody: (count) =>
-		`Diese ${count} Überschrift(en) wirken nummeriert, doch das Plugin kann nicht sicher sein, dass Sie sie selbst geschrieben haben („2024 Rückblick“, „3 Kernpunkte“ usw. können Fehltreffer sein). Standardmäßig sind alle angehakt; ohne Haken bleibt der Text unverändert (das Plugin setzt trotzdem seine eigene Nummer davor):`,
+		`Diese ${count} Überschrift(en) wirken nummeriert. Eindeutige Fälle sind angehakt, unsichere („2024 Rückblick“, „30-Sekunden-Pitch“ usw.) zunächst nicht. Angehakte werden bereinigt, nicht angehakte behalten ihren Text (das Plugin setzt trotzdem seine eigene Nummer davor):`,
 	foreignGuardItemToggle: (before) => `Fremde Nummerierung in „${before}“ bereinigen`,
 	foreignGuardSearchPlaceholder: "Überschriften suchen…",
 	foreignGuardSearchEmpty: "Keine passenden Überschriften",
@@ -439,6 +439,12 @@ const de: Partial<Messages> = {
 	foreignGuardSelected: (selected, total) => `${selected} von ${total} ausgewählt`,
 	foreignGuardUndoHint: "Änderungen an dieser Notiz lassen sich mit Strg+Z rückgängig machen",
 	foreignGuardConfirmCount: (count) => `${count} bereinigen`,
+	foreignGuardConfirmNumberOnly: "Nicht bereinigen, nur nummerieren",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}. ` : ""}${count} Überschrift(en) sind womöglich keine Nummerierung und blieben unverändert`,
+	noticeForeignUnsureAction: "Prüfen…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`Tresor-Nummerierung gelöscht (${count} Datei(en) geändert); ${unsureFiles} Datei(en) enthalten unsichere Überschriften, die unverändert blieben`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Diese Notiz hat ${count} Überschrift(en), die wie handgeschriebene Nummerierung aussehen; diesmal wurde nicht ${virtual ? "angezeigt" : "automatisch nummeriert"}.`,
 	noticeNumberOnlyGuard: (virtual) =>

@@ -234,7 +234,7 @@ const ko: Partial<Messages> = {
 
 	foreignGuardModalTitle: "플러그인이 아닌 번호로 의심됨",
 	foreignGuardModalBody: (count) =>
-		`다음 제목 ${count}개는 번호가 있는 것처럼 보이지만, 직접 쓴 것인지 확신할 수 없습니다 ('2024 회고', '3가지 요점' 등은 오탐일 수 있음). 기본적으로 모두 선택되어 있으며, 선택을 해제하면 원문을 그대로 두고 플러그인이 자체 번호를 추가합니다:`,
+		`다음 제목 ${count}개는 번호가 있는 것처럼 보입니다. 확실한 것은 선택되어 있고, 애매한 것('2024 회고', '30초 버전' 등)은 기본적으로 선택되지 않습니다. 선택한 제목은 정리되고, 선택하지 않은 제목은 원문을 그대로 두며 플러그인이 자체 번호를 추가합니다:`,
 	foreignGuardItemToggle: (before) => `'${before}'의 외부 번호 정리`,
 	foreignGuardSearchPlaceholder: "제목 검색…",
 	foreignGuardSearchEmpty: "일치하는 제목이 없습니다",
@@ -404,6 +404,12 @@ const ko: Partial<Messages> = {
 	foreignGuardSelected: (selected, total) => `${total}개 중 ${selected}개 선택`,
 	foreignGuardUndoHint: "이 노트의 변경은 Ctrl+Z로 되돌릴 수 있습니다",
 	foreignGuardConfirmCount: (count) => `${count}개 정리`,
+	foreignGuardConfirmNumberOnly: "정리하지 않고 번호만 매기기",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}. ` : ""}번호인지 확실하지 않은 제목 ${count}개는 그대로 두었습니다`,
+	noticeForeignUnsureAction: "확인…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`보관함 번호를 지웠습니다 (파일 ${count}개 변경). 확실하지 않은 제목이 있는 파일 ${unsureFiles}개는 그대로 두었습니다`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`이 노트에는 직접 쓴 번호로 보이는 제목이 ${count}개 있어, 이번에는 번호를 ${virtual ? "표시하" : "자동으로 매기"}지 않았습니다.`,
 	noticeNumberOnlyGuard: (virtual) =>

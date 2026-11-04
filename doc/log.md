@@ -15,6 +15,31 @@
 
 ---
 
+## 2026-11-04 手写编号按置信度分级：整篇判定确定 / 存疑（未发版，交接：claude/foreign-confidence-tiers）
+
+### 做了什么
+
+- 新增 `src/foreignassess.ts` 的 `assessForeignNumbering`：形状分强 / 中 / 弱，再用同级成串、上下级对得上、「值 = 同级序位」升为「确定」，量词否决孤立猜测、重名与「同字起头的字母修饰语」否决成串。`strip.ts` 拆出 `matchForeignPrefix`（同一条正则交出组成部分），`stripForeignNumbering` 行为不变。
+- 各入口改按档位（spec 3.10「按置信度分级」）：守卫只认确定；仅显示过半只数确定与纯编号；预览框存疑默认不勾、全不勾时按钮为「不清理，直接编号」；清理 / 清除命令只剥确定，存疑跳过并在提示里给「检查…」（清除命令点开的框只剥不套模板）；清除全库提示带存疑篇数。新增 4 条文案 × 10 语言，并改了预览框说明。
+- `scripts/foreign-corpus.mjs`：用当前源码过一遍某库的标题、对照 1.3.1 单标题正则。主力库 Oblivion（323 篇 / 3539 标题）：确定 74 个全是真编号，存疑 34 个全是数量短语与一个日期；守卫会拦的笔记 33 → 17 篇。实测中抓出并修掉三处误判：单字量词挡串（`2 分析`）、字母 + 冒号标签（`Q：` / `ID：`）、`A 档` / `B 档` 修饰语串；另修孤立 `⑤ 「…」` 被降成存疑。报告在 `doc/research/`（不入库）。
+- testplan J29–J34、H23、V80 新增并 ✅；H5（孤立 `1.1 标题` 被误剥）随之解决。
+
+### 没做什么
+
+- 未真机验证（预览框按钮文案、提示文案、清除全库提示）；可打 BRAT beta。
+- Roadmap 第 3 步（守卫提示只弹一次 + 状态栏常驻）、`Step 1` / `Chapter 2` 前导词、`number headings` 属性证据未做。
+- PR #11 仍未回复（本机无 `gh`）。
+
+### 下一步
+
+- 真机试一轮后决定是否发 1.3.2（含上一块的清除命令修复与本块）。
+
+### 验证方式
+
+- `npm run check` 的测试与 eslint 全过（唯一红为已知 ICU 排序假红 whitelist.test.ts）；本机 CRLF 工作副本下 prettier 全量检查会误报，改动文件单独 `prettier --check` 通过；`npm run test:fuzz` 全绿；语料脚本见上。
+
+---
+
 ## 2026-11-04 「清除编号」不再删拉丁词开头的标题 + 手写编号识别定方案（未发版，交接：claude/clear-no-wj-foreign-rules）
 
 ### 做了什么
@@ -58,27 +83,3 @@
 ### 验证方式
 
 - `npm run preflight` 全绿（唯一红为已知 ICU 排序假红 whitelist.test.ts）；真机见 11-03 / 11-04 两块。
-
----
-
-## 2026-11-04 新装后重启一次就从「仅显示」变成写入（未发版，交接：claude/fresh-install-restart-mode → claude/fresh-install-no-templates-dir）
-
-### 做了什么
-
-- 起因：真机验 PR #11 时，Test 库（新装、没改过设置）替换插件重载后进了写入模式，笔记被写上编号。根因：新装判据 `isFreshInstall` 看「data.json 为空且没有 `templates/`」，而 `TemplateStore.init` 首次加载就自己建了 `templates/default.json`、新装分支又刻意不落盘 data.json（V4）——第二次启动被认成「从没改过设置的老用户」切到写入。原 V5 顺序约束只保住了第一次加载。
-- 第一版（`6f58e56`，已被取代）用 vault 级 `localStorage` 记「判过新装」；用户追问全平台后改掉：移动端 WebView 存储可能被系统回收，也不随同步走（新装库同步到第二台设备照样切写入）。
-- 最终方案：**`templates/` 懒建**（`src/templates/TemplateStore.ts`）。`init` 不建目录、不写文件，默认模板走内置默认；`create` / `save` / `rename` 写前过 `ensureDir`，第一次建目录**之前**回调主插件 `saveSettings`（先 data.json 后目录，中途失败最多是有设置无模板）。新装不改设置时磁盘零写入，各设备都判为新装；老用户目录已在，行为不变、不额外落盘。
-- testplan V5 改写、V78 改写、新增 V79；spec 3.22 / 3.6 / 4 / 7 同步；`tests/dev_tests/fake-disk.ts`（最严格平台语义：`write` 不自动建父目录、`list` 对缺失目录抛错）+ `template-store.test.ts` 5 例 + `settings.test.ts` V78 / V79 走真实重启链路。
-
-### 没做什么
-
-- 真机已验（用户 Windows Test 库：V78 卸载重装 + 重载两次、V79 只改白名单）；iOS / Android / macOS / Linux 未上真机，靠 `fake-disk` 最严格语义兜底。1.2.0–1.3.0 期间已被切到写入的库不回迁（目录已在，无从区分）。
-- 已知边界（spec 3.22）：新装用户改过模板后，另一台设备先同步到 `templates/`、data.json 未到时启动，会短暂按写入处理——与 V6 同类，接受。
-
-### 下一步
-
-- 真机验 V78 / V79 与 PR #11 三篇验证笔记，通过后发 1.3.1（含 10-29、11-03、本块三项修复；发版说明致谢 @smallerxie）。
-
-### 验证方式
-
-- `settings.test.ts` + `template-store.test.ts` 28/28；全量 1076/1077（唯一红是已知 ICU 排序假红）；lint 0 错误；docs 守卫全过。

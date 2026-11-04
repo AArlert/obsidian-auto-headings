@@ -244,7 +244,7 @@ const es: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Posible numeración ajena al complemento",
 	foreignGuardModalBody: (count) =>
-		`Estos ${count} encabezado(s) parecen numerados, pero el complemento no puede asegurar que los escribieras tú («2024 en resumen», «3 puntos clave», etc. pueden ser falsos positivos). Todos están marcados por defecto; al desmarcar uno se conserva su texto tal cual (el complemento añadirá igualmente su numeración):`,
+		`Estos ${count} encabezado(s) parecen numerados. Los casos claros están marcados; los dudosos («2024 en resumen», «presentación de 30 segundos», etc.) empiezan sin marcar. Los marcados se limpian; los no marcados conservan su texto (el complemento añadirá igualmente su numeración):`,
 	foreignGuardItemToggle: (before) => `Limpiar la numeración ajena de «${before}»`,
 	foreignGuardSearchPlaceholder: "Buscar encabezados…",
 	foreignGuardSearchEmpty: "No hay encabezados coincidentes",
@@ -436,6 +436,12 @@ const es: Partial<Messages> = {
 	foreignGuardSelected: (selected, total) => `${selected} de ${total} seleccionados`,
 	foreignGuardUndoHint: "Los cambios en esta nota se pueden deshacer con Ctrl+Z",
 	foreignGuardConfirmCount: (count) => `Limpiar ${count}`,
+	foreignGuardConfirmNumberOnly: "No limpiar, solo numerar",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}. ` : ""}${count} encabezado(s) dudosos se dejaron sin cambios`,
+	noticeForeignUnsureAction: "Revisar…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`Numeración de la bóveda borrada (${count} archivo(s) modificados); ${unsureFiles} archivo(s) tienen encabezados dudosos que no se tocaron`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Esta nota tiene ${count} encabezado(s) que parecen numerados a mano; esta vez no se ${virtual ? "mostró" : "aplicó"} numeración.`,
 	noticeNumberOnlyGuard: (virtual) =>

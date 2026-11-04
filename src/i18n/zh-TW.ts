@@ -225,7 +225,7 @@ const zhTW: Partial<Messages> = {
 
 	foreignGuardModalTitle: "疑似非本外掛的編號",
 	foreignGuardModalBody: (count) =>
-		`以下 ${count} 處標題看起來帶有編號，但無法確認是否為你手寫（如「2024 總結」「3 個重點」可能誤判）。預設全部勾選清理；取消勾選則保留原文，外掛仍會依範本加上自己的編號：`,
+		`以下 ${count} 處標題看起來帶有編號。有把握的已勾選，沒把握的（如「2024 總結」「30 秒版」）預設不勾；勾選的會被清理，未勾選的保留原文，外掛仍會依範本加上自己的編號：`,
 	foreignGuardItemToggle: (before) => `清理「${before}」的外來編號`,
 	foreignGuardSearchPlaceholder: "搜尋標題…",
 	foreignGuardSearchEmpty: "沒有符合的標題",
@@ -389,6 +389,12 @@ const zhTW: Partial<Messages> = {
 	foreignGuardSelected: (selected, total) => `已選 ${selected} / ${total}`,
 	foreignGuardUndoHint: "本篇的變更可用 Ctrl+Z 復原",
 	foreignGuardConfirmCount: (count) => `確認清理 ${count} 處`,
+	foreignGuardConfirmNumberOnly: "不清理，直接編號",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}；` : ""}另有 ${count} 處標題無法確定是否為編號，未更動`,
+	noticeForeignUnsureAction: "檢查…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`已清除全庫編號（共修改 ${count} 個檔案）；另有 ${unsureFiles} 個檔案含無法確定的標題，未更動`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`這篇有 ${count} 處標題像是手寫編號，本次沒有${virtual ? "顯示" : "自動"}編號。`,
 	noticeNumberOnlyGuard: (virtual) =>

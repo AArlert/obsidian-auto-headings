@@ -462,6 +462,14 @@ export interface Messages {
 	foreignGuardSelected: (selected: number, total: number) => string;
 	foreignGuardUndoHint: string;
 	foreignGuardConfirmCount: (count: number) => string;
+	/** J33：清理预览框一条都没勾、确认后仍会套模板时的确认按钮。 */
+	foreignGuardConfirmNumberOnly: string;
+	/** J34 / H23：清理 / 清除命令跳过了「存疑」条目；`base` 为原本的结果提示（无改动时缺省）。 */
+	noticeForeignUnsureSkipped: (count: number, base?: string) => string;
+	/** J34 / H23：上一条提示里打开清理预览框的链接。 */
+	noticeForeignUnsureAction: string;
+	/** H23：清除全库编号后，有文件含「存疑」标题未动。 */
+	noticeClearedVaultUnsure: (count: number, unsureFiles: number) => string;
 	noticeForeignGuardCount: (count: number, virtual: boolean) => string;
 	/** J25 / J26：外来编号守卫命中但没有可清理的条目（标题本身就是编号，如「第一章」）。 */
 	noticeNumberOnlyGuard: (virtual: boolean) => string;

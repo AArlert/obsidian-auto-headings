@@ -437,21 +437,64 @@ function foreignNumeralTokenPattern(style: NumeralStyle): string {
  * 「字母 / 罗马 + 空格」见 {@link isLatinWordPrefix}。本命令是**用户主动**的一次性清理，已接受。
  */
 export function stripForeignNumbering(rawText: string): string {
-	const allToken = `(?:${ALL_NUMERAL_STYLES.map(foreignNumeralTokenPattern).join("|")})`;
-	const sep = `${NUMBER_SEPARATOR_CLASS}+`;
-	const numberPattern = `(?:${allToken}${sep})*${allToken}`;
-	const cjkPrefix = "(?:第)?";
-	const open = "[(（\\[【〔《〈]?";
-	const cjkUnit = "(?:[章节條条讲講篇部回卷课課])?";
-	// 序号之后**必须**跟「成对右括号 或 分隔标点 / 空白」中的至少一个（故纯数字无分隔的真实标题
-	// 如 `100`、`三` 不被误剥）。右括号兼作分隔（`（一）背景` 中 `）` 即边界，无需空格）。
-	const trail = `(?:[)）\\]】〕》〉]|${TITLE_SEPARATOR_CLASS})+`;
-	const pattern = new RegExp(`^${cjkPrefix}${open}${numberPattern}${cjkUnit}${trail}`);
-	const m = pattern.exec(rawText);
-	if (m && isLatinWordPrefix(m[0], rawText.slice(m[0].length))) {
+	const m = matchForeignPrefix(rawText);
+	if (!m || m.latinWord) {
 		return rawText.replace(/\s+$/, "");
 	}
-	return rawText.replace(pattern, "").replace(/\s+$/, "");
+	return rawText.slice(m.prefix.length).replace(/\s+$/, "");
+}
+
+/** {@link matchForeignPrefix} 的结果：一段疑似手写编号前缀的**形状**，供整篇判定（`foreignassess.ts`）分档。 */
+export interface ForeignPrefixMatch {
+	/** 整段前缀（含其后的分隔标点 / 空白），剥离即 `rawText.slice(prefix.length)`。 */
+	prefix: string;
+	/** 是否以 `第` 起头。 */
+	di: boolean;
+	/** 左括号（无则空串）。 */
+	open: string;
+	/** 各序号段的原文（`1.2` → `["1", "2"]`）。 */
+	segments: string[];
+	/** 中文量词单位（`章` / `节`…，无则空串）。 */
+	unit: string;
+	/** 序号之后的右括号 / 分隔标点 / 空白。 */
+	trail: string;
+	/** 命中的其实是拉丁词（`vim 配置`、`K-means`，J28）：{@link stripForeignNumbering} 不剥。 */
+	latinWord: boolean;
+}
+
+/** 手写编号前缀的正则（{@link matchForeignPrefix} 惰性构建一次）。 */
+let foreignPrefixRe: RegExp | null = null;
+
+/**
+ * 解析标题开头的手写编号前缀**形状**（{@link stripForeignNumbering} 的同一条正则，多交出各组成部分）。
+ * 无匹配返回 `null`。调用方须保证传入的是不带插件前缀的标题（同 {@link stripForeignNumbering}）。
+ */
+export function matchForeignPrefix(rawText: string): ForeignPrefixMatch | null {
+	if (!foreignPrefixRe) {
+		const allToken = `(?:${ALL_NUMERAL_STYLES.map(foreignNumeralTokenPattern).join("|")})`;
+		const sep = `${NUMBER_SEPARATOR_CLASS}+`;
+		const numberPattern = `(?:${allToken}${sep})*${allToken}`;
+		// 序号之后**必须**跟「成对右括号 或 分隔标点 / 空白」中的至少一个（故纯数字无分隔的真实标题
+		// 如 `100`、`三` 不被误剥）。右括号兼作分隔（`（一）背景` 中 `）` 即边界，无需空格）。
+		const trail = `(?:[)）\\]】〕》〉]|${TITLE_SEPARATOR_CLASS})+`;
+		foreignPrefixRe = new RegExp(
+			`^(第)?([(（\\[【〔《〈]?)(${numberPattern})([章节條条讲講篇部回卷课課]?)(${trail})`,
+		);
+	}
+	const m = foreignPrefixRe.exec(rawText);
+	if (!m) {
+		return null;
+	}
+	const [prefix, di, open, num, unit, trail] = m;
+	return {
+		prefix,
+		di: Boolean(di),
+		open,
+		segments: num.split(new RegExp(`${NUMBER_SEPARATOR_CLASS}+`)),
+		unit,
+		trail,
+		latinWord: isLatinWordPrefix(prefix, rawText.slice(prefix.length)),
+	};
 }
 
 /**

@@ -232,7 +232,7 @@ const zh: Messages = {
 
 	foreignGuardModalTitle: "疑似非本插件的编号",
 	foreignGuardModalBody: (count) =>
-		`以下 ${count} 处标题看起来带编号，但无法确认是否你手写（如「2024 总结」「3 个要点」可能误判）。默认全勾清理；取消勾选则保留原文，插件仍会按模板加上自己的编号：`,
+		`以下 ${count} 处标题看起来带编号。拿得准的已勾选，拿不准的（如「2024 总结」「30 秒版」）默认不勾；勾选的会被清理，未勾选的保留原文，插件仍会按模板加上自己的编号：`,
 	foreignGuardItemToggle: (before) => `清理「${before}」的外来编号`,
 	foreignGuardSearchPlaceholder: "搜索标题…",
 	foreignGuardSearchEmpty: "没有匹配的标题",
@@ -398,6 +398,12 @@ const zh: Messages = {
 	foreignGuardSelected: (selected, total) => `已选 ${selected} / ${total}`,
 	foreignGuardUndoHint: "本篇的改动可用 Ctrl+Z 撤销",
 	foreignGuardConfirmCount: (count) => `确认清理 ${count} 处`,
+	foreignGuardConfirmNumberOnly: "不清理，直接编号",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}；` : ""}另有 ${count} 处标题看不准是不是编号，未动`,
+	noticeForeignUnsureAction: "检查…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`已清除全库编号（共修改 ${count} 个文件）；另有 ${unsureFiles} 个文件含看不准的标题，未动`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`这篇有 ${count} 处标题像是手写编号，本次没有${virtual ? "显示" : "自动"}编号。`,
 	noticeNumberOnlyGuard: (virtual) =>

@@ -237,7 +237,7 @@ const ja: Partial<Messages> = {
 
 	foreignGuardModalTitle: "他プラグインの番号の疑い",
 	foreignGuardModalBody: (count) =>
-		`次の ${count} 件の見出しは番号付きに見えますが、あなたの手書きかどうか判断できません（「2024 振り返り」「3 つの要点」などは誤判定の可能性があります）。既定ではすべて整理対象としてチェックされています。チェックを外すと原文を残し、プラグインはテンプレートに従って自分の番号を付けます：`,
+		`次の ${count} 件の見出しは番号付きに見えます。確実なものはチェック済み、判断しきれないもの（「2024 振り返り」「30 秒版」など）は既定でチェックなしです。チェックしたものは整理され、チェックなしは原文のまま残り、プラグインはテンプレートに従って自分の番号を付けます：`,
 	foreignGuardItemToggle: (before) => `「${before}」の外部番号を整理`,
 	foreignGuardSearchPlaceholder: "見出しを検索…",
 	foreignGuardSearchEmpty: "一致する見出しがありません",
@@ -419,6 +419,12 @@ const ja: Partial<Messages> = {
 	foreignGuardSelected: (selected, total) => `${selected} / ${total} 件を選択`,
 	foreignGuardUndoHint: "このノートの変更は Ctrl+Z で元に戻せます",
 	foreignGuardConfirmCount: (count) => `${count} 件を整理する`,
+	foreignGuardConfirmNumberOnly: "整理せずに番号を付ける",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}。` : ""}番号かどうか判断しきれない見出し ${count} 件はそのままです`,
+	noticeForeignUnsureAction: "確認…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`Vault 全体の番号を消去しました（${count} 個のファイルを変更）。判断しきれない見出しを含む ${unsureFiles} 個のファイルはそのままです`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`このノートには手書きの番号らしき見出しが ${count} 件あり、今回は${virtual ? "表示" : "自動採番"}されませんでした。`,
 	noticeNumberOnlyGuard: (virtual) =>

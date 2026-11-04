@@ -250,7 +250,7 @@ const ru: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Возможная нумерация не от плагина",
 	foreignGuardModalBody: (count) =>
-		`Заголовки (${count}) выглядят пронумерованными, но плагин не уверен, что вы написали номера сами («2024 итоги», «3 главных пункта» и т. п. могут оказаться ложными срабатываниями). По умолчанию отмечены все; если снять отметку, текст останется как есть (плагин всё равно добавит свою нумерацию):`,
+		`Заголовки (${count}) выглядят пронумерованными. Очевидные случаи отмечены, сомнительные («2024 итоги», «версия на 30 секунд» и т. п.) по умолчанию не отмечены. Отмеченные будут очищены, неотмеченные сохранят текст (плагин всё равно добавит свою нумерацию):`,
 	foreignGuardItemToggle: (before) => `Убрать чужую нумерацию в «${before}»`,
 	foreignGuardSearchPlaceholder: "Поиск заголовков…",
 	foreignGuardSearchEmpty: "Подходящих заголовков нет",
@@ -432,6 +432,12 @@ const ru: Partial<Messages> = {
 	foreignGuardSelected: (selected, total) => `Выбрано ${selected} из ${total}`,
 	foreignGuardUndoHint: "Изменения в этой заметке можно отменить через Ctrl+Z",
 	foreignGuardConfirmCount: (count) => `Очистить: ${count}`,
+	foreignGuardConfirmNumberOnly: "Не очищать, просто пронумеровать",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}. ` : ""}Сомнительные заголовки (${count}) оставлены без изменений`,
+	noticeForeignUnsureAction: "Проверить…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`Нумерация хранилища очищена (изменено файлов: ${count}); файлы с сомнительными заголовками (${unsureFiles}) оставлены без изменений`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`В этой заметке заголовков, похожих на ручную нумерацию: ${count}; на этот раз нумерация не ${virtual ? "показана" : "применена"}.`,
 	noticeNumberOnlyGuard: (virtual) =>

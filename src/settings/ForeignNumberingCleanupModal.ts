@@ -34,9 +34,17 @@ export interface ForeignNumberingCandidate {
  * 提供）而非提前算好两个静态变体——白名单 `subtree` 匹配依据标题文本判豁免，某条外来编号是否被
  * 清理会联动影响它自身乃至子孙标题是否被套用编号，只有整份重算才保证预览与确认执行逐条一致。
  */
+/** {@link ForeignNumberingCleanupModal} 的可选项。 */
+export interface ForeignNumberingCleanupModalOptions {
+	/** 初始即不勾的行号——整篇判定为「存疑」的条目（testplan J33）。 */
+	initialKeep?: ReadonlySet<number>;
+	/** 确认后是否紧接着套模板编号：是且一条都没勾时，按钮写「不清理，直接编号」（testplan J33）。 */
+	renumbers?: boolean;
+}
+
 export class ForeignNumberingCleanupModal extends Modal {
-	/** 取消勾选（=保留原文，不清理）的行号集合；默认空集＝全部勾选清理。 */
-	private readonly keepLines = new Set<number>();
+	/** 取消勾选（=保留原文，不清理）的行号集合；初始为「存疑」条目（testplan J33），其余默认勾选清理。 */
+	private readonly keepLines: Set<number>;
 	/** 搜索框当前查询词；跨 {@link render} 重绘保留，避免勾选联动重算时把用户正输入的内容擦掉。 */
 	private searchQuery = "";
 
@@ -48,8 +56,10 @@ export class ForeignNumberingCleanupModal extends Modal {
 			keepLines: ReadonlySet<number>,
 		) => readonly ForeignNumberingPreviewItem[],
 		private readonly onConfirm: (keepLines: ReadonlySet<number>) => void,
+		private readonly options: ForeignNumberingCleanupModalOptions = {},
 	) {
 		super(app);
+		this.keepLines = new Set(options.initialKeep ?? []);
 	}
 
 	onOpen(): void {
@@ -207,9 +217,13 @@ export class ForeignNumberingCleanupModal extends Modal {
 		buttons
 			.createEl("button", { text: this.t.cancel })
 			.addEventListener("click", () => this.close());
+		// 一条都没勾、确认后仍会套模板：等于「这些都是正文，直接编号」，写入编号即接管、守卫此后不再问。
 		const confirm = buttons.createEl("button", {
-			cls: "mod-warning",
-			text: this.t.foreignGuardConfirmCount(selected),
+			cls: selected === 0 && this.options.renumbers ? "mod-cta" : "mod-warning",
+			text:
+				selected === 0 && this.options.renumbers
+					? this.t.foreignGuardConfirmNumberOnly
+					: this.t.foreignGuardConfirmCount(selected),
 		});
 		confirm.addEventListener("click", () => {
 			this.close();
