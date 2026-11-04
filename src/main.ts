@@ -35,6 +35,7 @@ import {
 	clearForeignNumberingContent,
 	clearNumberingContent,
 	clearPluginNumberingContent,
+	countUnsure,
 	hasPluginNumbering,
 	hasUnclaimedForeignNumbering,
 	isMostlyForeignNumbered,
@@ -1451,9 +1452,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 		this.activeGuardNotice?.notice.hide();
 
 		const t = this.messages();
-		// 1.2.2（testplan J24）：一句话带处数，「查看并清理」另起一行。处数与清理预览同一口径
-		// （previewForeignNumberingCleanup），点进去看到的条数与提示一致。
-		const count = previewForeignNumberingCleanup(content).length;
+		// 1.2.2（testplan J24）：一句话带处数，「查看并清理」另起一行。处数 = 清理预览里默认勾选的
+		// 「确定」条数（testplan J33），点进去看到的已选数与提示一致。
+		const count = previewForeignNumberingCleanup(content).filter(
+			(c) => c.tier === "sure",
+		).length;
 		// J26：全是「标题本身就是编号」（`# 第一章`）时清理框里没有可剥的条目，只说明原因、不给「查看并清理」。
 		if (count === 0) {
 			this.activeGuardNotice = {
@@ -1488,9 +1491,11 @@ export default class AutoHeadingsPlugin extends Plugin {
 	 * 可能已变化，该叶子也可能已切换到别的文件。找不到（文件已不在任何标签页）则提示改为重新打开。
 	 *
 	 * 确认框逐条可勾选（testplan J17）：预览与「确认清理」执行复用同一份计算
-	 * （{@link computeForeignCleanupPreview}），保证「用户看到的」与「实际发生的」逐条一致。
+	 * （{@link computeForeignCleanupPreview}），保证「用户看到的」与「实际发生的」逐条一致。「存疑」条目
+	 * 默认不勾（testplan J33）。`stripOnly`：只剥不套模板——从「清除当前文件编号」的结果提示点进来时用，
+	 * 那篇刚被暂停（testplan H23）。
 	 */
-	openForeignNumberingCleanupModal(path: string): void {
+	openForeignNumberingCleanupModal(path: string, stripOnly = false): void {
 		const found = this.markdownContextForPath(path);
 		if (!found) {
 			new Notice(this.messages().noticeForeignGuardFileNotOpen);
@@ -1508,8 +1513,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 			this.app,
 			this.messages(),
 			candidates.map((c) => ({ lineIndex: c.lineIndex, before: c.before })),
-			(keepLines) => this.computeForeignCleanupPreview(content, path, keepLines).items,
-			(keepLines) => this.applyForeignCleanupSelection(editor, ctx, path, keepLines),
+			(keepLines) =>
+				this.computeForeignCleanupPreview(content, path, keepLines, stripOnly).items,
+			(keepLines) =>
+				this.applyForeignCleanupSelection(editor, ctx, path, keepLines, stripOnly),
+			{
+				initialKeep: new Set(
+					candidates.filter((c) => c.tier === "unsure").map((c) => c.lineIndex),
+				),
+				renumbers: this.cleanupRenumbers(path, stripOnly),
+			},
 		).open();
 	}
 
@@ -1531,25 +1544,64 @@ export default class AutoHeadingsPlugin extends Plugin {
 		content: string,
 		path: string,
 		keepLines: ReadonlySet<number>,
+		stripOnly = false,
 	): { items: ForeignNumberingPreviewItem[]; finalContent: string } {
 		const template = this.getTemplateForFile(path);
 		const stripped = clearForeignNumberingContent(content, { keepLines });
 		const { prefixes, suffixes } = this.strippableAffixes();
-		// 仅显示文件（M14）：只剥手写编号，不写插件编号——编号由渲染器显示。没命中模板同理只剥。
+		// 仅显示文件（M14）：只剥手写编号，不写插件编号——编号由渲染器显示。没命中模板、只剥模式同理。
 		const finalContent =
-			!template || this.isVirtualFile(path)
-				? stripped
-				: renumberContent(stripped, template, {
+			template && this.cleanupRenumbers(path, stripOnly)
+				? renumberContent(stripped, template, {
 						strippablePrefixes: prefixes,
 						strippableSuffixes: suffixes,
-					});
+					})
+				: stripped;
 		const finalLines = finalContent.split("\n");
 		const items = previewForeignNumberingCleanup(content).map((c) => ({
-			lineIndex: c.lineIndex,
-			before: c.before,
+			...c,
 			after: finalLines[c.lineIndex],
 		}));
 		return { items, finalContent };
+	}
+
+	/** 清理预览框确认后是否紧接着套模板编号（命中模板、非仅显示、非只剥模式）。 */
+	private cleanupRenumbers(path: string, stripOnly: boolean): boolean {
+		return !stripOnly && Boolean(this.getTemplateForFile(path)) && !this.isVirtualFile(path);
+	}
+
+	/**
+	 * 清理 / 清除命令跳过了「存疑」条目时的结果提示（testplan J34 / H23）：`base` 之后补一句「另有 N 处看不准，
+	 * 未动」与可点击的「检查…」，点开即清理预览框（存疑默认不勾）。没有存疑时只弹 `base`。
+	 */
+	private noticeWithUnsure(
+		base: string | null,
+		path: string | undefined,
+		unsure: number,
+		stripOnly: boolean,
+	): void {
+		const t = this.messages();
+		if (unsure === 0 || !path) {
+			if (base) {
+				new Notice(base);
+			}
+			return;
+		}
+		let link!: HTMLAnchorElement;
+		const frag = createFragment((el) => {
+			el.appendText(t.noticeForeignUnsureSkipped(unsure, base ?? undefined));
+			link = el.createEl("a", {
+				text: t.noticeForeignUnsureAction,
+				href: "#",
+				cls: "ah-foreign-guard-link",
+			});
+		});
+		const notice = new Notice(frag, 10000);
+		link.addEventListener("click", (evt) => {
+			evt.preventDefault();
+			notice.hide();
+			this.openForeignNumberingCleanupModal(path, stripOnly);
+		});
 	}
 
 	/**
@@ -1581,8 +1633,15 @@ export default class AutoHeadingsPlugin extends Plugin {
 			strippableSuffixes: suffixes,
 		});
 
+		// 不带插件前缀的「存疑」标题原样留下，提示里给「检查…」入口（testplan H23）。
+		const unsure = countUnsure(newContent);
 		if (newContent === oldContent) {
-			new Notice(this.messages().noticeNothingToClear);
+			this.noticeWithUnsure(
+				unsure ? null : this.messages().noticeNothingToClear,
+				path,
+				unsure,
+				true,
+			);
 			return;
 		}
 
@@ -1604,7 +1663,12 @@ export default class AutoHeadingsPlugin extends Plugin {
 			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
 		}
 		const m = this.messages();
-		new Notice(pause ? m.noticeClearedAndPaused : m.noticeCleared);
+		this.noticeWithUnsure(
+			pause ? m.noticeClearedAndPaused : m.noticeCleared,
+			path,
+			unsure,
+			true,
+		);
 	}
 
 	/**
@@ -1649,9 +1713,16 @@ export default class AutoHeadingsPlugin extends Plugin {
 
 		const oldContent = editor.getValue();
 		let newContent = clearForeignNumberingContent(oldContent);
+		// 只剥「确定」，「存疑」留给清理预览框（testplan J34）。
+		const unsure = countUnsure(oldContent);
 
 		if (newContent === oldContent) {
-			new Notice(this.messages().noticeNoForeign);
+			this.noticeWithUnsure(
+				unsure ? null : this.messages().noticeNoForeign,
+				path,
+				unsure,
+				false,
+			);
 			return;
 		}
 
@@ -1663,7 +1734,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 			// Backlink 同步：清理外来编号也改写了标题文本，更新别处指向它的内部链接。
 			this.syncAndSnapshot(ctx.file, newContent, fold.renames, fold.selfCount);
 		}
-		new Notice(this.messages().noticeForeignCleared);
+		this.noticeWithUnsure(this.messages().noticeForeignCleared, path, unsure, false);
 	}
 
 	/**
@@ -1682,6 +1753,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		ctx: MarkdownView | MarkdownFileInfo,
 		path: string,
 		keepLines: ReadonlySet<number>,
+		stripOnly = false,
 	): void {
 		const existing = this.debounceTimers.get(path);
 		if (existing !== undefined) {
@@ -1690,7 +1762,7 @@ export default class AutoHeadingsPlugin extends Plugin {
 		}
 
 		const oldContent = editor.getValue();
-		const preview = this.computeForeignCleanupPreview(oldContent, path, keepLines);
+		const preview = this.computeForeignCleanupPreview(oldContent, path, keepLines, stripOnly);
 		let newContent = preview.finalContent;
 		if (newContent === oldContent) {
 			new Notice(this.messages().noticeNoForeign);
@@ -1738,13 +1810,23 @@ export default class AutoHeadingsPlugin extends Plugin {
 		try {
 			const { prefixes, suffixes } = this.strippableAffixes();
 			const files = this.app.vault.getMarkdownFiles();
-			const r = await this.batchRewrite(files, (_file, content) =>
-				clearNumberingContent(content, {
+			let unsureFiles = 0;
+			const r = await this.batchRewrite(files, (_file, content) => {
+				// 「存疑」标题原样留下（testplan H23），提示里报篇数。
+				if (countUnsure(content) > 0) {
+					unsureFiles++;
+				}
+				return clearNumberingContent(content, {
 					strippablePrefixes: prefixes,
 					strippableSuffixes: suffixes,
-				}),
+				});
+			});
+			const m = this.messages();
+			new Notice(
+				unsureFiles > 0
+					? m.noticeClearedVaultUnsure(r.changed, unsureFiles)
+					: m.noticeClearedVault(r.changed),
 			);
-			new Notice(this.messages().noticeClearedVault(r.changed));
 			await this.notifyBacklinkTotal(r.links);
 		} finally {
 			this.vaultClearInProgress = false;

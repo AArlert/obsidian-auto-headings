@@ -1055,11 +1055,17 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14/J17）",
 
 		// 默认全部勾选（keepLines 为空集）时的预览：已套模板，不是仅剥离外来编号的中间态。
 		expect(modal.computePreview(new Set())).toEqual([
-			{ lineIndex: 0, before: "## 1 红米", after: `## ${WORD_JOINER}1 ${WORD_JOINER}红米` },
+			{
+				lineIndex: 0,
+				before: "## 1 红米",
+				after: `## ${WORD_JOINER}1 ${WORD_JOINER}红米`,
+				tier: "sure",
+			},
 			{
 				lineIndex: 1,
 				before: "### 1.1 工艺",
 				after: `### ${WORD_JOINER}1.1 ${WORD_JOINER}工艺`,
+				tier: "sure",
 			},
 		]);
 
@@ -1113,6 +1119,61 @@ describe("迁移守卫 Notice 可点击 → 清理预览确认框（J14/J17）",
 		expect(Modal.instances).toHaveLength(1);
 		// 不调用 onConfirm：内容原封不动。
 		expect(ed.getValue()).toBe("## 1 红米");
+	});
+
+	it("J33：存疑条目初始不勾；会套模板时选项标明，供「不清理，直接编号」按钮", async () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 红米\n## 2024 总结");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.renumberOnOpen({ path: "a.md" });
+		await flushPromises();
+		expect(Notice.messages[0]).toContain("1"); // 处数只数确定（J24 / J33）。
+		Notice.lastFragment!.children[0].click();
+		const modal = Modal.instances[0] as unknown as {
+			keepLines: Set<number>;
+			options: { renumbers?: boolean };
+			onConfirm: (keepLines: ReadonlySet<number>) => void;
+		};
+		expect([...modal.keepLines]).toEqual([1]);
+		expect(modal.options.renumbers).toBe(true);
+		// 一条都不勾地确认 = 不清理，直接编号：原文保留，插件写入编号接管。
+		modal.onConfirm(new Set([0, 1]));
+		expect(ed.getValue()).toBe(
+			`## ${WORD_JOINER}1 ${WORD_JOINER}1 红米\n## ${WORD_JOINER}2 ${WORD_JOINER}2024 总结`,
+		);
+	});
+
+	it("J34：清理命令只剥确定，存疑跳过并在提示里给「检查…」，点开即清理预览框", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor("## 1 概述\n## 2024 总结");
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		(
+			p as unknown as { runClearForeignNumbering(e: unknown, c: unknown): void }
+		).runClearForeignNumbering(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toBe("## 概述\n## 2024 总结");
+		const frag = Notice.lastFragment!;
+		expect(frag.children).toHaveLength(1);
+		frag.children[0].click();
+		expect(Modal.instances).toHaveLength(1);
+		const modal = Modal.instances[0] as unknown as { keepLines: Set<number> };
+		expect([...modal.keepLines]).toEqual([1]);
+	});
+
+	it("H23：清除命令跳过存疑，点「检查…」打开的预览框只剥不套模板", () => {
+		const { p, setActiveView } = makePlugin();
+		const ed = new FakeEditor(`## ${WORD_JOINER}1 ${WORD_JOINER}概述\n## 2024 总结`);
+		setActiveView({ editor: ed, file: { path: "a.md" } });
+		p.runClearNumbering(ed, fileInfo("a.md"));
+		expect(ed.getValue()).toContain("## 概述\n## 2024 总结");
+		Notice.lastFragment!.children[0].click();
+		const modal = Modal.instances[0] as unknown as {
+			options: { renumbers?: boolean };
+			onConfirm: (keepLines: ReadonlySet<number>) => void;
+		};
+		expect(modal.options.renumbers).toBe(false);
+		modal.onConfirm(new Set());
+		expect(ed.getValue()).toContain("## 概述\n## 总结");
+		expect(ed.getValue()).not.toContain(WORD_JOINER);
 	});
 
 	it("点击时该文件已不在任何已打开的标签页：提示改为重新打开，不抛错、不开确认框", async () => {

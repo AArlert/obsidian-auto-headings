@@ -185,7 +185,7 @@ describe("C3 修复：调高 topLevel 后降出范围的标题旧前缀被剥除
 
 describe("clearForeignNumberingContent（0.6.6「清理非本插件的标题编号」）", () => {
 	it("剥手写阿拉伯多级编号（无 WJ）", () => {
-		const input = "## 1 概述\n### 1.1 背景\n## 2.3 细节";
+		const input = "## 1 概述\n### 1.1 背景\n## 2 细节";
 		expect(clearForeignNumberingContent(input)).toBe("## 概述\n### 背景\n## 细节");
 	});
 
@@ -208,7 +208,7 @@ describe("clearForeignNumberingContent（0.6.6「清理非本插件的标题编�
 	});
 
 	it("混合：剥手写、保留带 WJ 的", () => {
-		const input = `## ${WORD_JOINER}1 ${WORD_JOINER}插件编号\n### 2.3 手写编号`;
+		const input = `## ${WORD_JOINER}1 ${WORD_JOINER}插件编号\n### 1. 手写编号`;
 		expect(clearForeignNumberingContent(input)).toBe(
 			`## ${WORD_JOINER}1 ${WORD_JOINER}插件编号\n### 手写编号`,
 		);
@@ -238,9 +238,17 @@ describe("clearForeignNumberingContent（0.6.6「清理非本插件的标题编�
 		expect(clearForeignNumberingContent("## A. 概述")).toBe("## 概述");
 		expect(clearForeignNumberingContent("## (a) 备注")).toBe("## 备注");
 		expect(clearForeignNumberingContent("## IV、结论")).toBe("## 结论");
-		expect(clearForeignNumberingContent("## A.1 背景")).toBe("## 背景");
 		expect(clearForeignNumberingContent("## iv. 结论")).toBe("## 结论");
-		expect(clearForeignNumberingContent("## 1.1 背景")).toBe("## 背景");
+		expect(clearForeignNumberingContent("## A.1 背景\n## A.2 方法")).toBe("## 背景\n## 方法");
+		expect(clearForeignNumberingContent("## 1.1 背景\n## 1.2 方法")).toBe("## 背景\n## 方法");
+	});
+
+	// J32：孤立的多段号（父标题没有编号、同级也不成串）可能是版本号，只算「存疑」：命令不剥，预览里默认不勾。
+	it("J32: 孤立的多段号只算存疑", () => {
+		for (const input of ["## A.1 背景", "## 1.1 背景", "## 1.2 版本发布"]) {
+			expect(clearForeignNumberingContent(input)).toBe(input);
+			expect(previewForeignNumberingCleanup(input).map((i) => i.tier)).toEqual(["unsure"]);
+		}
 	});
 
 	// J28：字母 / 罗马序号后只跟空格不算编号——罗马字母能拼出大量真词，单字母 + 空格也多是正文。
@@ -295,8 +303,8 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 	it("单条外来编号标题：现状→清理后一一对应，含 # 前缀", () => {
 		const items = previewForeignNumberingCleanup("## 1 红米\n### 1.1 工艺");
 		expect(items).toEqual([
-			{ lineIndex: 0, before: "## 1 红米", after: "## 红米" },
-			{ lineIndex: 1, before: "### 1.1 工艺", after: "### 工艺" },
+			{ lineIndex: 0, before: "## 1 红米", after: "## 红米", tier: "sure" },
+			{ lineIndex: 1, before: "### 1.1 工艺", after: "### 工艺", tier: "sure" },
 		]);
 	});
 
@@ -304,8 +312,8 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 		const content = "## (1) 概述\n## 第3章 引言";
 		const items = previewForeignNumberingCleanup(content);
 		expect(items).toEqual([
-			{ lineIndex: 0, before: "## (1) 概述", after: "## 概述" },
-			{ lineIndex: 1, before: "## 第3章 引言", after: "## 引言" },
+			{ lineIndex: 0, before: "## (1) 概述", after: "## 概述", tier: "sure" },
+			{ lineIndex: 1, before: "## 第3章 引言", after: "## 引言", tier: "sure" },
 		]);
 		// 与实际清理命令结果逐条一致：拼回全文应等于 clearForeignNumberingContent 的输出。
 		const cleaned = clearForeignNumberingContent(content);
@@ -316,7 +324,8 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 		const input = `## ${WORD_JOINER}1 ${WORD_JOINER}已编号\n### 1.1 疑似外来`;
 		const items = previewForeignNumberingCleanup(input);
 		expect(items).toEqual([
-			{ lineIndex: 1, before: "### 1.1 疑似外来", after: "### 疑似外来" },
+			// 父标题是插件编号（不是手写候选）、同级也不成串：孤立多段号只算存疑（J32）。
+			{ lineIndex: 1, before: "### 1.1 疑似外来", after: "### 疑似外来", tier: "unsure" },
 		]);
 	});
 
@@ -335,7 +344,7 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 
 	it("J27: 拉丁词标题与真外来编号混排时，只有后者进入预览", () => {
 		expect(previewForeignNumberingCleanup("## 1 概述\n## git 相关")).toEqual([
-			{ lineIndex: 0, before: "## 1 概述", after: "## 概述" },
+			{ lineIndex: 0, before: "## 1 概述", after: "## 概述", tier: "sure" },
 		]);
 	});
 
@@ -354,7 +363,7 @@ describe("previewForeignNumberingCleanup（迁移守卫清理预览确认框，t
 			"## 裸标题 ",
 		].join("\n");
 		expect(previewForeignNumberingCleanup(input)).toEqual([
-			{ lineIndex: 0, before: "## 1 外来编号", after: "## 外来编号" },
+			{ lineIndex: 0, before: "## 1 外来编号", after: "## 外来编号", tier: "sure" },
 		]);
 	});
 
@@ -415,7 +424,7 @@ describe("「非本插件」判定不看链接锚点里的 WJ（1.1.5，testplan
 	it("清理非本插件编号：手写编号 + 链接的标题照样被清（不因含 WJ 当成插件的）", () => {
 		expect(clearForeignNumberingContent(`## 1. 参见 ${link}`)).toBe(`## 参见 ${link}`);
 		expect(previewForeignNumberingCleanup(`## 1. 参见 ${link}`)).toEqual([
-			{ lineIndex: 0, before: `## 1. 参见 ${link}`, after: `## 参见 ${link}` },
+			{ lineIndex: 0, before: `## 1. 参见 ${link}`, after: `## 参见 ${link}`, tier: "sure" },
 		]);
 	});
 

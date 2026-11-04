@@ -243,7 +243,7 @@ const en: Messages = {
 
 	foreignGuardModalTitle: "Possible non-plugin numbering",
 	foreignGuardModalBody: (count) =>
-		`The following ${count} heading(s) look numbered, but the plugin can't be sure you wrote them yourself ("2024 review", "3 key points", etc. can false-positive). All are checked by default; unchecking one keeps its text as-is (the plugin will still add its own numbering):`,
+		`The following ${count} heading(s) look numbered. Clear cases are checked; uncertain ones ("2024 review", "30-second pitch", etc.) start unchecked. Checked headings are cleaned up; unchecked ones keep their text (the plugin will still add its own numbering):`,
 	foreignGuardItemToggle: (before) => `Clean up foreign numbering in "${before}"`,
 	foreignGuardSearchPlaceholder: "Search headings…",
 	foreignGuardSearchEmpty: "No matching headings",
@@ -426,6 +426,12 @@ const en: Messages = {
 	foreignGuardSelected: (selected, total) => `${selected} of ${total} selected`,
 	foreignGuardUndoHint: "Changes to this note can be undone with Ctrl+Z",
 	foreignGuardConfirmCount: (count) => `Clean up ${count}`,
+	foreignGuardConfirmNumberOnly: "Don't clean up, just number",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}. ` : ""}${count} heading(s) may not be numbering and were left unchanged`,
+	noticeForeignUnsureAction: "Review…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`Vault numbering cleared (${count} file(s) changed); ${unsureFiles} file(s) have uncertain headings that were left unchanged`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`${count} ${count === 1 ? "heading looks" : "headings look"} hand-numbered here, so numbers were ${virtual ? "not shown" : "not added"} this time.`,
 	noticeNumberOnlyGuard: (virtual) =>

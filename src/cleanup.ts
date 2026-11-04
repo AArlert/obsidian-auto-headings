@@ -10,12 +10,12 @@
  * 供迁移守卫 Notice 点击后的清理预览确认框计算「现状 → 清理后」逐条对照（testplan J14）。
  */
 
+import { assessForeignNumbering, type ForeignTier } from "./foreignassess";
 import { parseHeadings } from "./parser";
 import {
 	cleanDemotedResidue,
 	hasPluginPrefix,
 	isNumberOnlyHeading,
-	stripForeignNumbering,
 	stripPrefixBroad,
 	WORD_JOINER,
 } from "./numbering";
@@ -49,9 +49,18 @@ export function clearNumberingContent(content: string, options: CleanupOptions =
 
 	const lines = content.split("\n");
 	const headingLines = new Set<number>();
+	const affixes = { strippablePrefixes: prefixes, strippableSuffixes: suffixes };
+	// 不带插件前缀的标题只剥「确定」的手写编号，「存疑」原样留给用户在清理预览框里定（testplan H23）。
+	const sure = new Map(
+		assessForeignNumbering(content)
+			.filter((a) => a.tier === "sure")
+			.map((a) => [a.lineIndex, a.stripped]),
+	);
 	for (const h of headings) {
 		const hashes = "#".repeat(h.level);
-		const text = stripPrefixBroad(h.rawText, prefixes, suffixes);
+		const text = hasPluginPrefix(h.rawText, affixes)
+			? stripPrefixBroad(h.rawText, prefixes, suffixes)
+			: (sure.get(h.lineIndex) ?? h.rawText.replace(/\s+$/, ""));
 		lines[h.lineIndex] = `${hashes} ${text}`;
 		headingLines.add(h.lineIndex);
 	}
@@ -117,40 +126,29 @@ export function hasPluginNumbering(content: string): boolean {
 /**
  * 剥离内容中**外来 / 手写**（**非本插件写入**）的标题编号前缀，返回清理后的全文（0.6.6，spec §3.10）。
  *
- * 与 {@link clearNumberingContent} 的区别：本函数**只动不带插件前缀的标题**（{@link hasPluginPrefix}）——带的是
- * 本插件自己写的编号，**原样保留不动**；其余标题（含「中间有链接锚点 WJ」的）用 {@link stripForeignNumbering}（覆盖括号 / `第` / 章节
- * 量词等更多手写惯例）剥一层外来编号。用于「我有一批手写 / 导入的编号，想清掉好让插件接管」的场景
- * （方案 A 下插件不会自动吸收无 WJ 的手写编号，故提供此主动清理命令）。
+ * 与 {@link clearNumberingContent} 的区别：本函数**只动不带插件前缀的标题**——带的是本插件自己写的编号，
+ * **原样保留不动**；其余标题（含「中间有链接锚点 WJ」的，testplan E40）按整篇判定
+ * {@link assessForeignNumbering} 的结果剥一层外来编号。用于「我有一批手写 / 导入的编号，想清掉好让插件接管」
+ * 的场景（方案 A 下插件不会自动吸收无 WJ 的手写编号，故提供此主动清理命令）。
  *
- * **已知风险**：同 {@link stripForeignNumbering}（以序号样字开头紧跟分隔符的真实标题可能被误剥）。属
- * 用户主动一次性操作，已接受（spec §3.10）。
+ * - **不传 `keepLines`**（命令面板，不弹框）：只剥「确定」，「存疑」原样保留（testplan J34）。
+ * - **传 `keepLines`**（清理预览框确认）：用户勾选的一律剥（含勾上的「存疑」），`keepLines` 里的保留原文
+ *   （testplan J17）；插件仍会在下一步套用模板时把自己的编号叠在原文前面——由调用方（main.ts）紧接着调用
+ *   renumberContent 完成。
  *
  * @param content 待清理的 Markdown 文件全文。
- * @returns 剥除外来编号前缀后的全文；无标题则原样返回。
+ * @returns 剥除外来编号前缀后的全文；无可剥条目则原样返回。
  */
 export function clearForeignNumberingContent(
 	content: string,
 	options: { keepLines?: ReadonlySet<number> } = {},
 ): string {
-	const headings = parseHeadings(content);
-	if (headings.length === 0) {
-		return content;
-	}
 	const lines = content.split("\n");
-	for (const h of headings) {
-		// 带插件前缀 = 本插件写的编号 → 不动（「非本插件」语义）。不能只看「含不含 WJ」：标题中间
-		// 链接锚点里的 WJ 不是插件前缀，手写 `1. 参见 [[a#⁠1 ⁠概述]]` 照样该清（testplan E40）。
-		if (hasPluginPrefix(h.rawText)) {
-			continue;
+	for (const a of assessForeignNumbering(content)) {
+		const keep = options.keepLines ? options.keepLines.has(a.lineIndex) : a.tier !== "sure";
+		if (!keep) {
+			lines[a.lineIndex] = `${"#".repeat(a.level)} ${a.stripped}`;
 		}
-		// 用户在清理预览确认框里取消勾选的行：保留原文不剥离（testplan J17），插件仍会在下一步
-		// 套用模板时把自己的编号叠在原文前面——由调用方（main.ts）紧接着调用 renumberContent 完成。
-		if (options.keepLines?.has(h.lineIndex)) {
-			continue;
-		}
-		const hashes = "#".repeat(h.level);
-		const text = stripForeignNumbering(h.rawText);
-		lines[h.lineIndex] = `${hashes} ${text}`;
 	}
 	return lines.join("\n");
 }
@@ -159,7 +157,7 @@ export function clearForeignNumberingContent(
 const CLAIMED_LINE_RE = new RegExp(`^[ \\t]*(?:#{1,6}[ \\t]+)?${WORD_JOINER}`, "m");
 
 /**
- * 只读探测：本文件是否「插件从未接触过」且含疑似外来编号（迁移守卫，testplan J10）。
+ * 只读探测：本文件是否「插件从未接触过」且含外来编号（迁移守卫，testplan J10）。
  *
  * 用于自动路径（`scheduleRenumber`/`renumberOnOpen`/`renumberActiveFile`）写入前的门控——方案A下
  * 自动路径只认 WJ，会把 `## 1 红米` 当纯正文、在前面再叠一层自己的编号，写成 `## 1 1 红米`，观感
@@ -170,18 +168,9 @@ const CLAIMED_LINE_RE = new RegExp(`^[ \\t]*(?:#{1,6}[ \\t]+)?${WORD_JOINER}`, "
  * 判定条件**两者都满足**才为 true：
  * - 插件从未给这份内容写过编号：没有任何行以 {@link WORD_JOINER} 哨兵起头、也没有标题带插件前缀（避免把
  *   「已被本插件接管、只是新增了一个以数字起头的标题」误判为迁移场景，见 spec §3.10 相邻讨论）；
- * - 至少一个标题被 {@link stripForeignNumbering} 判定为「像外来编号」（剥离结果与原文不同），**或**过半标题
- *   像手写编号——后者把「标题本身就是编号」（`# 第一章`，{@link isNumberOnlyHeading}）也算进来（testplan J25）。
- *   这类标题只按过半算、不按「一个就算」：它剥不掉，清理框里没有出口，个别一个就拦住整篇会永远没有编号。
- *
- * **已知风险**：与 {@link stripForeignNumbering} 共享同一误伤面（`## 2024 总结`；拉丁词起头的
- * 标题自本次修复起不再命中，testplan J27 / J28）——但落在这里
- * 代价是「跳过写入 + 提示」而非「内容被吃」，比清理命令本身更安全，故接受。
- *
- * **1.0.15 修**（testplan J12）：比较基准必须先去掉行尾空白。{@link stripForeignNumbering} 末尾带一道
- * `\s+$` 归一化，于是 `## 标题 `（用户刚在标题末尾敲了个空格、全文一个编号都没有）会因为
- * 「剥离结果 ≠ 原文」被判成外来编号——该文件的自动编号被整个拦下，还弹一句「请先清理非本插件的
- * 标题编号」的误导提示。守卫只该对**真的剥掉了编号**的情形生效，不该对空白归一化生效。
+ * - 至少一个标题被整篇判定为「确定」（{@link assessForeignNumbering}），**或**过半标题「确定」或本身就是编号
+ *   （`# 第一章`，{@link isNumberOnlyHeading}，testplan J25）。「存疑」（`## 2024 总结`、`## 30 秒版`）**不拦**
+ *   （testplan J31）——此前单标题正则一个误判就拦下整篇。
  */
 export function hasUnclaimedForeignNumbering(content: string): boolean {
 	// 「插件接触过」只认结构性证据：某行（含注释 / 围栏里的标题形残留、降级残留）以 WJ 哨兵起头，或某个
@@ -194,47 +183,54 @@ export function hasUnclaimedForeignNumbering(content: string): boolean {
 	if (headings.some((h) => hasPluginPrefix(h.rawText))) {
 		return false;
 	}
-	return (
-		headings.some((h) => looksForeignNumbered(h.rawText)) || isMostlyForeignHeadings(headings)
+	const sure = sureLines(content);
+	return sure.size > 0 || isMostlyForeignHeadings(headings, sure);
+}
+
+/**
+ * 仅显示模式的外来编号判定（M14，spec §3.22）：**超过一半**的标题「确定」带手写编号或本身就是编号，才算
+ * 整篇带外来编号、不显示虚拟编号（否则会叠出两套数字）。「存疑」不计（testplan V80）。
+ *
+ * 为什么不沿用写入模式「一个就算」的 {@link hasUnclaimedForeignNumbering}：写入模式下用户在清理框里
+ * 确认一次，插件写入编号后文件含 WJ，守卫就永久解除；仅显示模式永不写文件，没有这个出口。按多数判定后：
+ * 从别的编号插件迁来、每个标题都带编号的笔记照样被拦下；偶尔一个手写编号的标题照常编号。
+ * 以 WJ 打头的标题是本插件写过的残留，不算外来编号。
+ */
+export function isMostlyForeignNumbered(content: string): boolean {
+	return isMostlyForeignHeadings(parseHeadings(content), sureLines(content));
+}
+
+/** 整篇判定为「确定」的标题行号。 */
+function sureLines(content: string): Set<number> {
+	return new Set(
+		assessForeignNumbering(content)
+			.filter((a) => a.tier === "sure")
+			.map((a) => a.lineIndex),
 	);
 }
 
 /**
- * 某个标题的原始文本看起来是否带手写 / 外来编号（{@link stripForeignNumbering} 真的剥掉了东西；
- * 比较前去掉行尾空白，见 {@link hasUnclaimedForeignNumbering} 的 1.0.15 修复说明）。
+ * 过半判定的本体：超过一半的标题「确定」带手写编号，或**本身就是编号**（`# 第一章`，{@link isNumberOnlyHeading}；
+ * 剥不掉，但套模板会叠成「第一章 第一章」，testplan J25 / V77）。
  */
-export function looksForeignNumbered(rawText: string): boolean {
-	return stripForeignNumbering(rawText) !== rawText.replace(/\s+$/, "");
-}
-
-/**
- * 仅显示模式的外来编号判定（M14，spec §3.22）：**超过一半**的标题像手写编号，才算整篇带外来编号、
- * 不显示虚拟编号（否则会叠出两套数字）。
- *
- * 为什么不沿用写入模式「一个就算」的 {@link hasUnclaimedForeignNumbering}：写入模式下用户在清理框里
- * 确认一次，插件写入编号后文件含 WJ，守卫就永久解除；仅显示模式永不写文件，没有这个出口——一个
- * `## 2024 总结` 就会让整篇永远没有编号。按多数判定后：从别的编号插件迁来、每个标题都带编号的
- * 笔记照样被拦下；偶尔一个以数字开头的标题照常编号，与写入模式对它的处理（方案 A）一致。
- * 以 WJ 打头的标题是本插件写过的残留，不算外来编号。
- */
-export function isMostlyForeignNumbered(content: string): boolean {
-	return isMostlyForeignHeadings(parseHeadings(content));
-}
-
-/**
- * {@link isMostlyForeignNumbered} 的本体：超过一半的标题带手写编号，或**本身就是编号**（`# 第一章`，
- * {@link isNumberOnlyHeading}；剥不掉，但套模板会叠成「第一章 第一章」，testplan J25 / V77）。
- */
-function isMostlyForeignHeadings(headings: ReturnType<typeof parseHeadings>): boolean {
+function isMostlyForeignHeadings(
+	headings: ReturnType<typeof parseHeadings>,
+	sure: ReadonlySet<number>,
+): boolean {
 	if (headings.length === 0) {
 		return false;
 	}
 	const foreign = headings.filter(
 		(h) =>
 			!h.rawText.startsWith(WORD_JOINER) &&
-			(looksForeignNumbered(h.rawText) || isNumberOnlyHeading(h.rawText)),
+			(sure.has(h.lineIndex) || isNumberOnlyHeading(h.rawText)),
 	).length;
 	return foreign * 2 > headings.length;
+}
+
+/** 整篇判定为「存疑」的标题数——清理 / 清除命令跳过它们后，结果提示据此给「检查…」入口（testplan J34 / H23）。 */
+export function countUnsure(content: string): number {
+	return assessForeignNumbering(content).filter((a) => a.tier === "unsure").length;
 }
 
 /** {@link previewForeignNumberingCleanup} 单条对照项：某标题清理前后的完整行文本。 */
@@ -243,43 +239,31 @@ export interface ForeignNumberingPreviewItem {
 	lineIndex: number;
 	/** 清理前的完整标题行（`#` 组 + 原始文本）。 */
 	before: string;
-	/** {@link stripForeignNumbering} 处理后的完整标题行（不含模板前缀，仅剥离外来编号后的中间态）。 */
+	/** 剥离外来编号后的完整标题行（不含模板前缀，仅剥离外来编号后的中间态）。 */
 	after: string;
+	/** 整篇判定的档位：「存疑」在清理预览框里默认不勾（testplan J33）。 */
+	tier: ForeignTier;
 }
 
 /**
- * 预览 {@link clearForeignNumberingContent} 会实际改动哪些标题（迁移守卫 Notice 点击后的清理预览
- * 确认框用，testplan J14）：只收录**真的会被剥掉编号**的标题——
- * - 带插件前缀（{@link hasPluginPrefix}，本插件自己写的编号）跳过，与 {@link clearForeignNumberingContent} 同一「非本插件」语义；
- * - 剥离结果与原文本无实质差异（仅行尾空白被 {@link stripForeignNumbering} 的归一化步骤吃掉，
- *   同 {@link hasUnclaimedForeignNumbering} J12 修复的比较口径）的也跳过，避免预览列表里出现
- *   「看起来什么都没变」的对照，误导用户以为会有改动。
+ * 预览 {@link clearForeignNumberingContent} 能改动哪些标题（清理预览确认框用，testplan J14）：「确定」与「存疑」
+ * 都列出，按标题在文中出现的顺序；带插件前缀的、剥不出东西的不列。
  *
- * 与 {@link clearForeignNumberingContent} 共享同一剥离逻辑 {@link stripForeignNumbering}，保证
- * 预览与「确认清理」后的实际结果逐条一致——绝不能出现预览说改 A、实际却改了 B 的落差，这正是本
- * 对话框存在的意义：清理命令带与守卫同源的误伤面（如 `## 2024 总结`），无预览的一键执行等于吃
- * 用户内容。
+ * 与 {@link clearForeignNumberingContent} 共享同一份整篇判定 {@link assessForeignNumbering}，保证预览与
+ * 「确认清理」后的实际结果逐条一致——绝不能出现预览说改 A、实际却改了 B 的落差。
  *
  * @param content 待预览的文件全文（通常取自实时编辑器 `editor.getValue()`）。
- * @returns 会被改动的标题「现状 → 清理后」对照列表，按标题在文中出现的顺序排列；无改动返回空数组。
+ * @returns 「现状 → 清理后」对照列表；无候选返回空数组。
  */
 export function previewForeignNumberingCleanup(content: string): ForeignNumberingPreviewItem[] {
-	const headings = parseHeadings(content);
-	const items: ForeignNumberingPreviewItem[] = [];
-	for (const h of headings) {
-		if (hasPluginPrefix(h.rawText)) {
-			continue;
-		}
-		const stripped = stripForeignNumbering(h.rawText);
-		if (stripped === h.rawText.replace(/\s+$/, "")) {
-			continue;
-		}
-		const hashes = "#".repeat(h.level);
-		items.push({
-			lineIndex: h.lineIndex,
-			before: `${hashes} ${h.rawText}`,
-			after: `${hashes} ${stripped}`,
-		});
-	}
-	return items;
+	const raw = new Map(parseHeadings(content).map((h) => [h.lineIndex, h.rawText]));
+	return assessForeignNumbering(content).map((a) => {
+		const hashes = "#".repeat(a.level);
+		return {
+			lineIndex: a.lineIndex,
+			before: `${hashes} ${raw.get(a.lineIndex) ?? ""}`,
+			after: `${hashes} ${a.stripped}`,
+			tier: a.tier,
+		};
+	});
 }

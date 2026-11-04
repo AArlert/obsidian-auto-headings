@@ -246,7 +246,7 @@ const fr: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Numérotation possiblement étrangère à l'extension",
 	foreignGuardModalBody: (count) =>
-		`Ces ${count} titre(s) semblent numérotés, mais l'extension ne peut pas être sûre que vous les avez écrits vous-même (« 2024 en bref », « 3 points clés », etc. peuvent être de faux positifs). Tous sont cochés par défaut ; en décocher un conserve son texte tel quel (l'extension ajoutera quand même sa numérotation) :`,
+		`Ces ${count} titre(s) semblent numérotés. Les cas sûrs sont cochés ; les cas douteux (« 2024 en bref », « pitch de 30 secondes », etc.) sont décochés au départ. Les titres cochés sont nettoyés ; les autres gardent leur texte (l'extension ajoutera quand même sa numérotation) :`,
 	foreignGuardItemToggle: (before) => `Nettoyer la numérotation étrangère de « ${before} »`,
 	foreignGuardSearchPlaceholder: "Rechercher des titres…",
 	foreignGuardSearchEmpty: "Aucun titre correspondant",
@@ -434,6 +434,12 @@ const fr: Partial<Messages> = {
 	foreignGuardSelected: (selected, total) => `${selected} sur ${total} sélectionnés`,
 	foreignGuardUndoHint: "Les modifications de cette note peuvent être annulées avec Ctrl+Z",
 	foreignGuardConfirmCount: (count) => `Nettoyer ${count}`,
+	foreignGuardConfirmNumberOnly: "Ne pas nettoyer, numéroter",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}. ` : ""}${count} titre(s) douteux laissé(s) tel(s) quel(s)`,
+	noticeForeignUnsureAction: "Vérifier…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`Numérotation du coffre effacée (${count} fichier(s) modifié(s)) ; ${unsureFiles} fichier(s) contiennent des titres douteux laissés tels quels`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Cette note a ${count} titre(s) qui ressemblent à une numérotation manuelle ; cette fois, la numérotation n'a pas été ${virtual ? "affichée" : "appliquée"}.`,
 	noticeNumberOnlyGuard: (virtual) =>

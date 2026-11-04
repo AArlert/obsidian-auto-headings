@@ -241,7 +241,7 @@ const ptBR: Partial<Messages> = {
 
 	foreignGuardModalTitle: "Possível numeração alheia ao plugin",
 	foreignGuardModalBody: (count) =>
-		`Estes ${count} cabeçalho(s) parecem numerados, mas o plugin não tem certeza de que você os escreveu («2024 em revisão», «3 pontos-chave» etc. podem ser falsos positivos). Todos vêm marcados; desmarcar mantém o texto como está (o plugin ainda adicionará a própria numeração):`,
+		`Estes ${count} cabeçalho(s) parecem numerados. Os casos claros vêm marcados; os duvidosos («2024 em revisão», «versão de 30 segundos» etc.) começam desmarcados. Os marcados são limpos; os desmarcados mantêm o texto (o plugin ainda adicionará a própria numeração):`,
 	foreignGuardItemToggle: (before) => `Limpar a numeração alheia de «${before}»`,
 	foreignGuardSearchPlaceholder: "Buscar cabeçalhos…",
 	foreignGuardSearchEmpty: "Nenhum cabeçalho correspondente",
@@ -432,6 +432,12 @@ const ptBR: Partial<Messages> = {
 	foreignGuardSelected: (selected, total) => `${selected} de ${total} selecionados`,
 	foreignGuardUndoHint: "As alterações nesta nota podem ser desfeitas com Ctrl+Z",
 	foreignGuardConfirmCount: (count) => `Limpar ${count}`,
+	foreignGuardConfirmNumberOnly: "Não limpar, só numerar",
+	noticeForeignUnsureSkipped: (count, base) =>
+		`${base ? `${base}. ` : ""}${count} cabeçalho(s) duvidoso(s) mantido(s) como estão`,
+	noticeForeignUnsureAction: "Revisar…",
+	noticeClearedVaultUnsure: (count, unsureFiles) =>
+		`Numeração do cofre limpa (${count} arquivo(s) alterado(s)); ${unsureFiles} arquivo(s) têm cabeçalhos duvidosos que não foram alterados`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Esta nota tem ${count} cabeçalho(s) que parecem numeração manual; desta vez a numeração não foi ${virtual ? "exibida" : "aplicada"}.`,
 	noticeNumberOnlyGuard: (virtual) =>
