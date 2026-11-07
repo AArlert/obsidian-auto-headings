@@ -5,8 +5,8 @@ node_modules/
 main.js
 main.js.map
 
-# 例外：release/ 下的可分发插件文件是交付物，需入库
-!release/main.js
+# release/ 是本地实测用的三件套（npm run release 生成），不入库：正式发版与 beta 由 Release 工作流现场构建
+release/
 
 # Test / coverage
 coverage/

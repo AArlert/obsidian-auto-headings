@@ -403,7 +403,11 @@ describe("filterSortWhitelist（编辑器搜索 / 排序纯视图，M8 批次 1�
 	it("过滤 + 排序组合，且绝不改动传入数组", () => {
 		const snapshot = entries.map((e) => ({ ...e }));
 		const views = filterSortWhitelist(entries, "a", "az"); // 命中 Appendix / 附录 A / abstract
-		expect(views.map((v) => v.entry.text)).toEqual(["abstract", "Appendix", "附录 A"]);
+		const texts = views.map((v) => v.entry.text);
+		// A–Z 按运行环境的语言排序（中文系统把「附录 A」按拼音排在拉丁词前，英文系统排在后），
+		// 这里只断言各语言一致的部分：命中哪几条、拉丁词之间不分大小写的先后。
+		expect([...texts].sort()).toEqual(["Appendix", "abstract", "附录 A"].sort());
+		expect(texts.filter((t) => /^[A-Za-z]/.test(t))).toEqual(["abstract", "Appendix"]);
 		expect(entries).toEqual(snapshot); // 存储数组原样
 	});
 });

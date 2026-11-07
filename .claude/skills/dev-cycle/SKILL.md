@@ -8,6 +8,11 @@ description: Auto Headings 开发与发版流程的唯一出处：testplan 先�
 1. **接手**：`npm run docs -- --handover`；首次或依赖变化时 `npm install`。
 2. **testplan 先行**（行为有变化时）：先在 `doc/testplan/<组>.md` 加 / 改场景行（操作 + 预期 + 初始状态），
    再动代码。场景写法要诀见 `doc/testplan/1-核心理念.md`。
+   **动手前先写一行需求来源**（进周期块「做了什么」）：用户报告 / 真实库样本 / 推测，以及判错时往哪边错、
+   代价多大。**推测性需求不进当前版本**，先登记 Roadmap，等有真实样本或反馈再做。
+   **改手写编号识别（`foreignassess.ts` / `strip.ts` 的 `matchForeignPrefix` 一带）**：改前改后各跑
+   `node scripts/foreign-corpus.mjs <库> --expect <答案文件>`，按各入口（守卫 / 仅显示 / 清理）对答案，
+   有新增不符要么修、要么在周期块说明为何接受；单测构造的例子不算证据。
 3. **改代码**，配套补 / 改 `tests/dev_tests/` 与 `tests/user_tests/`，可追溯回场景 ID。涉及规格的同步改
    `doc/spec/` 对应节；新增 / 拆分源码文件回填 `doc/spec/4-架构设计.md`「目录结构约定」。
 4. **质量门槛**：`npm run check`（docs 守卫 + 测试 + lint + 格式，只报问题）。动编号引擎（`numbering.ts`
@@ -18,7 +23,7 @@ description: Auto Headings 开发与发版流程的唯一出处：testplan 先�
 6. **写 `doc/log.md` 周期块**（顶部追加）：日期 / 交接人（分支名）、做了什么、没做什么、下一步、验证方式。
 7. **`npm run preflight`**（= `npm run docs` 归档旧块 + `npm run release` 重建 `release/` + `npm run check`）。
    **先写后挪**：脚本只搬旧块，不动刚写的新块。
-8. **提交**：源码 + 测试 + `release/` + 文档自包含；收尾按根 `CLAUDE.md` §5.1 合并回 master。
+8. **提交**：源码 + 测试 + 文档自包含（`release/` 不入库，只供本机实测）；收尾按根 `CLAUDE.md` §5.1 合并回 master。
 
 ## 版本号与发版
 

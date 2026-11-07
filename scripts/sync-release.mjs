@@ -3,10 +3,10 @@
  *
  * 由 `npm run release` 调用（其前置 `npm run build` 已生成根目录 main.js）。
  * 产出三个独立文件（main.js + manifest.json + styles.css），平铺在 release/，
- * 方便往 `<Vault>/.obsidian/plugins/<插件 id>/` 里逐个拖放实测；它们随提交入库。
+ * 方便往 `<Vault>/.obsidian/plugins/<插件 id>/` 里逐个拖放实测；release/ 不入库（.gitignore）。
  * 正式发布与 beta 预发布走 Release 工作流，直接上传这三个文件，不经本脚本。
  *
- * 每个开发周期结束都应运行，以保证 release/ 始终是「可供 Obsidian 实测的最新产物」。
+ * 需要在本机 Obsidian 里实测时运行（preflight 也会顺带跑），得到当前源码的最新产物。
  */
 import { copyFileSync, mkdirSync } from "fs";
 import { fileURLToPath } from "url";

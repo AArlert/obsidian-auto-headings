@@ -1,0 +1,2 @@
+# 统一 LF：本机 core.autocrlf=true 时工作副本也保持 LF，prettier（endOfLine: lf）不再误报
+* text=auto eol=lf
