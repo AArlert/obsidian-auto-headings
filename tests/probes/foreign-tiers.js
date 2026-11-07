@@ -1,4 +1,4 @@
-// 手写编号按置信度分级的真机走查（testplan J29–J34 / H23 / V80，spec §3.10「按置信度分级」）。
+// 手写编号按置信度分级的真机走查（testplan J29–J35 / H23 / V80 / V81，spec §3.10「按置信度分级」）。
 // A 段只读：打开库里几篇真实笔记，看仅显示编号与提示（只看不改，结束时核对修改时间没变）。
 // B 段写临时文件夹 `探针-AH分级`：迁移守卫、清理预览框默认勾选与按钮、两个清理命令的「检查…」入口；结束时删掉、还原路径规则。
 const DIR = "探针-AH分级";
@@ -178,6 +178,57 @@ try {
 		notices().some((t) => /手写编号/.test(t)),
 		true,
 	);
+
+	// V81 仅显示：整级手写编号（按级别过半）不叠编号、弹提示；只有一处的照常显示
+	const subs = (n) => Array.from({ length: n }, (_, i) => `### 小节${i}`).join("\n");
+	clearNotices();
+	await open(
+		await mk(
+			"仅显示/v81-whole.md",
+			["## 一、背景", subs(4), "## 二、方法", subs(4), "## 三、结论", subs(4), ""].join("\n"),
+		),
+		1500,
+	);
+	check("V81 整级 一、二、三、：不显示虚拟编号", virtualCount(), 0);
+	check(
+		"V81 整级：弹提示",
+		notices().some((t) => /手写编号/.test(t)),
+		true,
+	);
+	clearNotices();
+	await open(
+		await mk(
+			"仅显示/v81-single.md",
+			["## 〇、一屏结论", subs(3), "## 背景", subs(3), "## 方法", subs(3), ""].join("\n"),
+		),
+		1500,
+	);
+	check("V81 只有一处 〇、：照常显示虚拟编号", virtualCount() > 0, true);
+	check(
+		"V81 只有一处：不弹提示",
+		notices().filter((t) => /手写编号/.test(t)),
+		[],
+	);
+
+	// J35 前导词与 第…部分：写入模式守卫拦下，清理命令连前导词一起剥
+	for (const [name, content, stripped] of [
+		["j35-part.md", "# 文档\n## 第一部分 引言\n## 第二部分 方法\n", ["## 引言", "## 方法"]],
+		["j35-step.md", "# 文档\n## Step 1 安装\n## Step 2 配置\n", ["## 安装", "## 配置"]],
+	]) {
+		clearNotices();
+		ed = await open(await mk(`写入/${name}`, content));
+		const orig = content.split("\n").filter((l) => /^## /.test(l));
+		check(`J35 ${name}：守卫拦下、文件不变`, heads(ed), orig);
+		check(
+			`J35 ${name}：弹提示`,
+			notices().some((t) => /手写编号/.test(t)),
+			true,
+		);
+		clearNotices();
+		app.commands.executeCommandById("auto-headings:clear-foreign-numbering");
+		await sleep(250);
+		check(`J35 ${name}：清理命令剥成裸标题`, heads(ed), stripped);
+	}
 
 	// J30 / 标签：Q： / ID： / A 档 不当编号
 	clearNotices();

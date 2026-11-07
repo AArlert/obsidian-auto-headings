@@ -1715,6 +1715,7 @@ describe("清除全库编号（敏感操作 TAB，0.7.11：清除期间压制自
 				"plugin.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲`,
 				"mixed.md": mixed,
 				"hand.md": handwritten,
+				"unsure.md": "## 30 秒版\n## 背景", // 只有存疑：不算带手写编号
 			},
 		});
 		await p.clearAllVaultNumbering();

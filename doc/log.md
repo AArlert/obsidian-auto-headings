@@ -15,6 +15,32 @@
 
 ---
 
+## 2026-11-08 发版 1.3.2：手写编号分级、前导词、仅显示按级别过半、清除全库只清插件编号（交接：claude/foreign-lead-words → master，tag 1.3.2）
+
+### 做了什么
+
+- 真机走查（Test 库，经 Obsidian CLI `eval` 执行探针；装新构建后 `plugin:reload` 并自查新文案键在）：
+  - `foreign-tiers.js` 补 V81（整级 `一、二、三、` 不叠编号并提示；只有一处 `〇、` 照常显示）与 J35（`第一部分` / `Step 1`
+    守卫拦下、清理命令剥成裸标题）两组，连同原有 J31–J34 / H23 / V80 全过。
+  - `vault-clear-tiers.js` 全过，库内原有 4 篇笔记跑前备份、跑后逐字节比对未变。实测抓出提示里的篇数把只有 `30 秒版`
+    的文件也算成「带手写编号」，改为只数「确定」（`main.ts`，H24 单测补一篇只有存疑的文件）。
+- 发版：`npm run bump` → 1.3.2；双语发布说明 `doc/release-notes/1.3.2.md`；testplan 与 spec 里本版条目的「未发版」换成 1.3.2。
+
+### 没做什么
+
+- 手机端未测；主力库 Oblivion 当时没开，真机只在 Test 库跑（主力库只跑了语料脚本对答案）。
+- PR #11 未回复（本机无 `gh`）；rps007 的双小写字母分支等对方开 PR，排 1.3.3。
+
+### 下一步
+
+- 发版后到 Community Hub 维护者面板点「Check for new releases」送审；回复 PR #11。
+
+### 验证方式
+
+- `npm run preflight` 全绿；两个真机探针全过；语料脚本对答案全部相符。
+
+---
+
 ## 2026-11-08 1.3.2 收口：仅显示模式按级别过半、清除全库只清插件编号、门槛变真绿（未发版，交接：claude/foreign-lead-words）
 
 ### 做了什么
@@ -91,28 +117,3 @@
 - `npm run check` 的测试全过（唯一红为已知 ICU 排序假红 whitelist.test.ts），eslint、tsc 通过；改动文件
   `prettier --end-of-line auto --check` 通过（本机 CRLF 误报）；`npm run test:fuzz` 全绿；`node scripts/foreign-corpus.mjs`
   主力库改动前后统计一致（确定 74 / 存疑 34，守卫拦 17 篇）。
-
----
-
-## 2026-11-04 手写编号按置信度分级：整篇判定确定 / 存疑（未发版，交接：claude/foreign-confidence-tiers）
-
-### 做了什么
-
-- 新增 `src/foreignassess.ts` 的 `assessForeignNumbering`：形状分强 / 中 / 弱，再用同级成串、上下级对得上、「值 = 同级序位」升为「确定」，量词否决孤立猜测、重名与「同字起头的字母修饰语」否决成串。`strip.ts` 拆出 `matchForeignPrefix`（同一条正则交出组成部分），`stripForeignNumbering` 行为不变。
-- 各入口改按档位（spec 3.10「按置信度分级」）：守卫只认确定；仅显示过半只数确定与纯编号；预览框存疑默认不勾、全不勾时按钮为「不清理，直接编号」；清理 / 清除命令只剥确定，存疑跳过并在提示里给「检查…」（清除命令点开的框只剥不套模板）；清除全库提示带存疑篇数。新增 4 条文案 × 10 语言，并改了预览框说明。
-- `scripts/foreign-corpus.mjs`：用当前源码过一遍某库的标题、对照 1.3.1 单标题正则。主力库 Oblivion（323 篇 / 3539 标题）：确定 74 个全是真编号，存疑 34 个全是数量短语与一个日期；守卫会拦的笔记 33 → 17 篇。实测中抓出并修掉三处误判：单字量词挡串（`2 分析`）、字母 + 冒号标签（`Q：` / `ID：`）、`A 档` / `B 档` 修饰语串；另修孤立 `⑤ 「…」` 被降成存疑。报告在 `doc/research/`（不入库）。
-- testplan J29–J34、H23、V80 新增并 ✅；H5（孤立 `1.1 标题` 被误剥）随之解决。
-
-### 没做什么
-
-- 真机（主力库 Oblivion，经 Obsidian CLI `eval` 跑新探针 `tests/probes/foreign-tiers.js`）全过：两篇真实笔记照常显示编号且未被改动；守卫、预览框默认勾选与按钮、两个命令的「检查…」、仅显示过半均符合预期。实测抓出清除命令提示「…恢复接管。；另有…」重复标点，已在 main.ts 统一去掉原提示末尾句号（+ 单测）。清除全库另在 Test 库用探针 `tests/probes/vault-clear-tiers.js` 真机跑过，全过（库内原有笔记跑前备份、跑后还原）。用户指南（中英）补了「拿得准 / 拿不准」一节。未测：手机端。
-- Roadmap 第 3 步（守卫提示只弹一次 + 状态栏常驻）、`Step 1` / `Chapter 2` 前导词、`number headings` 属性证据未做。
-- PR #11 仍未回复（本机无 `gh`）。
-
-### 下一步
-
-- 真机试一轮后决定是否发 1.3.2（含上一块的清除命令修复与本块）。
-
-### 验证方式
-
-- `npm run check` 的测试与 eslint 全过（唯一红为已知 ICU 排序假红 whitelist.test.ts）；本机 CRLF 工作副本下 prettier 全量检查会误报，改动文件单独 `prettier --check` 通过；`npm run test:fuzz` 全绿；语料脚本见上。
