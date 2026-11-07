@@ -85,12 +85,24 @@ testplan 与 `tests/dev_tests/`（自动化单测）、`tests/user_tests/`（实
 ## 5. Git 与提交
 
 -   Commit message 用中文，Conventional Commits：`feat: …`、`fix: …`、`docs: …`、`chore: …`。
--   提交自包含：源码 + 测试 + 产物（`release/`）+ `doc/log.md`。
+-   提交自包含：源码 + 测试 + `doc/log.md`。`release/` 是本机实测用的产物，不入库（发版由 Release 工作流现场构建）。
 -   **仅在用户明确要求时才创建 Pull Request。**
 
 ### 5.1 会话收尾：合并回 `master`（用户长期授权）
 
 质量门槛全绿后：工作分支自包含提交并推送 → `checkout master` → `pull` → `merge --no-ff <分支>` → 推 `master`。网络失败按 2/4/8/16s 退避重试。有冲突或行为存疑就停下问用户。长期授权**仅限合并到 `master`**。
+
+## 6. 外部贡献者（在 fork 里开发、向本仓库提 PR）
+
+如果你（或你的 agent）不是本仓库维护者，以下几条**替换**上文对应要求，其余照旧（testplan 先行、
+`npm run check` 全绿、中文注释与 commit）：
+
+-   **不改** `doc/log.md` / `doc/log-archive.md`（周期块由维护者合并时写）、**不 bump 版本号**、不写
+    `doc/release-notes/`——这几处每个分支都改必然冲突。
+-   testplan 新增 / 改动的场景行状态填 🔲，由维护者真机验证后回填。
+-   PR 描述写清：改了什么行为、为什么（用户场景）、跑过哪些门槛。
+
+人类贡献者看 [`CONTRIBUTING.md`](./CONTRIBUTING.md)（中英双语）。
 
 ## 7. 开发环境
 

@@ -423,8 +423,8 @@ const ja: Partial<Messages> = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}。` : ""}番号かどうか判断しきれない見出し ${count} 件はそのままです`,
 	noticeForeignUnsureAction: "確認…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`Vault 全体の番号を消去しました（${count} 個のファイルを変更）。判断しきれない見出しを含む ${unsureFiles} 個のファイルはそのままです`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`Vault 全体の番号を消去しました（${count} 個のファイルを変更）。手書きの番号がある ${foreignFiles} 個のファイルはそのままです。整理するにはそのノートのメニューから「手書きの番号を整理…」を使ってください`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`このノートには手書きの番号らしき見出しが ${count} 件あり、今回は${virtual ? "表示" : "自動採番"}されませんでした。`,
 	noticeNumberOnlyGuard: (virtual) =>

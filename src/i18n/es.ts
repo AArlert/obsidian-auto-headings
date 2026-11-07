@@ -440,8 +440,8 @@ const es: Partial<Messages> = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}. ` : ""}${count} encabezado(s) dudosos se dejaron sin cambios`,
 	noticeForeignUnsureAction: "Revisar…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`Numeración de la bóveda borrada (${count} archivo(s) modificados); ${unsureFiles} archivo(s) tienen encabezados dudosos que no se tocaron`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`Numeración de la bóveda borrada (${count} archivo(s) modificados); ${foreignFiles} archivo(s) con numeración manual no se tocaron; para limpiarla, usa «Limpiar numeración manual…» en el menú de esa nota`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Esta nota tiene ${count} encabezado(s) que parecen numerados a mano; esta vez no se ${virtual ? "mostró" : "aplicó"} numeración.`,
 	noticeNumberOnlyGuard: (virtual) =>

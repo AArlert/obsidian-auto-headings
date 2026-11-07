@@ -402,8 +402,8 @@ const zh: Messages = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}；` : ""}另有 ${count} 处标题看不准是不是编号，未动`,
 	noticeForeignUnsureAction: "检查…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`已清除全库编号（共修改 ${count} 个文件）；另有 ${unsureFiles} 个文件含看不准的标题，未动`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`已清除全库编号（共修改 ${count} 个文件）；另有 ${foreignFiles} 个文件带手写编号，未动——要清理请在该笔记的本篇菜单用「清理手写编号…」`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`这篇有 ${count} 处标题像是手写编号，本次没有${virtual ? "显示" : "自动"}编号。`,
 	noticeNumberOnlyGuard: (virtual) =>

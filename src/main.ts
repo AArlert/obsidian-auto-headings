@@ -42,6 +42,7 @@ import {
 	previewForeignNumberingCleanup,
 	type ForeignNumberingPreviewItem,
 } from "./cleanup";
+import { assessForeignNumbering } from "./foreignassess";
 import {
 	computeHeadingRenames,
 	computeSnapshotRenames,
@@ -1816,21 +1817,23 @@ export default class AutoHeadingsPlugin extends Plugin {
 		try {
 			const { prefixes, suffixes } = this.strippableAffixes();
 			const files = this.app.vault.getMarkdownFiles();
-			let unsureFiles = 0;
+			let foreignFiles = 0;
 			const r = await this.batchRewrite(files, (_file, content) => {
-				// 「存疑」标题原样留下（testplan H23），提示里报篇数。
-				if (countUnsure(content) > 0) {
-					unsureFiles++;
-				}
-				return clearNumberingContent(content, {
+				// 只清插件写的编号，手写编号原样留下（testplan H24），提示里报篇数、指向逐篇清理。
+				const cleared = clearNumberingContent(content, {
 					strippablePrefixes: prefixes,
 					strippableSuffixes: suffixes,
+					keepForeign: true,
 				});
+				if (assessForeignNumbering(cleared).length > 0) {
+					foreignFiles++;
+				}
+				return cleared;
 			});
 			const m = this.messages();
 			new Notice(
-				unsureFiles > 0
-					? m.noticeClearedVaultUnsure(r.changed, unsureFiles)
+				foreignFiles > 0
+					? m.noticeClearedVaultForeign(r.changed, foreignFiles)
 					: m.noticeClearedVault(r.changed),
 			);
 			await this.notifyBacklinkTotal(r.links);

@@ -436,8 +436,8 @@ const ru: Partial<Messages> = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}. ` : ""}Сомнительные заголовки (${count}) оставлены без изменений`,
 	noticeForeignUnsureAction: "Проверить…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`Нумерация хранилища очищена (изменено файлов: ${count}); файлы с сомнительными заголовками (${unsureFiles}) оставлены без изменений`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`Нумерация хранилища очищена (изменено файлов: ${count}); файлы с ручной нумерацией (${foreignFiles}) оставлены без изменений — чтобы очистить, используйте «Очистить ручную нумерацию…» в меню заметки`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`В этой заметке заголовков, похожих на ручную нумерацию: ${count}; на этот раз нумерация не ${virtual ? "показана" : "применена"}.`,
 	noticeNumberOnlyGuard: (virtual) =>

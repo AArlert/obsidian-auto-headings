@@ -131,9 +131,14 @@ function shapeKind(m: ForeignPrefixMatch, rest: string, hasValue: boolean): Cand
 	}
 	// 字母 / 罗马 + 冒号是标签（`Q：…`、`ID：…`、`CDC：…`），读不出值的字母词（`ID`、`CDC`）也不可能是强编号。
 	if (!DIGIT_RE.test(m.segments[0]) && !CIRCLED_RE.test(m.segments[0])) {
-		if (/^[:：]/.test(m.trail) || !hasValue) {
+		if ((!m.lead && /^[:：]/.test(m.trail)) || !hasValue) {
 			return "weak";
 		}
+	}
+	// 前导词（`Step 1`、`Part 2：…`，J35）单独出现至多存疑：英文正文里也说 `Part 2 of the series`、`Section 3`，
+	// 要成串、上下级对得上或值 = 同级序位才确定。
+	if (m.lead) {
+		return "medium";
 	}
 	if (m.di || m.unit || (m.open && CLOSE_BRACKET_RE.test(m.trail))) {
 		return "strong";
@@ -187,6 +192,11 @@ export function assessForeignNumbering(content: string): ForeignAssessment[] {
 	const stack: number[] = [];
 	const positions = new Map<string, number>();
 	const byHeading = new Map<number, Candidate>();
+	// 同级各标题剥完后的文字（不是候选的按原文），用来查「剥完会不会重名」。
+	const siblingTexts = new Map<string, string[]>();
+	const noteText = (group: string, text: string): void => {
+		siblingTexts.set(group, [...(siblingTexts.get(group) ?? []), text.trim()]);
+	};
 	headings.forEach((h, i) => {
 		while (stack.length > 0 && headings[stack[stack.length - 1]].level >= h.level) {
 			stack.pop();
@@ -204,9 +214,15 @@ export function assessForeignNumbering(content: string): ForeignAssessment[] {
 		const stripped = match ? h.rawText.slice(match.prefix.length).replace(/\s+$/, "") : "";
 		// 连字符词（`K-means`）与剥完为空的纯编号标题不当候选。
 		if (!match || match.prefix.endsWith("-") || stripped.trim() === "") {
+			noteText(group, h.rawText);
 			return;
 		}
-		const readings = readingsOf(match.segments);
+		noteText(group, stripped);
+		// 前导词算进读法签名：`Step 1` / `Step 2` 成串，`Step 1` 与 `2 分析` 不串（J35）。
+		const readings = readingsOf(match.segments).map((r) => ({
+			...r,
+			sig: `${match.lead}|${r.sig}`,
+		}));
 		const kind = shapeKind(match, stripped, readings.length > 0);
 		const measure =
 			kind === "medium" &&
@@ -237,6 +253,11 @@ export function assessForeignNumbering(content: string): ForeignAssessment[] {
 			: null;
 	};
 
+	// 剥完与同级别的标题重名（`Week 1 计划` / `Week 2 计划`，或旁边本就有个 `计划`）：序号在区分内容，不用
+	// 「值 = 序位」猜——与成串的重名否决同理（J30），否则清除命令剥完就分不清谁是谁。
+	const clashes = (c: Candidate): boolean =>
+		(siblingTexts.get(c.group) ?? []).filter((t) => t === c.stripped.trim()).length > 1;
+
 	// 上下级对得上 + 值 = 同级序位。
 	for (const c of eligible) {
 		for (const r of c.readings) {
@@ -249,6 +270,7 @@ export function assessForeignNumbering(content: string): ForeignAssessment[] {
 			if (
 				c.kind === "medium" &&
 				!c.measure &&
+				!clashes(c) &&
 				r.values.length === 1 &&
 				(last === c.pos || (last === 0 && c.pos === 1))
 			) {

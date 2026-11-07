@@ -408,8 +408,8 @@ const ko: Partial<Messages> = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}. ` : ""}번호인지 확실하지 않은 제목 ${count}개는 그대로 두었습니다`,
 	noticeForeignUnsureAction: "확인…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`보관함 번호를 지웠습니다 (파일 ${count}개 변경). 확실하지 않은 제목이 있는 파일 ${unsureFiles}개는 그대로 두었습니다`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`보관함 번호를 지웠습니다 (파일 ${count}개 변경). 직접 입력한 번호가 있는 파일 ${foreignFiles}개는 그대로 두었습니다. 정리하려면 해당 노트 메뉴의 "직접 입력한 번호 정리…"를 사용하세요`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`이 노트에는 직접 쓴 번호로 보이는 제목이 ${count}개 있어, 이번에는 번호를 ${virtual ? "표시하" : "자동으로 매기"}지 않았습니다.`,
 	noticeNumberOnlyGuard: (virtual) =>

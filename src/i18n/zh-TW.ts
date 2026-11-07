@@ -393,8 +393,8 @@ const zhTW: Partial<Messages> = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}；` : ""}另有 ${count} 處標題無法確定是否為編號，未更動`,
 	noticeForeignUnsureAction: "檢查…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`已清除全庫編號（共修改 ${count} 個檔案）；另有 ${unsureFiles} 個檔案含無法確定的標題，未更動`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`已清除全庫編號（共修改 ${count} 個檔案）；另有 ${foreignFiles} 個檔案帶手寫編號，未更動——要清理請在該筆記的本篇選單用「清理手寫編號…」`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`這篇有 ${count} 處標題像是手寫編號，本次沒有${virtual ? "顯示" : "自動"}編號。`,
 	noticeNumberOnlyGuard: (virtual) =>

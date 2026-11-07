@@ -121,6 +121,18 @@ describe("J30 成串但剥后重名", () => {
 		expect(tiers("## 1 号线\n## 2 号线")).toEqual(["unsure", "unsure"]);
 	});
 
+	it("剥后重名也不用「值 = 序位」猜：序号在区分内容，清除命令剥完会分不清", () => {
+		expect(tiers("## 1 计划\n## 2 计划")).toEqual(["unsure", "unsure"]);
+		expect(tiers("## Week 1 计划\n## Week 2 计划")).toEqual(["unsure", "unsure"]);
+		expect(clearForeignNumberingContent("## Week 1 计划\n## Week 2 计划")).toBe(
+			"## Week 1 计划\n## Week 2 计划",
+		);
+		// 与同级里本就没编号的标题撞名同样算。
+		expect(tiers("## Week 1 计划\n## 计划")).toEqual(["unsure", "-"]);
+		// 不同父标题下的同名不算撞。
+		expect(tiers("# A\n## 1 计划\n# B\n## 1 计划")).toEqual(["-", "sure", "-", "sure"]);
+	});
+
 	it("主力库实测：字母只跟空格的串，剥后都以同一个字起头 → 字母是修饰语，整串作废", () => {
 		expect(
 			tiers("### A 档 — 外企在华\n### B 档 — 国产 AI 芯片\n### C 档 — 国产 GPU 四小龙"),
@@ -232,5 +244,109 @@ describe("各入口按档位处理", () => {
 		expect(isMostlyForeignNumbered("## 2023 总结\n## 2024 总结\n## 展望")).toBe(false);
 		expect(isMostlyForeignNumbered("## 30 秒版\n## 60 秒版\n## 背景")).toBe(false);
 		expect(isMostlyForeignNumbered("## 1. 引言\n## 2. 方法\n## 结论")).toBe(true);
+	});
+
+	it("V81 仅显示模式按级别过半：整级手写编号即算，只有一处不算", () => {
+		const subs = (n: number) => Array.from({ length: n }, (_, i) => `### 小节${i}`).join("\n");
+		// ① 整级 `一、二、三、`，每个下挂 4 个无编号 ###：全篇 3/15 不过半，按级别 3/3 过半。
+		const whole = ["## 一、背景", subs(4), "## 二、方法", subs(4), "## 三、结论", subs(4)].join(
+			"\n",
+		);
+		expect(isMostlyForeignNumbered(whole)).toBe(true);
+		// ② 只有一处 `〇、`：该级 1 个，不够 2 个，不算。
+		const single = ["## 〇、一屏结论", subs(3), "## 背景", subs(3), "## 方法", subs(3)].join(
+			"\n",
+		);
+		expect(isMostlyForeignNumbered(single)).toBe(false);
+		// ③ 6 个 ### 里 5 个带圈数字，上面的 ## 不带编号。
+		const circled = [
+			"## 问题",
+			"### ① 甲",
+			"### ② 乙",
+			"### ③ 丙",
+			"### ④ 丁",
+			"### ⑤ 戊",
+			"### 小结",
+		]
+			.concat(["## 附录", "## 参考"])
+			.join("\n");
+		expect(isMostlyForeignNumbered(circled)).toBe(true);
+		// 存疑不计：一级里全是 `30 秒版` 这类，照常显示。
+		expect(
+			isMostlyForeignNumbered("## 背景\n### 30 秒版\n### 60 秒版\n## 方法\n### 细节"),
+		).toBe(false);
+	});
+});
+
+describe("J35 前导词与 第…步 / 第…部分", () => {
+	it("① 前导词成串 → 确定，剥时连前导词一起剥", () => {
+		const steps = "## Step 1 安装\n## Step 2 配置\n## Step 3 运行";
+		expect(tiers(steps)).toEqual(["sure", "sure", "sure"]);
+		expect(clearForeignNumberingContent(steps)).toBe("## 安装\n## 配置\n## 运行");
+		expect(tiers("## Chapter 1: 引言\n## Chapter 2: 方法")).toEqual(["sure", "sure"]);
+		expect(tiers("## Part I 背景\n## Part II 方法")).toEqual(["sure", "sure"]);
+		expect(tiers("## Appendix A: 术语\n## Appendix B: 参考")).toEqual(["sure", "sure"]);
+		expect(tiers("## §1 总则\n## § 2 定义")).toEqual(["sure", "sure"]);
+		expect(tiers("## STEP 1 安装\n## step 2 配置")).toEqual(["sure", "sure"]);
+	});
+
+	it("① 前导词与上下级对得上", () => {
+		expect(tiers("## Chapter 3 方法\n### 3.1 数据\n### 3.2 模型")).toEqual([
+			"sure",
+			"sure",
+			"sure",
+		]);
+	});
+
+	it("① 不同前导词、有无前导词不互相成串", () => {
+		// 序位都对不上（第 3、4 个），只看成串：前导词算进签名，`Step 1` 接不上 `2 配置`。
+		expect(tiers("## 背景\n## 概述\n## Step 1 安装\n## 2 配置")).toEqual([
+			"-",
+			"-",
+			"unsure",
+			"unsure",
+		]);
+		expect(tiers("## 背景\n## 概述\n## Step 1 安装\n## Phase 2 配置")).toEqual([
+			"-",
+			"-",
+			"unsure",
+			"unsure",
+		]);
+	});
+
+	it("② 孤立的前导词：值 = 序位才确定，否则存疑、守卫不拦", () => {
+		expect(tiers("## Step 1 安装\n## 总结")).toEqual(["sure", "-"]);
+		expect(tiers("## Part 2 结果\n## 讨论")).toEqual(["unsure", "-"]);
+		expect(tiers("## 背景\n## Section 3 讨论")).toEqual(["-", "unsure"]);
+		expect(tiers("## Part 2: 结果")).toEqual(["unsure"]);
+		expect(hasUnclaimedForeignNumbering("## Part 2 结果\n## 讨论")).toBe(false);
+		expect(hasUnclaimedForeignNumbering("## Step 1 安装\n## Step 2 配置")).toBe(true);
+	});
+
+	it("③ 第…步 / 第…部分 是强形状", () => {
+		expect(tiers("## 第1步 安装\n## 第2步 运行")).toEqual(["sure", "sure"]);
+		expect(tiers("## 第一部分 背景")).toEqual(["sure"]);
+		expect(clearForeignNumberingContent("## 第一部分 背景")).toBe("## 背景");
+	});
+
+	it("④ 标题只有前导词 + 序号 → 纯编号，过半即拦", () => {
+		expect(hasUnclaimedForeignNumbering("# Chapter 1\n正文\n# Chapter 2\n正文")).toBe(true);
+		expect(isMostlyForeignNumbered("## Day 1\n## Day 2\n## 感想")).toBe(true);
+	});
+
+	it("⑤ 像前导词的正文与不带 第 的数量不动", () => {
+		for (const t of [
+			"## Unit Test 规范",
+			"## Stage Manager",
+			"## Step Functions",
+			"## Python 3 教程",
+			"## 3步 搞定",
+			"## 两部分 内容",
+		]) {
+			expect(tiers(t), t).toEqual(["-"]);
+		}
+		expect(
+			hasUnclaimedForeignNumbering("## Unit Test 规范\n## Stage Manager\n## 3步 搞定"),
+		).toBe(false);
 	});
 });

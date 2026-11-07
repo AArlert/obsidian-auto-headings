@@ -443,8 +443,8 @@ const de: Partial<Messages> = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}. ` : ""}${count} Überschrift(en) sind womöglich keine Nummerierung und blieben unverändert`,
 	noticeForeignUnsureAction: "Prüfen…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`Tresor-Nummerierung gelöscht (${count} Datei(en) geändert); ${unsureFiles} Datei(en) enthalten unsichere Überschriften, die unverändert blieben`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`Tresor-Nummerierung gelöscht (${count} Datei(en) geändert); ${foreignFiles} Datei(en) mit manueller Nummerierung blieben unverändert – zum Bereinigen im Menü der Notiz „Manuelle Nummerierung bereinigen…“ verwenden`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Diese Notiz hat ${count} Überschrift(en), die wie handgeschriebene Nummerierung aussehen; diesmal wurde nicht ${virtual ? "angezeigt" : "automatisch nummeriert"}.`,
 	noticeNumberOnlyGuard: (virtual) =>

@@ -8,6 +8,52 @@
 
 ---
 
+## 2026-11-04 「清除编号」不再删拉丁词开头的标题 + 手写编号识别定方案（未发版，交接：claude/clear-no-wj-foreign-rules）
+
+### 做了什么
+
+- PR #11 的 @smallerxie 追问：「清除当前笔记的编号」对不带 WJ 的 `## vim 配置` 仍会删掉 `vim`。根因：`stripPrefixBroad` 对**完全没有插件痕迹**的标题也套全样式正则。改为三路：首尾哨兵都在 → 精确剥；首哨兵在、尾哨兵坏 → 仍用全样式正则；没有插件痕迹（含只有链接锚点 WJ 的）→ `stripForeignNumbering`，与「清理非本插件编号」同一口径（testplan H22，spec 3.10）。
+- H3 夹具 `#### a 备注` → `#### a. 备注`（不带 WJ 时字母序号须带标点，H22 的代价）。
+- 与用户讨论定下手写编号识别的精简方案，写进 Roadmap「手写 / 外来编号识别改为整篇判断」（第 2 步：成串证据 + 重名否决 + 存疑默认不勾；刻意不做逐标题记忆、标签页图标、叠号自检等），「分级预览」一条并入。用户明确：分步走补丁，不为此升 1.4。
+
+### 没做什么
+
+- 第 2 步（`assessForeignNumbering`）与语料脚本未开工；`2024 总结`、`1.1 标题`（H5）在清除命令里仍会被剥。
+- 未回复 PR #11（本机无 `gh`，回复草稿在会话里，需用户自己贴）；未真机验证。
+
+### 下一步
+
+- 写本地语料脚本统计主力库标题，定第 2 步门槛；再按 Roadmap 第 2 步实现。
+
+### 验证方式
+
+- `npm run check`：docs 守卫、eslint、prettier 全过，测试仅已知 ICU 排序假红 whitelist.test.ts；`npm run test:fuzz` 全绿。
+
+---
+
+## 2026-11-04 发版 1.3.1：拉丁词误判 + 纯编号标题叠号 + 新装重启切写入（交接：claude/release-1.3.1 → master，tag 1.3.1）
+
+### 做了什么
+
+- `npm run bump`：1.3.0 → 1.3.1；`doc/release-notes/1.3.1.md` 双语，致谢 @smallerxie（PR #11）。
+- 合入三项修复（11-03 / 11-04 见下方两块，10-29 已滚入 log-archive.md）：10-29「标题本身就是编号」不再叠号（J25 / J26 / V77）；11-03 PR #11 + 后续，拉丁词开头的标题不再当手写编号（J27 / J28 / H21）；11-04 新装 `templates/` 懒建，重启不再切写入（V5 / V78 / V79）。
+- testplan 状态格「未发版」→「1.3.1」；spec 3.10 / 3.22 / Roadmap 本次条目同步。
+
+### 没做什么
+
+- J25 / J26（纯编号标题）真机只看了守卫不叠号，提示文案未单独确认；iOS / Android / macOS / Linux 未上真机。
+- 「数字 + 空格」误判（`2024 总结`，写入模式下任一即拦）与 `Step 1` 漏判未修，已提新会话卡片「手写编号识别改为整篇判断（序列证据）」。
+
+### 下一步
+
+- 推送 master 与 tag 后核实 Release 工作流产物；用户到 Community Hub 点「Check for new releases」。
+
+### 验证方式
+
+- `npm run preflight` 全绿（唯一红为已知 ICU 排序假红 whitelist.test.ts）；真机见 11-03 / 11-04 两块。
+
+---
+
 ## 2026-11-04 新装后重启一次就从「仅显示」变成写入（未发版，交接：claude/fresh-install-restart-mode → claude/fresh-install-no-templates-dir）
 
 ### 做了什么
