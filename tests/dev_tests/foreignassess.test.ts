@@ -245,6 +245,37 @@ describe("各入口按档位处理", () => {
 		expect(isMostlyForeignNumbered("## 30 秒版\n## 60 秒版\n## 背景")).toBe(false);
 		expect(isMostlyForeignNumbered("## 1. 引言\n## 2. 方法\n## 结论")).toBe(true);
 	});
+
+	it("V81 仅显示模式按级别过半：整级手写编号即算，只有一处不算", () => {
+		const subs = (n: number) => Array.from({ length: n }, (_, i) => `### 小节${i}`).join("\n");
+		// ① 整级 `一、二、三、`，每个下挂 4 个无编号 ###：全篇 3/15 不过半，按级别 3/3 过半。
+		const whole = ["## 一、背景", subs(4), "## 二、方法", subs(4), "## 三、结论", subs(4)].join(
+			"\n",
+		);
+		expect(isMostlyForeignNumbered(whole)).toBe(true);
+		// ② 只有一处 `〇、`：该级 1 个，不够 2 个，不算。
+		const single = ["## 〇、一屏结论", subs(3), "## 背景", subs(3), "## 方法", subs(3)].join(
+			"\n",
+		);
+		expect(isMostlyForeignNumbered(single)).toBe(false);
+		// ③ 6 个 ### 里 5 个带圈数字，上面的 ## 不带编号。
+		const circled = [
+			"## 问题",
+			"### ① 甲",
+			"### ② 乙",
+			"### ③ 丙",
+			"### ④ 丁",
+			"### ⑤ 戊",
+			"### 小结",
+		]
+			.concat(["## 附录", "## 参考"])
+			.join("\n");
+		expect(isMostlyForeignNumbered(circled)).toBe(true);
+		// 存疑不计：一级里全是 `30 秒版` 这类，照常显示。
+		expect(
+			isMostlyForeignNumbered("## 背景\n### 30 秒版\n### 60 秒版\n## 方法\n### 细节"),
+		).toBe(false);
+	});
 });
 
 describe("J35 前导词与 第…步 / 第…部分", () => {

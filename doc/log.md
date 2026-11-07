@@ -15,6 +15,49 @@
 
 ---
 
+## 2026-11-08 1.3.2 收口：仅显示模式按级别过半、清除全库只清插件编号、门槛变真绿（未发版，交接：claude/foreign-lead-words）
+
+### 做了什么
+
+- **需求来源**：与用户评审 1.3.2 的投入，定中心需求——带手写编号的笔记能清掉、接管；`API 要求` 这类不被误清。拿主力库
+  对照：不误清一侧已到位；接管一侧写入模式到位，但新装默认的仅显示模式在 18 篇带手写编号的笔记里只认出 1 篇。
+- 仅显示模式外来编号判定加「按级别过半」（`cleanup.ts` `isMostlyForeignHeadings`）：某一级至少 2 个「确定」或纯编号、
+  且占该级过半即整篇不叠编号、弹提示。主力库 1 → 3 篇（Oceanus、求职追踪、时钟网络），正是整级手写编号的三篇；只有零星
+  一两处的（`〇、一屏结论`、一串 `① 「问题」`）照常显示。testplan V81，spec 3.22。
+- 「清除全库编号」只清插件写的编号（`CleanupOptions.keepForeign`）：手写编号一个字节不动，提示改报「另有 M 个文件带手写编号，
+  未动」并指向本篇菜单「清理手写编号…」（文案键 `noticeClearedVaultUnsure` → `noticeClearedVaultForeign`，10 种语言）。
+  用户确认没用过、也没见过反馈批量清手写编号；它是唯一会大面积删用户手写文字又撤销不了的路径。testplan H24（取代 H23 清库一半），
+  spec 3.10，用户指南中英，探针 `vault-clear-tiers.js` 改按新行为。「清除当前文件编号」不变。
+- 前导词分支保留并入 1.3.2：评审时曾提议撤回，复核后改主意——源码约 77 行，且补的 `第一部分` / `第1步` 在 master 上完全认不出；
+  词表冻结，只按反馈加词（Roadmap 记了不做通用「单词 + 数字」的理由）。孤立的 `1 概述`（值 = 同级序位）保留为确定。
+- 门槛变真绿：`whitelist.test.ts` 的 A–Z 断言改为只断言各语言一致的部分（产品仍按系统语言排序，中文按拼音）；加 `.gitattributes`
+  统一 LF，本机全量 prettier 不再误报。本机 `npm run check` 首次全绿。
+- `release/` 移出版本库（`.gitignore`），发版本来就由 Release 工作流现场构建；CLAUDE.md §5、dev-cycle、spec 4 / 7 同步。
+- 新增 `CONTRIBUTING.md`（中英）与 CLAUDE.md §6「外部贡献者」：不碰 log、版本号、发布说明，testplan 状态填 🔲。起因是外部贡献者
+  rps007 的 fork 分支（双小写字母序号样式，尚未开 PR）照着本仓库 CLAUDE.md 写了周期块、打了包，必然冲突。
+- dev-cycle 第 2 步加「需求来源」一行与「推测性需求先进 Roadmap」；改手写编号识别须跑 `foreign-corpus.mjs --expect` 对答案。
+  脚本新增 `--expect`：按守卫 / 仅显示 / 各标题档位比对答案文件，不符即非零退出。主力库答案 `doc/research/foreign-answers-oblivion.json`
+  （不入库，人工逐条核对）；撤掉按级别过半时它报出 2 处不符，验证有效。
+
+### 没做什么
+
+- 真机未测（V81、H24、前导词 J35）；手机端未测。
+- 未发版：版本号未 bump，未写 `doc/release-notes/1.3.2.md`，未打 tag；PR #11 未回复。
+- rps007 的双小写字母分支：等对方开 PR，拟排 1.3.3；需提的修改见本会话评审（下拉文案只写例字 `aa, bb, cc`、别改 log / 产物）。
+- testplan 积压（49 🔲 / 14 ⚠️）未清理。
+
+### 下一步
+
+- 真机过一遍 V81 / H24 / J35（Obsidian CLI 探针或手动），然后发 1.3.2：bump、写双语发布说明、打 tag，回复 PR #11。
+
+### 验证方式
+
+- `npm run check` 全绿（docs 守卫、1125 个测试、eslint、prettier）；`node scripts/foreign-corpus.mjs <主力库> --expect
+  doc/research/foreign-answers-oblivion.json` 全部相符（确定 76 / 存疑 35，守卫拦 18 篇，仅显示不叠编号 3 篇）。
+  未跑 `test:fuzz`（未动编号引擎）。
+
+---
+
 ## 2026-11-05 手写编号识别补前导词：`Step 1` / `Chapter 2` / `§1` / `第1步` / `第一部分`（未发版，交接：claude/foreign-lead-words）
 
 ### 做了什么
@@ -73,26 +116,3 @@
 ### 验证方式
 
 - `npm run check` 的测试与 eslint 全过（唯一红为已知 ICU 排序假红 whitelist.test.ts）；本机 CRLF 工作副本下 prettier 全量检查会误报，改动文件单独 `prettier --check` 通过；`npm run test:fuzz` 全绿；语料脚本见上。
-
----
-
-## 2026-11-04 「清除编号」不再删拉丁词开头的标题 + 手写编号识别定方案（未发版，交接：claude/clear-no-wj-foreign-rules）
-
-### 做了什么
-
-- PR #11 的 @smallerxie 追问：「清除当前笔记的编号」对不带 WJ 的 `## vim 配置` 仍会删掉 `vim`。根因：`stripPrefixBroad` 对**完全没有插件痕迹**的标题也套全样式正则。改为三路：首尾哨兵都在 → 精确剥；首哨兵在、尾哨兵坏 → 仍用全样式正则；没有插件痕迹（含只有链接锚点 WJ 的）→ `stripForeignNumbering`，与「清理非本插件编号」同一口径（testplan H22，spec 3.10）。
-- H3 夹具 `#### a 备注` → `#### a. 备注`（不带 WJ 时字母序号须带标点，H22 的代价）。
-- 与用户讨论定下手写编号识别的精简方案，写进 Roadmap「手写 / 外来编号识别改为整篇判断」（第 2 步：成串证据 + 重名否决 + 存疑默认不勾；刻意不做逐标题记忆、标签页图标、叠号自检等），「分级预览」一条并入。用户明确：分步走补丁，不为此升 1.4。
-
-### 没做什么
-
-- 第 2 步（`assessForeignNumbering`）与语料脚本未开工；`2024 总结`、`1.1 标题`（H5）在清除命令里仍会被剥。
-- 未回复 PR #11（本机无 `gh`，回复草稿在会话里，需用户自己贴）；未真机验证。
-
-### 下一步
-
-- 写本地语料脚本统计主力库标题，定第 2 步门槛；再按 Roadmap 第 2 步实现。
-
-### 验证方式
-
-- `npm run check`：docs 守卫、eslint、prettier 全过，测试仅已知 ICU 排序假红 whitelist.test.ts；`npm run test:fuzz` 全绿。

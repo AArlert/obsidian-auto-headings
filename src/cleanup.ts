@@ -26,6 +26,11 @@ export interface CleanupOptions {
 	strippablePrefixes?: readonly string[];
 	/** 已知后缀候选（同上）。 */
 	strippableSuffixes?: readonly string[];
+	/**
+	 * 不带插件痕迹的标题一律不动（手写编号原样留下）。「清除全库编号」用它（testplan H24）：批量、未打开的文件
+	 * 撤销不了，又常是卸载前的清理，只该清插件自己写的；手写编号交给逐篇、带预览的「清理手写编号…」。
+	 */
+	keepForeign?: boolean;
 }
 
 /**
@@ -52,9 +57,11 @@ export function clearNumberingContent(content: string, options: CleanupOptions =
 	const affixes = { strippablePrefixes: prefixes, strippableSuffixes: suffixes };
 	// 不带插件前缀的标题只剥「确定」的手写编号，「存疑」原样留给用户在清理预览框里定（testplan H23）。
 	const sure = new Map(
-		assessForeignNumbering(content)
-			.filter((a) => a.tier === "sure")
-			.map((a) => [a.lineIndex, a.stripped]),
+		options.keepForeign
+			? []
+			: assessForeignNumbering(content)
+					.filter((a) => a.tier === "sure")
+					.map((a) => [a.lineIndex, a.stripped]),
 	);
 	for (const h of headings) {
 		const hashes = "#".repeat(h.level);
@@ -212,6 +219,10 @@ function sureLines(content: string): Set<number> {
 /**
  * 过半判定的本体：超过一半的标题「确定」带手写编号，或**本身就是编号**（`# 第一章`，{@link isNumberOnlyHeading}；
  * 剥不掉，但套模板会叠成「第一章 第一章」，testplan J25 / V77）。
+ *
+ * 也按**级别**算一遍（testplan V81）：手写编号通常只用在某一级（`## 一、` 下挂一堆不带编号的 `###`），按全篇
+ * 标题数算永远不过半，仅显示模式就会叠出 `1 一、背景`。某一级至少 2 个且占该级过半，同样算整篇带外来编号；
+ * 只有一处的（`## 〇、一屏结论`）不算。
  */
 function isMostlyForeignHeadings(
 	headings: ReturnType<typeof parseHeadings>,
@@ -220,12 +231,23 @@ function isMostlyForeignHeadings(
 	if (headings.length === 0) {
 		return false;
 	}
-	const foreign = headings.filter(
-		(h) =>
-			!h.rawText.startsWith(WORD_JOINER) &&
-			(sure.has(h.lineIndex) || isNumberOnlyHeading(h.rawText)),
-	).length;
-	return foreign * 2 > headings.length;
+	const isForeign = (h: (typeof headings)[number]) =>
+		!h.rawText.startsWith(WORD_JOINER) &&
+		(sure.has(h.lineIndex) || isNumberOnlyHeading(h.rawText));
+	const foreign = headings.filter(isForeign).length;
+	if (foreign * 2 > headings.length) {
+		return true;
+	}
+	const byLevel = new Map<number, { total: number; foreign: number }>();
+	for (const h of headings) {
+		const s = byLevel.get(h.level) ?? { total: 0, foreign: 0 };
+		s.total++;
+		if (isForeign(h)) {
+			s.foreign++;
+		}
+		byLevel.set(h.level, s);
+	}
+	return [...byLevel.values()].some((s) => s.foreign >= 2 && s.foreign * 2 > s.total);
 }
 
 /** 整篇判定为「存疑」的标题数——清理 / 清除命令跳过它们后，结果提示据此给「检查…」入口（testplan J34 / H23）。 */

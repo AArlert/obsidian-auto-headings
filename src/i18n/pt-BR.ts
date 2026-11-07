@@ -436,8 +436,8 @@ const ptBR: Partial<Messages> = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}. ` : ""}${count} cabeçalho(s) duvidoso(s) mantido(s) como estão`,
 	noticeForeignUnsureAction: "Revisar…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`Numeração do cofre limpa (${count} arquivo(s) alterado(s)); ${unsureFiles} arquivo(s) têm cabeçalhos duvidosos que não foram alterados`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`Numeração do cofre limpa (${count} arquivo(s) alterado(s)); ${foreignFiles} arquivo(s) com numeração manual não foram alterados — para limpar, use “Limpar numeração manual…” no menu dessa nota`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Esta nota tem ${count} cabeçalho(s) que parecem numeração manual; desta vez a numeração não foi ${virtual ? "exibida" : "aplicada"}.`,
 	noticeNumberOnlyGuard: (virtual) =>

@@ -438,8 +438,8 @@ const fr: Partial<Messages> = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}. ` : ""}${count} titre(s) douteux laissé(s) tel(s) quel(s)`,
 	noticeForeignUnsureAction: "Vérifier…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`Numérotation du coffre effacée (${count} fichier(s) modifié(s)) ; ${unsureFiles} fichier(s) contiennent des titres douteux laissés tels quels`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`Numérotation du coffre effacée (${count} fichier(s) modifié(s)) ; ${foreignFiles} fichier(s) avec une numérotation manuelle laissés tels quels — pour la nettoyer, utilisez « Nettoyer la numérotation manuelle… » dans le menu de la note`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`Cette note a ${count} titre(s) qui ressemblent à une numérotation manuelle ; cette fois, la numérotation n'a pas été ${virtual ? "affichée" : "appliquée"}.`,
 	noticeNumberOnlyGuard: (virtual) =>

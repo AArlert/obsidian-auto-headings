@@ -1707,6 +1707,25 @@ describe("清除全库编号（敏感操作 TAB，0.7.11：清除期间压制自
 		expect(ed.txnCount).toBe(0);
 	});
 
+	it("H24：清除全库只清插件编号，手写编号一个字节不动，提示报篇数", async () => {
+		const mixed = `## ${WORD_JOINER}1 ${WORD_JOINER}概述\n## 一、背景\n## 二、方法\n## 2024 总结`;
+		const handwritten = "## 1. 引言\n## 2. 方法";
+		const { p, vaultFiles } = makePlugin({
+			vaultFiles: {
+				"plugin.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲`,
+				"mixed.md": mixed,
+				"hand.md": handwritten,
+			},
+		});
+		await p.clearAllVaultNumbering();
+		expect(vaultFiles.get("plugin.md")).toBe("## 甲");
+		expect(vaultFiles.get("mixed.md")).toBe("## 概述\n## 一、背景\n## 二、方法\n## 2024 总结");
+		expect(vaultFiles.get("hand.md")).toBe(handwritten);
+		expect(
+			Notice.messages.some((m) => /共修改 2 个文件.*另有 2 个文件带手写编号/.test(m)),
+		).toBe(true);
+	});
+
 	it("H7（0.7.17）：清除全库前先持久关闭「全局自动编号」——清完不会一编辑又被编回去", async () => {
 		const { p, vaultFiles } = makePlugin({
 			vaultFiles: { "a.md": `## ${WORD_JOINER}1 ${WORD_JOINER}甲` },

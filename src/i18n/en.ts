@@ -430,8 +430,8 @@ const en: Messages = {
 	noticeForeignUnsureSkipped: (count, base) =>
 		`${base ? `${base}. ` : ""}${count} heading(s) may not be numbering and were left unchanged`,
 	noticeForeignUnsureAction: "Review…",
-	noticeClearedVaultUnsure: (count, unsureFiles) =>
-		`Vault numbering cleared (${count} file(s) changed); ${unsureFiles} file(s) have uncertain headings that were left unchanged`,
+	noticeClearedVaultForeign: (count, foreignFiles) =>
+		`Vault numbering cleared (${count} file(s) changed); ${foreignFiles} file(s) with handwritten numbering were left unchanged — to clean one up, use “Clean up handwritten numbering…” in that note's menu`,
 	noticeForeignGuardCount: (count, virtual) =>
 		`${count} ${count === 1 ? "heading looks" : "headings look"} hand-numbered here, so numbers were ${virtual ? "not shown" : "not added"} this time.`,
 	noticeNumberOnlyGuard: (virtual) =>
