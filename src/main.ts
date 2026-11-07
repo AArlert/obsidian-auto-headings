@@ -1825,7 +1825,8 @@ export default class AutoHeadingsPlugin extends Plugin {
 					strippableSuffixes: suffixes,
 					keepForeign: true,
 				});
-				if (assessForeignNumbering(cleared).length > 0) {
+				// 只数「确定」：只有 `30 秒版` 这类存疑标题的文件不算带手写编号。
+				if (assessForeignNumbering(cleared).some((a) => a.tier === "sure")) {
 					foreignFiles++;
 				}
 				return cleared;
